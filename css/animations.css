@@ -1,0 +1,32 @@
+@keyframes rise-in {
+  from { opacity: 0; transform: translateY(18px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes card-deal {
+  0% { opacity: 0; transform: perspective(900px) rotateY(34deg) translateX(45px) scale(.96); }
+  100% { opacity: 1; transform: perspective(900px) rotateY(0) translateX(0) scale(1); }
+}
+
+@keyframes dice-cube-roll {
+  0% { transform: rotateX(0deg) rotateY(0deg) rotateZ(0deg) scale(.82); }
+  22% { transform: rotateX(210deg) rotateY(145deg) rotateZ(60deg) scale(1.08); }
+  48% { transform: rotateX(430deg) rotateY(370deg) rotateZ(170deg) scale(.92); }
+  76% { transform: rotateX(690deg) rotateY(610deg) rotateZ(280deg) scale(1.04); }
+  100% { transform: var(--die-final) scale(1); }
+}
+
+@keyframes pulse-gold {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(225,183,90,.2); }
+  50% { box-shadow: 0 0 0 10px rgba(225,183,90,0); }
+}
+
+@keyframes toast-in {
+  from { opacity: 0; transform: translateX(20px); }
+  to { opacity: 1; transform: translateX(0); }
+}
+
+.screen-root > * { animation: rise-in .42s ease both; }
+.game-card { animation: card-deal .45s cubic-bezier(.2,.8,.2,1) both; }
+.course-node[data-state="active"] .node-number { animation: pulse-gold 2.2s ease-in-out infinite; }
+.toast { animation: toast-in .25s ease both; }

@@ -1,0 +1,91 @@
+<!doctype html>
+<html lang="de">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+    <meta name="theme-color" content="#071f2a">
+    <meta name="description" content="A cooperative seafaring board game that turns a six-course dinner into an adventure.">
+    <meta name="author" content="Jonas Lummerzheim">
+    <meta property="og:title" content="Adventure Dinner: Seafaring Adventure">
+    <meta property="og:description" content="Cook, explore, roll the dice, and find the treasure together.">
+    <meta property="og:type" content="website">
+    <meta property="og:image" content="./assets/seafaring-adventure.webp">
+    <meta name="twitter:card" content="summary_large_image">
+    <title>Adventure Dinner: Seafaring Adventure</title>
+    <link rel="manifest" href="./manifest.webmanifest?v=1.3.2">
+    <link rel="stylesheet" href="./css/base.css?v=1.3.2">
+    <link rel="stylesheet" href="./css/layout.css?v=1.3.2">
+    <link rel="stylesheet" href="./css/components.css?v=1.3.2">
+    <link rel="stylesheet" href="./css/animations.css?v=1.3.2">
+  </head>
+  <body>
+    <a class="skip-link" href="#main-content">Zum Spiel springen / Skip to game</a>
+
+    <div id="app" class="app-shell" data-screen="welcome">
+      <header class="app-header">
+        <button id="brand-button" class="brand" type="button" aria-label="Startseite">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span>
+            <strong>Adventure Dinner</strong>
+            <small>Seafaring Adventure</small>
+          </span>
+        </button>
+
+        <div class="header-actions">
+          <div id="save-indicator" class="save-indicator" role="status" aria-live="polite">
+            <span aria-hidden="true">●</span>
+            <span data-i18n="saved">Gespeichert</span>
+          </div>
+          <button id="language-button" class="icon-button language-button" type="button" aria-label="Sprache wechseln">
+            <span aria-hidden="true">DE</span>
+          </button>
+          <button id="audio-button" class="icon-button" type="button" aria-label="Audio umschalten">
+            <span aria-hidden="true">♪</span>
+          </button>
+          <button id="menu-button" class="icon-button menu-button" type="button" aria-label="Menü öffnen" aria-expanded="false">
+            <span aria-hidden="true">☰</span>
+          </button>
+        </div>
+      </header>
+
+      <nav id="app-nav" class="app-nav" aria-label="Spielnavigation">
+        <button type="button" data-nav="game"><span aria-hidden="true">⌖</span><span data-i18n="navGame">Spiel</span></button>
+        <button type="button" data-nav="tasks"><span aria-hidden="true">✓</span><span data-i18n="navTasks">Aufgaben</span><b id="task-badge" hidden>0</b></button>
+        <button type="button" data-nav="pantry"><span aria-hidden="true">◇</span><span data-i18n="navPantry">Zutaten</span></button>
+        <button type="button" data-nav="crew"><span aria-hidden="true">♙</span><span data-i18n="navCrew">Crew</span></button>
+        <button type="button" data-nav="sessions"><span aria-hidden="true">↺</span><span data-i18n="navSessions">Reisen</span></button>
+        <button type="button" data-nav="rules"><span aria-hidden="true">?</span><span data-i18n="navRules">Regeln</span></button>
+      </nav>
+
+      <main id="main-content" class="main-content" tabindex="-1">
+        <div id="screen-root" class="screen-root" aria-live="polite"></div>
+      </main>
+    </div>
+
+    <div id="toast-region" class="toast-region" aria-live="assertive" aria-atomic="true"></div>
+    <div id="live-region" class="sr-only" aria-live="assertive" aria-atomic="true"></div>
+
+    <dialog id="app-dialog" class="app-dialog">
+      <form method="dialog" class="dialog-frame">
+        <div class="dialog-header">
+          <div>
+            <p id="dialog-kicker" class="eyebrow"></p>
+            <h2 id="dialog-title"></h2>
+          </div>
+          <button class="icon-button" value="close" aria-label="Schließen">×</button>
+        </div>
+        <div id="dialog-content" class="dialog-content"></div>
+        <div id="dialog-actions" class="dialog-actions"></div>
+      </form>
+    </dialog>
+
+    <noscript>
+      <section class="noscript-panel">
+        <h1>JavaScript wird benötigt / JavaScript is required</h1>
+        <p>Dieses interaktive Spiel speichert seinen vollständigen Zustand ausschließlich auf diesem Gerät.</p>
+      </section>
+    </noscript>
+
+    <script defer src="./js/app.bundle.js?v=1.3.2"></script>
+  </body>
+</html>

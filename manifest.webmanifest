@@ -1,0 +1,12 @@
+{
+  "name": "Adventure Dinner: Seafaring Adventure",
+  "short_name": "Adventure Dinner",
+  "description": "A cooperative seafaring board game that turns a six-course dinner into an adventure.",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#04161e",
+  "theme_color": "#071f2a",
+  "lang": "de"
+}
