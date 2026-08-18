@@ -17,6 +17,7 @@ const nav = document.querySelector('#app-nav');
 const taskBadge = document.querySelector('#task-badge');
 const languageButton = document.querySelector('#language-button');
 const audioButton = document.querySelector('#audio-button');
+const notificationButton = document.querySelector('#notification-button');
 const menuButton = document.querySelector('#menu-button');
 const saveIndicator = document.querySelector('#save-indicator');
 const toastRegion = document.querySelector('#toast-region');
@@ -44,6 +45,12 @@ if (currentSnapshot && validateSessionState(currentSnapshot).valid) {
 
 const audio = new GameAudio(engine?.state.settings.audio ?? preferences.audio);
 
+function cueForAction(actionCode) {
+  if (['treasure', 'treasureAndTask', 'treasureAndIngredient', 'treasureAndWatch', 'treasureAndChain'].includes(actionCode)) return 'treasure';
+  if (['drawTask', 'singleTask', 'teamTask', 'discoverIngredient', 'lockIngredient', 'swapIngredient'].includes(actionCode)) return 'card';
+  return 'move';
+}
+
 function language() {
   if (engine && view !== 'setup' && view !== 'welcome') return engine.activePlayer?.language ?? preferences.language;
   return preferences.language;
@@ -55,6 +62,17 @@ function updateHeader(currentLanguage) {
   languageButton.setAttribute('aria-label', currentLanguage === 'de' ? 'Auf Englisch wechseln' : 'Switch to German');
   audioButton.querySelector('span').textContent = audio.enabled ? '♪' : '×';
   audioButton.setAttribute('aria-label', ui(audio.enabled ? 'audioOn' : 'audioOff', currentLanguage));
+  const notificationsSupported = 'Notification' in window;
+  const notificationsEnabled = notificationsSupported && preferences.notifications && Notification.permission === 'granted';
+  notificationButton.hidden = !notificationsSupported;
+  notificationButton.dataset.enabled = String(notificationsEnabled);
+  notificationButton.querySelector('span').textContent = notificationsEnabled ? '🔔' : '🔕';
+  notificationButton.setAttribute('aria-label', currentLanguage === 'de'
+    ? notificationsEnabled ? 'Timer-Endmeldungen ausschalten' : 'Timer-Endmeldungen einschalten'
+    : notificationsEnabled ? 'Disable timer-finished notifications' : 'Enable timer-finished notifications');
+  notificationButton.title = currentLanguage === 'de'
+    ? 'Benachrichtigt nur, wenn ein Timer abgelaufen ist'
+    : 'Only notifies when a timer has finished';
   const activeTasks = engine?.state.tasks.filter((task) => ['queued', 'active', 'ready'].includes(task.status)).length ?? 0;
   taskBadge.hidden = activeTasks === 0;
   taskBadge.textContent = String(activeTasks);
@@ -143,7 +161,11 @@ async function requestWakeLock() {
 }
 
 async function requestNotifications() {
-  if (!('Notification' in window) || Notification.permission === 'denied') return false;
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'denied') {
+    preferences = repository.savePreferences({ notifications: false });
+    return false;
+  }
   try {
     const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
     preferences = repository.savePreferences({ notifications: permission === 'granted' });
@@ -229,6 +251,16 @@ function updateVisibleTimers() {
     const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskTimer);
     if (task) element.textContent = formatDuration(getRemainingSeconds(task));
   });
+  document.querySelectorAll('[data-task-progress]').forEach((element) => {
+    const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskProgress);
+    if (!task?.startedAt) return;
+    const card = engine.getTaskCard(task);
+    const minutes = task.timingMode === 'background'
+      ? (task.backgroundMinutes || card.backgroundMinutes)
+      : (task.challengeMinutes || card.challengeMinutes);
+    const elapsed = Math.max(0, Date.now() - task.startedAt);
+    element.style.setProperty('--progress', `${Math.min(100, Math.round((elapsed / Math.max(1, minutes * 60_000)) * 100))}%`);
+  });
   document.querySelectorAll('[data-watch-timer]').forEach((element) => {
     const remaining = Math.max(0, Math.ceil(((engine.state.turn.watchEndsAt ?? Date.now()) - Date.now()) / 1000));
     element.textContent = formatDuration(remaining);
@@ -250,11 +282,11 @@ function processTimers() {
   const result = updateTaskTimers(engine.state);
   updateVisibleTimers();
   if (!result.changed) return;
-  result.notices.forEach(({ taskId, threshold }) => {
+  result.notices.forEach(({ taskId }) => {
     const instance = engine.state.tasks.find((task) => task.instanceId === taskId);
     const card = instance ? engine.getTaskCard(instance) : null;
     const currentLanguage = language();
-    const prefix = threshold === 300 ? ui('timerNotice5', currentLanguage) : threshold === 60 ? ui('timerNotice1', currentLanguage) : ui('timerDone', currentLanguage);
+    const prefix = ui('timerDone', currentLanguage);
     const title = card ? localize(card.title, currentLanguage) : ui('timerDone', currentLanguage);
     showToast(`${prefix}: ${title}`);
     systemNotice(prefix, title);
@@ -278,7 +310,11 @@ async function handleAction(target) {
     case 'resume-session': resumeSession(target.dataset.sessionId); break;
     case 'navigate': navigate(target.dataset.view); break;
     case 'draw-event': engine.beginEvent(); audio.play('card'); persist(); render(); break;
-    case 'resolve-choice': engine.resolveChoice(target.dataset.choice); persist(); render(); break;
+    case 'resolve-choice': {
+      const choice = target.dataset.choice;
+      if (engine.resolveChoice(choice)) audio.play(cueForAction(choice));
+      persist(); render(); break;
+    }
     case 'roll-die': {
       engine.rollDie();
       audio.play('dice');
@@ -290,20 +326,41 @@ async function handleAction(target) {
     case 'reroll-die': engine.rerollDie(); audio.play('dice'); persist(); render(); animateVisibleDie(); break;
     case 'reroll-ingredient-die': engine.rerollDieWithIngredient(); audio.play('dice'); persist(); render(); animateVisibleDie(); break;
     case 'adjust-ingredient-die': engine.adjustDieWithIngredient(Number(target.dataset.option)); audio.play('move'); persist(); render(); break;
-    case 'confirm-roll': engine.confirmRoll(); persist(); render(); break;
+    case 'confirm-roll':
+      if (engine.confirmRoll()) audio.play(cueForAction(engine.state.turn.outcomeCode));
+      persist(); render(); break;
     case 'accept-task': {
-      const taskId = engine.state.turn.assignedTaskId;
       if (engine.acceptTaskBriefing()) {
-        const task = engine.state.tasks.find((candidate) => candidate.instanceId === taskId);
-        if (task?.endAt && 'Notification' in window && Notification.permission === 'default') requestNotifications();
         audio.play('move'); persist(); render();
       }
       break;
     }
     case 'complete-watch': engine.completeWatchChallenge(); audio.play('complete'); persist(); render(); break;
-    case 'choose-ingredient': engine.chooseIngredient(target.dataset.ingredientId); audio.play('treasure'); persist(); render(); break;
+    case 'start-watch':
+      if (engine.startWatchChallengeAction()) { audio.play('move'); persist(); render(); }
+      break;
+    case 'activate-watch': {
+      if (engine.activateOngoingWatchChallenge()) {
+        const result = engine.endTurn();
+        audio.play('move');
+        persist();
+        render();
+        if (result !== 'chain') showHandover();
+      }
+      break;
+    }
+    case 'choose-ingredient': engine.chooseIngredient(target.dataset.ingredientId); audio.play('card'); persist(); render(); break;
+    case 'choose-soup-style':
+      if (engine.chooseSoupStyle(target.dataset.style)) { audio.play('move'); persist(); render(); }
+      break;
     case 'choose-ingredient-ignore': engine.chooseIngredient(target.dataset.ingredientId, Date.now(), true); audio.play('move'); persist(); render(); break;
     case 'resolve-ingredient-effect': engine.resolveIngredientEffectChoice(target.dataset.option); audio.play('move'); persist(); render(); break;
+    case 'toggle-task-assignee':
+      if (engine.toggleTaskAssignee(target.dataset.playerId)) { audio.play('move'); persist(); render(); }
+      break;
+    case 'confirm-task-assignees':
+      if (engine.confirmTaskAssignees()) { audio.play('card'); persist(); render(); }
+      break;
     case 'use-ability': {
       const used = engine.useActiveAbility(target.dataset.option == null ? null : Number(target.dataset.option));
       if (used) { audio.play('move'); persist(); render(); }
@@ -325,8 +382,6 @@ async function handleAction(target) {
     }
     case 'start-task': {
       if (engine.startTask(target.dataset.taskId)) {
-        const task = engine.state.tasks.find((candidate) => candidate.instanceId === target.dataset.taskId);
-        if (task?.endAt && 'Notification' in window && Notification.permission === 'default') requestNotifications();
         audio.play('move'); persist(); render();
       }
       break;
@@ -335,7 +390,9 @@ async function handleAction(target) {
       if (engine.completeTask(target.dataset.taskId)) {
         const task = engine.state.tasks.find((entry) => entry.instanceId === target.dataset.taskId);
         const score = task?.challengeCoinValue ?? 0;
-        showToast(`${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
+        showToast(task?.challengeResult === 'background'
+          ? (language() === 'de' ? 'Hintergrundzeit beendet · keine Münzwertung' : 'Background time complete · no coin score')
+          : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
         audio.play('complete'); persist(); render();
       }
       break;
@@ -343,7 +400,7 @@ async function handleAction(target) {
       if (engine.undoTaskCompletion(target.dataset.taskId)) { audio.play('move'); persist(); render(); }
       break;
     case 'lock-basket-ingredient':
-      if (engine.lockIngredientFromBasket(target.dataset.ingredientId)) { audio.play('treasure'); persist(); render(); }
+      if (engine.lockIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
       break;
     case 'remove-basket-ingredient':
       if (engine.removeIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
@@ -434,6 +491,34 @@ audioButton.addEventListener('click', async () => {
   preferences = repository.savePreferences({ audio: audio.enabled });
   if (engine) { engine.state.settings.audio = audio.enabled; persist(); }
   if (audio.enabled) await audio.play('card');
+  render();
+});
+notificationButton.addEventListener('click', async () => {
+  const currentLanguage = language();
+  if (!('Notification' in window)) {
+    showToast(currentLanguage === 'de' ? 'Dieser Browser unterstützt keine Systemmeldungen.' : 'This browser does not support system notifications.');
+    return;
+  }
+  if (preferences.notifications && Notification.permission === 'granted') {
+    preferences = repository.savePreferences({ notifications: false });
+    showToast(currentLanguage === 'de'
+      ? 'Meldungen bei abgelaufenen Timern sind ausgeschaltet.'
+      : 'Timer-finished notifications are disabled.');
+    render();
+    return;
+  }
+  const granted = await requestNotifications();
+  showToast(currentLanguage === 'de'
+    ? granted
+      ? 'Du wirst nur benachrichtigt, wenn ein Timer abgelaufen ist.'
+      : Notification.permission === 'denied'
+        ? 'Systemmeldungen sind im Browser blockiert. Du kannst sie in den Website-Einstellungen freigeben.'
+        : 'Systemmeldungen bleiben ausgeschaltet.'
+    : granted
+      ? 'You will only be notified when a timer has finished.'
+      : Notification.permission === 'denied'
+        ? 'System notifications are blocked by the browser. You can enable them in the site settings.'
+        : 'System notifications remain disabled.');
   render();
 });
 menuButton.addEventListener('click', () => {

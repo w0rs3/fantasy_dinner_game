@@ -23,7 +23,9 @@ function serviceKitchenWork(engine, now) {
   let changed = false;
   for (const instance of engine.state.tasks) {
     const card = engine.getTaskCard(instance);
-    const simulatedHandsOnMinutes = card.timerMinutes || Math.min(card.estimatedMinutes, 2);
+    const simulatedHandsOnMinutes = card.timingMode === 'background'
+      ? card.backgroundMinutes
+      : Math.min(card.challengeMinutes || card.estimatedMinutes, 2);
     const estimatedEnd = instance.startedAt == null ? Infinity : instance.startedAt + simulatedHandsOnMinutes * MINUTE;
     if (instance.status === 'ready' || (instance.status === 'active' && now >= estimatedEnd)) {
       engine.completeTask(instance.instanceId, now);
@@ -46,14 +48,15 @@ function exerciseActiveAbility(engine, now, exercisedAbilities) {
   return { attempted: true, used };
 }
 
-export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxSteps = 20_000, useAbilities = false } = {}) {
+export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxSteps = 20_000, useAbilities = false, choiceStyle = 'balanced' } = {}) {
   const initialNow = 1_800_000_000_000 + seed * 10_000;
   let now = initialNow;
   const names = Array.from({ length: playerCount }, (_, index) => `Player ${index + 1}`);
   const engine = GameEngine.create({ names, title: `Simulation ${seed}`, defaultLanguage: 'de', audio: false, seed }, now);
-  now += 12 * MINUTE;
+  now += 10 * MINUTE;
   let steps = 0;
   let maxConcurrentTasks = 0;
+  let maxOpenTasksPerPlayer = 0;
   let productiveWaitingTurns = 0;
   let pureWaitingSteps = 0;
   let timerTasks = 0;
@@ -65,6 +68,9 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
   let failedTransitions = 0;
   let abilityAttempts = 0;
   let failedAbilityAttempts = 0;
+  let taskAssigneeChoices = 0;
+  let duplicateEventActions = 0;
+  let activeCreatorAssignmentViolations = 0;
   const exercisedAbilities = new Set();
   const stageEvents = { ingredients: 0, tasks: 0, cooking: 0 };
 
@@ -72,6 +78,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     steps += 1;
     serviceKitchenWork(engine, now);
     maxConcurrentTasks = Math.max(maxConcurrentTasks, engine.state.tasks.filter((task) => ['active', 'ready'].includes(task.status)).length);
+    maxOpenTasksPerPlayer = Math.max(maxOpenTasksPerPlayer, ...engine.state.players.map((player) => engine.openTasksForPlayer(player.id).length));
     timerTasks = engine.state.tasks.filter((instance) => engine.getTaskCard(instance).timerMinutes > 0).length;
 
     if (useAbilities) {
@@ -91,6 +98,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
       stageEvents[event.stage] += 1;
       if (event.stage !== engine.currentEventStage()) stageEventMismatches += 1;
       const actions = event.type === 'choice' ? event.options : event.outcomes;
+      if (new Set(actions).size !== actions.length) duplicateEventActions += 1;
       invalidEventActions += actions.filter((action) => !engine.actionAvailable(action)).length;
       if (event.stage === 'tasks' && !engine.ingredientsLockedForCourse() && engine.state.chapterIndex !== 0) taskAssignmentsBeforeIngredientsLocked += 1;
       if (engine.currentEvent.type === 'choice') {
@@ -99,14 +107,31 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     } else if (phase === 'rolled') {
       if (!engine.confirmRoll(now)) failedTransitions += 1;
     } else if (phase === 'watch') {
-      if (!engine.completeWatchChallenge(now)) failedTransitions += 1;
+      let handled;
+      if (engine.currentWatchChallenge?.flow === 'ongoing') handled = engine.activateOngoingWatchChallenge(now);
+      else if (engine.currentWatchChallenge?.secret && engine.state.turn.watchStartedAt == null) handled = engine.startWatchChallengeAction(now);
+      else handled = engine.completeWatchChallenge(now);
+      if (!handled) failedTransitions += 1;
     } else if (phase === 'ingredientChoice') {
       if (!engine.chooseIngredient(engine.state.turn.pendingIngredientIds[0], now)) failedTransitions += 1;
     } else if (phase === 'effectChoice') {
       if (!engine.resolveIngredientEffectChoice(engine.state.turn.pendingEffect.options[0], now)) failedTransitions += 1;
+    } else if (phase === 'taskAssigneeChoice') {
+      const pending = engine.state.turn.pendingTaskAssignment;
+      const group = engine.state.groups.find((candidate) => candidate.id === pending?.groupId);
+      const candidates = group ? engine.freePlayersForTask(group)
+        .sort((a, b) => a.taskMarkers - b.taskMarkers || a.id.localeCompare(b.id)) : [];
+      const alreadySelected = new Set(pending?.selectedPlayerIds ?? []);
+      const remaining = Math.max(0, (pending?.requiredPeople ?? 0) - alreadySelected.size);
+      for (const player of candidates.filter((candidate) => !alreadySelected.has(candidate.id)).slice(0, remaining)) {
+        if (!engine.toggleTaskAssignee(player.id)) failedTransitions += 1;
+      }
+      if (!engine.confirmTaskAssignees(now)) failedTransitions += 1;
+      else taskAssigneeChoices += 1;
     } else if (phase === 'taskBriefing') {
       const instance = engine.state.tasks.find((task) => task.instanceId === engine.state.turn.assignedTaskId);
       if (!instance || !engine.taskPrerequisitesMet(engine.getTaskCard(instance))) taskOrderViolations += 1;
+      if (instance && !instance.assignedPlayerIds.includes(engine.activePlayer.id)) activeCreatorAssignmentViolations += 1;
       if (!engine.acceptTaskBriefing(now)) failedTransitions += 1;
     } else if (phase === 'resolved') {
       const result = engine.endTurn(now);
@@ -119,6 +144,12 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
       now += CHAPTERS[engine.state.chapterIndex].eatingMinutes * MINUTE;
       if (!engine.startNextChapter(now)) failedTransitions += 1;
       previousChapter = engine.state.chapterIndex;
+    } else if (phase === 'courseDecision') {
+      const style = choiceStyle === 'clear' ? 'clear' : choiceStyle === 'cream' ? 'cream' : seed % 2 ? 'clear' : 'cream';
+      if (!engine.chooseSoupStyle(style, now)) failedTransitions += 1;
+    } else if (phase === 'crewBusy') {
+      const ends = engine.state.tasks.filter((task) => task.status === 'active' && task.endAt).map((task) => task.endAt);
+      now = ends.length ? Math.max(now + 1000, Math.min(...ends)) : now + turnSeconds * 1000;
     } else {
       throw new Error(`Unexpected phase ${phase} at step ${steps}`);
     }
@@ -139,6 +170,13 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     const card = engine.getTaskCard(instance);
     return card.ingredientTags.some((ingredientId) => !instance.basketIngredientIds.includes(ingredientId));
   }).length;
+  const cauldronWatches = engine.state.tasks
+    .map((instance) => ({ instance, card: engine.getTaskCard(instance) }))
+    .filter((entry) => entry.card?.chapterId === 'soup' && entry.card.questId === 'cauldron' && entry.card.timingMode === 'background')
+    .sort((a, b) => a.card.questStep - b.card.questStep);
+  const cauldronHandoffViolations = cauldronWatches.slice(1).filter((entry, index) =>
+    entry.instance.assignedPlayerIds.some((playerId) => cauldronWatches[index].instance.assignedPlayerIds.includes(playerId))
+  ).length;
 
   return {
     playerCount,
@@ -156,6 +194,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     events: engine.state.eventsDrawn.length,
     uniqueEvents: new Set(engine.state.eventsDrawn).size,
     maxConcurrentTasks,
+    maxOpenTasksPerPlayer,
     productiveWaitingTurns,
     pureWaitingSteps,
     timerTasks,
@@ -166,10 +205,22 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     failedTransitions,
     abilityAttempts,
     failedAbilityAttempts,
+    duplicateEventActions,
+    activeCreatorAssignmentViolations,
+    taskAssigneeChoices,
     exercisedAbilities: [...exercisedAbilities],
     allActiveAbilitiesExercised: ROLES.every((role) => exercisedAbilities.has(role.activeCode)),
     assignmentViolations,
     taskIngredientMismatches,
+    cauldronHandoffViolations,
+    activeChallengesRemaining: engine.state.activeChallenges.length,
+    followUpDelayViolations: engine.state.history.filter((entry) => entry.type === 'watchFollowUpScheduled' && (entry.data.delayTurns < 3 || entry.data.delayTurns > 5)).length,
+    backgroundCoinViolations: engine.state.tasks.filter((instance) => instance.timingMode === 'background' && instance.challengeCoinValue !== 0).length,
+    backgroundTasks: engine.state.tasks.filter((instance) => instance.timingMode === 'background').length,
+    challengeTasks: engine.state.tasks.filter((instance) => instance.timingMode !== 'background').length,
+    basketResidue: engine.state.ingredients.filter((ingredient) => ingredient.status === 'discovered').map((ingredient) => ingredient.id),
+    soupStyle: engine.state.menu[1]?.courseStyle,
+    coins: engine.state.coins,
     stageEvents,
     splitCount,
     essentialUnused: essentialUnused.map((ingredient) => ingredient.id),

@@ -1,8 +1,8 @@
-const CACHE_NAME = 'adventure-dinner-v1.3.2';
+const CACHE_NAME = 'adventure-dinner-v1.4.0';
 const APP_SHELL = [
   './',
   './index.html',
-  './manifest.webmanifest?v=1.3.2',
+  './manifest.webmanifest?v=1.4.0',
   './assets/seafaring-adventure.webp',
   './assets/location-scenes/tapas-harbour-basin.jpg',
   './assets/location-scenes/tapas-lighthouse.jpg',
@@ -15,11 +15,11 @@ const APP_SHELL = [
   './assets/location-scenes/main-locations-atlas.jpg',
   './assets/location-scenes/dessert-locations-atlas.jpg',
   './assets/location-scenes/cocktails-locations-atlas.jpg',
-  './css/base.css?v=1.3.2',
-  './css/layout.css?v=1.3.2',
-  './css/components.css?v=1.3.2',
-  './css/animations.css?v=1.3.2',
-  './js/app.bundle.js?v=1.3.2',
+  './css/base.css?v=1.4.0',
+  './css/layout.css?v=1.4.0',
+  './css/components.css?v=1.4.0',
+  './css/animations.css?v=1.4.0',
+  './js/app.bundle.js?v=1.4.0',
   './js/app.js',
   './js/config.js',
   './js/core/audio.js',

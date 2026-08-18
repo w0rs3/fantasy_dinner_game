@@ -61,6 +61,65 @@ export const ROLES = Object.freeze([
   }
 ]);
 
+const ROLE_USAGE = Object.freeze({
+  cook: {
+    passiveUsage: { de: 'Bei der Auswahl einer Zutatenkarte mit Effekt erscheint „Nehmen, Effekt als Koch ignorieren“. Die Zutat bleibt im Gangkorb; nur ihr Karteneffekt entfällt.', en: 'When choosing an ingredient card with an effect, “Take it and ignore the effect as Cook” appears. The ingredient stays in the course basket; only its card effect is skipped.' },
+    activeUsage: { de: 'Während der Zutatenphase, nachdem eine noch nicht fest zugeordnete Zutatenkarte mit Effekt gezogen wurde. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage, after drawing an ingredient card with an effect that is not yet locked. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Letzten Zutateneffekt wiederholen', en: 'Repeat last ingredient effect' }
+  },
+  scout: {
+    passiveUsage: { de: 'Automatisch im Ziehschritt: Vor dem Ziehen wird der Titel der nächsten passenden Ereigniskarte angezeigt. Dafür gibt es keinen Button und keinen begrenzten Einsatz.', en: 'Automatic during the draw step: the title of the next matching event card is shown before it is drawn. It has no button and no limited uses.' },
+    activeUsage: { de: 'Solange eine Ereigniskarte offen und noch nicht abgeschlossen ist. Die offene Karte wird abgelegt und sofort ersetzt; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'While an event card is face up and not yet resolved. The open card is discarded and immediately replaced; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Offenes Ereignis ersetzen', en: 'Replace open event' }
+  },
+  merchant: {
+    passiveUsage: { de: 'Automatisch bei jedem Zutatenfund: Es werden mindestens zwei gültige Zutaten angeboten und eine davon wird gewählt. Dafür gibt es keinen eigenen Button.', en: 'Automatic on every ingredient find: at least two valid ingredients are offered and one is chosen. It has no separate button.' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei beliebige gültige Zutaten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid ingredients of any kind to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei beliebige Zutaten ziehen', en: 'Draw two ingredients' }
+  },
+  smith: {
+    passiveUsage: { de: 'Nach einem Würfelwurf und vor dessen Bestätigung erscheint „Noch einmal würfeln · Schmied“. Das alte Ergebnis wird ersetzt; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'After a die roll and before confirming it, “Roll again · Smith” appears. The old result is replaced; this does not consume the active ability.' },
+    activeUsage: { de: 'Nach einem Würfelwurf und vor dessen Bestätigung. Wählt −1 oder +1; das Ergebnis bleibt zwischen 1 und 6. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'After a die roll and before confirming it. Choose −1 or +1; the result stays between 1 and 6. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Würfelergebnis verändern', en: 'Adjust die result' }
+  },
+  herbalist: {
+    passiveUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Der Button zieht genau eine gültige Gemüsekarte; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'During the ingredient stage in a free draw or event step. The button draws exactly one valid vegetable card; this does not consume the active ability.' },
+    passiveButton: { de: 'Eine Gemüsekarte ziehen (passiv)', en: 'Draw one vegetable card (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei gültige Gemüsekarten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid vegetable cards to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei Gemüsekarten ziehen', en: 'Draw two vegetable cards' }
+  },
+  hunter: {
+    passiveUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Der Button zieht genau eine gültige Fleischkarte; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'During the ingredient stage in a free draw or event step. The button draws exactly one valid meat card; this does not consume the active ability.' },
+    passiveButton: { de: 'Eine Fleischkarte ziehen (passiv)', en: 'Draw one meat card (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei gültige Fleischkarten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid meat cards to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei Fleischkarten ziehen', en: 'Draw two meat cards' }
+  },
+  gatherer: {
+    passiveUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Der Button zieht genau eine gültige Obstkarte; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'During the ingredient stage in a free draw or event step. The button draws exactly one valid fruit card; this does not consume the active ability.' },
+    passiveButton: { de: 'Eine Obstkarte ziehen (passiv)', en: 'Draw one fruit card (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei gültige Obstkarten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid fruit cards to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei Obstkarten ziehen', en: 'Draw two fruit cards' }
+  },
+  treasurer: {
+    passiveUsage: { de: 'Automatisch beim Start des Hauptgerichts: Eine passende, global verfügbare Zutat landet im Gangkorb. Dafür gibt es keinen Button und die aktive Fähigkeit wird nicht verbraucht.', en: 'Automatic when the main course starts: one suitable globally available ingredient is placed in the course basket. It has no button and does not consume the active ability.' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet alle gültigen globalen Zutaten zur Auswahl und legt eine in den Gangkorb; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens all valid global ingredients and places one in the course basket; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Freie Zutat für den Gang sichern', en: 'Secure a free ingredient for the course' }
+  },
+  alchemist: {
+    passiveUsage: { de: 'Während der Zutatenphase nach einer noch nicht fest zugeordneten Zutat, wenn eine gültige Alternative derselben Kategorie verfügbar ist. Der Tausch verbraucht keinen aktiven Einsatz.', en: 'During the ingredient stage after an ingredient that is not yet locked, when a valid alternative in the same category is available. The swap does not consume an active use.' },
+    passiveButton: { de: 'Letzte Zutat tauschen (passiv)', en: 'Swap last ingredient (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase nach einer noch nicht fest zugeordneten Zutat, wenn eine passende Alternative verfügbar ist. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage after an ingredient that is not yet locked, when a suitable alternative is available. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Letzte Zutat tauschen (aktiv)', en: 'Swap last ingredient (active)' }
+  },
+  tactician: {
+    passiveUsage: { de: 'Solange eine Ereigniskarte offen und noch nicht ausgeführt ist. Der Button schließt genau dieses Ereignis ohne seinen Effekt ab; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'While an event card is face up and has not yet been carried out. The button completes that event without its effect; this does not consume the active ability.' },
+    passiveButton: { de: 'Ereignis ohne Wirkung abschließen (passiv)', en: 'Complete event without effect (passive)' },
+    activeUsage: { de: 'Solange eine Ereigniskarte offen und noch nicht abgeschlossen ist. Die offene Karte wird zurückgemischt und durch eine neue ersetzt; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'While an event card is face up and not yet resolved. The open card is shuffled back and replaced; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Ereignisstapel mischen und neu ziehen', en: 'Shuffle event deck and redraw' }
+  }
+});
+
 export function getRole(roleId) {
-  return ROLES.find((role) => role.id === roleId);
+  const role = ROLES.find((entry) => entry.id === roleId);
+  return role ? { ...role, ...ROLE_USAGE[roleId] } : null;
 }

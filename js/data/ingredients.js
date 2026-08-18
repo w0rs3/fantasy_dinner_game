@@ -7,12 +7,14 @@ const item = (id, category, nameDe, nameEn, quantity, courseTags, options = {}) 
 });
 
 export const COURSE_INGREDIENT_RULES = Object.freeze({
-  tapas: { minimum: 9, categoryMinimums: {}, categoryLimits: {} },
-  soup: { minimum: 7, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
-  salad: { minimum: 8, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
-  main: { minimum: 10, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
-  dessert: { minimum: 6, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
-  cocktails: { minimum: 4, categoryMinimums: { fruit: 1, drinks: 3 }, categoryLimits: { vegetable: 1, meat: 0 } }
+  // The five flexible courses consume exactly all 40 essential, non-Tapas
+  // ingredients. Optional cocktail extras do not count towards these targets.
+  tapas: { target: 9, optionalLimit: 0, categoryMinimums: {}, categoryLimits: {} },
+  soup: { target: 6, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
+  salad: { target: 9, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
+  main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
+  dessert: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
+  cocktails: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, drinks: 3 }, categoryLimits: { vegetable: 1, meat: 0 } }
 });
 
 export const INGREDIENT_EFFECT_TEXT = Object.freeze({
@@ -61,7 +63,7 @@ export const INGREDIENTS = Object.freeze([
   item('ginger', 'vegetable', 'Ingwer', 'Ginger', q(100, 100, 'g'), ['soup', 'salad', 'main', 'dessert', 'cocktails'], { effect: 'adjustDie' }),
   item('chestnuts', 'pantry', 'Maronen', 'Chestnuts', q(200, 300, 'g'), ['soup', 'salad', 'main', 'dessert'], { effect: 'drawIngredient' }),
   item('lettuce', 'vegetable', 'Blattsalat', 'Mixed leaves', q(500, 800, 'g'), ['salad']),
-  item('cucumber', 'vegetable', 'Gurke', 'Cucumber', q(1, 2, 'Stück', 'pieces'), ['soup', 'salad', 'main']),
+  item('cucumber', 'vegetable', 'Gurke', 'Cucumber', q(1, 2, 'Stück', 'pieces'), ['salad', 'main']),
   item('herbs', 'vegetable', 'Frische Kräuter', 'Fresh herbs', q(3, 4, 'Bund', 'bunches'), ['soup', 'salad', 'main']),
 
   item('chicken', 'meat', 'Hähnchen', 'Chicken', q(450, 600, 'g'), ['soup', 'salad', 'main'], { effect: 'drawIngredient' }),
@@ -69,11 +71,10 @@ export const INGREDIENTS = Object.freeze([
   item('pork', 'meat', 'Schwein', 'Pork', q(400, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'chain' }),
   item('lamb', 'meat', 'Lamm', 'Lamb', q(350, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'reserveIngredient' }),
 
-  item('broth', 'pantry', 'Brühe', 'Stock', q(2.2, 3, 'l'), ['soup']),
+  item('peppermint', 'pantry', 'Pfefferminze', 'Peppermint', q(2, 3, 'Bund', 'bunches'), ['salad', 'dessert', 'cocktails'], { effect: 'revealEvent' }),
   item('croutons', 'pantry', 'Croûtons', 'Croutons', q(150, 250, 'g'), ['soup', 'salad']),
   item('nuts', 'pantry', 'Nüsse', 'Nuts', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert']),
   item('seeds', 'pantry', 'Kerne', 'Seeds', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert']),
-  item('yoghurt', 'pantry', 'Joghurt', 'Yoghurt', q(400, 500, 'g'), ['soup', 'salad', 'dessert', 'cocktails']),
   item('vinegar', 'pantry', 'Essig', 'Vinegar', q(180, 250, 'ml'), ['salad', 'main']),
   item('mustard', 'pantry', 'Senf', 'Mustard', q(1, 1, 'Glas', 'jar'), ['salad', 'main']),
   item('honey', 'pantry', 'Honig', 'Honey', q(1, 1, 'Glas', 'jar'), ['salad', 'main', 'dessert', 'cocktails']),
@@ -126,7 +127,8 @@ export function buildIngredientPlan(initialSeed, playerCount) {
       en: suggestQuantity(ingredient, playerCount, 'en')
     }
   }));
-  const shuffled = shuffle(plan.filter((entry) => entry.chapterIndex == null).map((entry) => entry.id), state);
+  // Keep the established RNG cadence after retiring yoghurt so existing seeds do not reshuffle every later deck.
+  const shuffled = shuffle([...plan.filter((entry) => entry.chapterIndex == null).map((entry) => entry.id), 'retired-yoghurt-slot'], state);
   state = shuffled.state;
   return { state, plan };
 }

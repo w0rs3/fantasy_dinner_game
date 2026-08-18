@@ -24,6 +24,89 @@ test('new voyages assign unique random roles and preserve individual languages',
   assert.ok(assignments.size >= 6, 'new voyages should produce meaningfully different role rosters');
 });
 
+test('new and saved voyages use 500 coins as the complete treasure', () => {
+  const engine = GameEngine.create({ names, title: 'Coin goal', defaultLanguage: 'de', seed: 43 }, 1_800_000_000_000);
+  assert.equal(engine.state.coinGoal, 500);
+  engine.state.coins = 41;
+  engine.state.coinGoal = 100;
+
+  const restored = new GameEngine(engine.snapshot());
+  assert.equal(restored.state.coins, 41, 'already earned coins are preserved');
+  assert.equal(restored.state.coinGoal, 500, 'the old reward goal is migrated');
+  assert.equal(restored.coinProgress, 8);
+  assert.match(renderGame(restored, 'de'), /41\/500 Münzen/);
+});
+
+test('saved voyages silently retire yoghurt as an ordinary optional kitchen staple', () => {
+  const engine = GameEngine.create({ names, title: 'Legacy yoghurt', defaultLanguage: 'de', seed: 431 }, 1_800_000_000_000);
+  const legacy = engine.snapshot();
+  legacy.ingredients.push({
+    id: 'yoghurt', category: 'pantry', name: { de: 'Joghurt', en: 'Yoghurt' },
+    quantity: { min: 400, max: 500, unitDe: 'g', unitEn: 'g', precision: 0 },
+    essential: true, courseTags: ['soup', 'salad', 'dessert', 'cocktails'], effect: null,
+    note: null, chapterIndex: 1, status: 'discovered', basketCourseIndex: 1,
+    basketTaskId: null, suggestedQuantity: { de: '450 g', en: '450 g' }
+  });
+  legacy.ingredientQueues[1].push('yoghurt');
+  legacy.tasks[0].basketIngredientIds.push('yoghurt');
+  legacy.menu[1].ingredientIds.push('yoghurt');
+  legacy.lastIngredientId = 'yoghurt';
+  legacy.previousIngredientId = 'yoghurt';
+  legacy.turn.phase = 'ingredientChoice';
+  legacy.turn.pendingIngredientIds = ['yoghurt'];
+
+  assert.equal(validateSessionState(legacy).valid, true, 'the previous catalogue remains loadable');
+  const restored = new GameEngine(legacy);
+  assert.ok(!restored.state.ingredients.some((ingredient) => ingredient.id === 'yoghurt'));
+  assert.ok(restored.state.ingredientQueues.every((queue) => !queue.includes('yoghurt')));
+  assert.ok(restored.state.tasks.every((task) => !task.basketIngredientIds.includes('yoghurt')));
+  assert.ok(restored.state.menu.every((course) => !course.ingredientIds.includes('yoghurt')));
+  assert.equal(restored.state.lastIngredientId, null);
+  assert.equal(restored.state.previousIngredientId, null);
+  assert.equal(restored.state.turn.phase, 'draw');
+  assert.equal(validateSessionState(restored.snapshot()).valid, true);
+});
+
+test('saved voyages retire broth from the played pool and add peppermint globally', () => {
+  const engine = GameEngine.create({ names, title: 'Legacy broth', defaultLanguage: 'de', seed: 433 }, 1_800_000_000_000);
+  const legacy = engine.snapshot();
+  const peppermint = legacy.ingredients.find((ingredient) => ingredient.id === 'peppermint');
+  legacy.ingredients = legacy.ingredients.filter((ingredient) => ingredient.id !== 'peppermint');
+  legacy.ingredients.push({ ...peppermint, id: 'broth', name: { de: 'Brühe', en: 'Stock' }, courseTags: ['soup'] });
+  legacy.ingredientQueues[1].push('broth');
+  const restored = new GameEngine(legacy);
+  assert.equal(restored.state.ingredients.some((ingredient) => ingredient.id === 'broth'), false);
+  const restoredPeppermint = restored.getIngredient('peppermint');
+  assert.equal(restoredPeppermint.status, 'available');
+  assert.equal(restoredPeppermint.chapterIndex, null);
+  assert.deepEqual(restoredPeppermint.courseTags, ['salad', 'dessert', 'cocktails']);
+});
+
+test('saved voyages return an unlocked cucumber from the soup basket', () => {
+  const engine = GameEngine.create({ names, title: 'Legacy cucumber soup', defaultLanguage: 'de', seed: 432 }, 1_800_000_000_000);
+  engine.state.turn.phase = 'eating';
+  assert.equal(engine.startNextChapter(1_800_000_001_000), true);
+  const legacy = engine.snapshot();
+  const cucumber = legacy.ingredients.find((ingredient) => ingredient.id === 'cucumber');
+  cucumber.courseTags = ['soup', 'salad', 'main'];
+  cucumber.chapterIndex = 1;
+  cucumber.status = 'discovered';
+  cucumber.basketCourseIndex = 1;
+  legacy.ingredientQueues[1].push('cucumber');
+  legacy.turn.phase = 'ingredientChoice';
+  legacy.turn.pendingIngredientIds = ['cucumber'];
+
+  const restored = new GameEngine(legacy);
+  const restoredCucumber = restored.getIngredient('cucumber');
+  assert.deepEqual(restoredCucumber.courseTags, ['salad', 'main']);
+  assert.equal(restoredCucumber.status, 'available');
+  assert.equal(restoredCucumber.chapterIndex, null);
+  assert.equal(restoredCucumber.basketCourseIndex, null);
+  assert.ok(!restored.state.ingredientQueues[1].includes('cucumber'));
+  assert.equal(restored.state.turn.phase, 'draw');
+  assert.deepEqual(restored.state.turn.pendingIngredientIds, []);
+});
+
 test('every task can be completed early and its challenge score survives persistence', () => {
   const now = 1_800_000_000_000;
   const engine = GameEngine.create({ names, title: 'Timer test', defaultLanguage: 'de', seed: 45 }, now);
@@ -37,8 +120,8 @@ test('every task can be completed early and its challenge score survives persist
   const coinsBefore = engine.state.coins;
   assert.equal(engine.completeTask(coreTask.instanceId, now + 1_000), true);
   assert.equal(coreTask.challengeResult, 'veryFast');
-  assert.equal(coreTask.challengeCoinValue, 3);
-  assert.equal(engine.state.coins, coinsBefore + 3);
+  assert.equal(coreTask.challengeCoinValue, 2);
+  assert.equal(engine.state.coins, coinsBefore + 2);
   const restored = new GameEngine(engine.snapshot());
   assert.equal(restored.state.tasks[0].status, 'done');
   assert.equal(restored.undoTaskCompletion(coreTask.instanceId, now + 2_000), true);
@@ -57,7 +140,7 @@ test('the current briefing task can be checked directly from the task list witho
   assert.equal(engine.state.turn.assignedTaskId, null);
 });
 
-test('timer alerts fire once at five minutes, one minute, and completion', () => {
+test('timer alerts fire once at completion and stay silent at five and one minute', () => {
   const start = 1_800_000_000_000;
   const task = {
     instanceId: 'timer-check', status: 'active', endAt: start + 10 * 60_000,
@@ -66,9 +149,9 @@ test('timer alerts fire once at five minutes, one minute, and completion', () =>
   const session = { tasks: [task], updatedAt: start };
 
   let result = updateTaskTimers(session, start + 5 * 60_000);
-  assert.deepEqual(result.notices.map((notice) => notice.threshold), [300]);
+  assert.deepEqual(result.notices, []);
   result = updateTaskTimers(session, start + 9 * 60_000);
-  assert.deepEqual(result.notices.map((notice) => notice.threshold), [60]);
+  assert.deepEqual(result.notices, []);
 
   const restored = structuredClone(session);
   result = updateTaskTimers(restored, start + 10 * 60_000);
@@ -100,7 +183,7 @@ test('repository round-trips the complete game state and deletes only the target
   assert.equal(repository.getCurrentSession(), null);
 });
 
-test('round-robin handover advances exactly one player after a completed turn', () => {
+test('handover advances to the next free player and skips task owners', () => {
   const engine = GameEngine.create({ names, title: 'Round robin', defaultLanguage: 'de', seed: 51 }, 1_800_000_000_000);
   const firstId = engine.activePlayer.id;
   assert.equal(engine.acceptTaskBriefing(), true, 'the automatic opening task is accepted before the first event');
@@ -112,13 +195,19 @@ test('round-robin handover advances exactly one player after a completed turn', 
     engine.confirmRoll();
   }
   if (engine.state.turn.phase === 'ingredientChoice') engine.chooseIngredient(engine.state.turn.pendingIngredientIds[0]);
+  if (engine.state.turn.phase === 'taskAssigneeChoice') {
+    const pending = engine.state.turn.pendingTaskAssignment;
+    const selected = new Set(pending.selectedPlayerIds);
+    engine.freePlayersForTask().filter((player) => !selected.has(player.id)).slice(0, pending.requiredPeople - selected.size).forEach((player) => engine.toggleTaskAssignee(player.id));
+    engine.confirmTaskAssignees();
+  }
   if (engine.state.turn.phase === 'taskBriefing') engine.acceptTaskBriefing();
   if (engine.state.turn.phase === 'watch') engine.completeWatchChallenge();
   while (engine.state.turn.chainPending) engine.state.turn.chainPending = false;
   assert.equal(engine.state.turn.phase, 'resolved');
   engine.endTurn();
   assert.notEqual(engine.activePlayer.id, firstId);
-  assert.equal(engine.activePlayer.id, engine.state.players[1].id);
+  assert.equal(engine.isPlayerFreeForTask(engine.activePlayer.id), true);
 });
 
 test('resolved work-order cards keep the task that was actually assigned', () => {

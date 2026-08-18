@@ -9,6 +9,8 @@ const createEngine = (seed = 801) => {
   const engine = GameEngine.create({ names, title: 'Ingredient effects', defaultLanguage: 'de', seed }, 1_800_000_000_000);
   engine.state.turn.phase = 'eating';
   engine.startNextChapter(1_800_000_000_100);
+  engine.beginEvent(1_800_000_000_110);
+  engine.chooseSoupStyle('cream', 1_800_000_000_120);
   return engine;
 };
 
@@ -32,6 +34,24 @@ function moveIngredientToCurrentTop(engine, ingredientId) {
     if (index >= 0) queue.splice(index, 1);
   });
   engine.state.ingredientQueues[engine.state.chapterIndex].unshift(ingredientId);
+}
+
+function completeSoupCompositionForTest(engine) {
+  ['seeds', 'croutons', 'pumpkin', 'carrots', 'chicken', 'nuts'].forEach((ingredientId) => {
+    const ingredient = engine.getIngredient(ingredientId);
+    ingredient.status = 'used';
+    ingredient.chapterIndex = 1;
+    ingredient.basketCourseIndex = null;
+  });
+}
+
+function completeSaladCompositionForTest(engine) {
+  ['lettuce', 'garlic', 'herbs', 'vinegar', 'mustard', 'apples', 'pears', 'beef', 'chestnuts'].forEach((ingredientId) => {
+    const ingredient = engine.getIngredient(ingredientId);
+    ingredient.status = 'used';
+    ingredient.chapterIndex = 2;
+    ingredient.basketCourseIndex = null;
+  });
 }
 
 test('every prepared ingredient effect is translated and handled by the engine', () => {
@@ -63,17 +83,17 @@ test('persistent ingredient bonuses are consumed by the intended later action', 
   engine.applyIngredientEffect(effectCard(engine, 'nextPlayer'));
 
   assert.deepEqual({
-    double: engine.state.bonuses.doubleNextDie,
-    reroll: engine.state.bonuses.rerollNext,
-    adjust: engine.state.bonuses.adjustNext,
-    ignoreEvent: engine.state.bonuses.ignoreNextEvent,
-    ignoreIngredient: engine.state.bonuses.ignoreNextIngredientEffect,
-    repeatIngredient: engine.state.bonuses.repeatNextIngredientEffect,
-    replaceIngredient: engine.state.bonuses.replaceNextIngredient,
-    reveal: engine.state.bonuses.revealNextEvent,
+    double: engine.activeBonuses.doubleNextDie,
+    reroll: engine.activeBonuses.rerollNext,
+    adjust: engine.activeBonuses.adjustNext,
+    ignoreEvent: engine.activeBonuses.ignoreNextEvent,
+    ignoreIngredient: engine.activeBonuses.ignoreNextIngredientEffect,
+    repeatIngredient: engine.activeBonuses.repeatNextIngredientEffect,
+    replaceIngredient: engine.activeBonuses.replaceNextIngredient,
+    reveal: engine.activeBonuses.revealNextEvent,
     chain: engine.state.turn.chainPending,
-    extra: engine.state.bonuses.extraTurns,
-    next: engine.state.bonuses.forceNextPlayer
+    extra: engine.activeBonuses.extraTurns,
+    next: engine.activeBonuses.forceNextPlayer
   }, { double: 1, reroll: 1, adjust: 1, ignoreEvent: 1, ignoreIngredient: 1, repeatIngredient: 1, replaceIngredient: 1, reveal: 2, chain: true, extra: 0, next: 0 });
 
   const diceEvent = EVENT_DECKS[0].find((event) => event.type === 'dice');
@@ -81,13 +101,13 @@ test('persistent ingredient bonuses are consumed by the intended later action', 
   engine.state.turn.phase = 'rolled';
   engine.state.turn.dieResult = 3;
   assert.ok(engine.rerollDieWithIngredient() >= 1);
-  assert.equal(engine.state.bonuses.rerollNext, 0);
+  assert.equal(engine.activeBonuses.rerollNext, 0);
   assert.equal(engine.adjustDieWithIngredient(1), true);
-  assert.equal(engine.state.bonuses.adjustNext, 0);
+  assert.equal(engine.activeBonuses.adjustNext, 0);
   const adjustedResult = engine.state.turn.dieResult;
   assert.equal(engine.confirmRoll(), true);
   assert.equal(engine.state.turn.dieResult, Math.min(6, adjustedResult * 2));
-  assert.equal(engine.state.bonuses.doubleNextDie, 0);
+  assert.equal(engine.activeBonuses.doubleNextDie, 0);
 });
 
 test('draw, character-choice, deck-swap, repeat, and event-replacement effects complete their UI flows', () => {
@@ -118,7 +138,7 @@ test('draw, character-choice, deck-swap, repeat, and event-replacement effects c
   const repeatEngine = createEngine(883);
   beginAbilityIngredientFlow(repeatEngine);
   repeatEngine.applyIngredientEffect(effectCard(repeatEngine, 'repeatIngredient'), Date.now(), { previousIngredientId: effectCard(repeatEngine, 'doubleDie').id });
-  assert.equal(repeatEngine.state.bonuses.doubleNextDie, 1);
+  assert.equal(repeatEngine.activeBonuses.doubleNextDie, 1);
 
   const replaceEngine = createEngine(884);
   replaceEngine.beginEvent();
@@ -139,7 +159,7 @@ test('the Cook can ignore one ingredient effect per course and the Alchemist pas
   assert.equal(cookEngine.prepareIngredientChoice('meat', 'ability', { all: true }), true);
   assert.ok(cookEngine.state.turn.pendingIngredientIds.includes('beef'));
   assert.equal(cookEngine.chooseIngredient('beef', Date.now(), true), true);
-  assert.equal(cookEngine.state.bonuses.doubleNextDie, 0);
+  assert.equal(cookEngine.activeBonuses.doubleNextDie, 0);
   assert.equal(cookEngine.canCookIgnoreIngredientEffect(), false);
 
   const alchemistEngine = createEngine(901);
@@ -164,7 +184,11 @@ test('category-role and Treasurer passives follow the character-card wording', (
   for (const [roleId, ingredientId] of cases) {
     const engine = createEngine(920 + cases.findIndex((entry) => entry[0] === roleId));
     engine.state.players[0].roleId = roleId;
-    if (roleId === 'gatherer') engine.state.chapterIndex = 2;
+    if (roleId === 'gatherer') {
+      completeSoupCompositionForTest(engine);
+      engine.state.turn.phase = 'eating';
+      assert.equal(engine.startNextChapter(), true);
+    }
     assert.equal(engine.useCategoryRolePassive(), true, roleId);
     const offered = engine.state.turn.pendingIngredientIds[0];
     assert.equal(engine.getIngredient(offered).category, engine.getIngredient(ingredientId).category);
@@ -179,9 +203,15 @@ test('category-role and Treasurer passives follow the character-card wording', (
 
   const treasurer = createEngine(931);
   treasurer.state.players[0].roleId = 'treasurer';
-  treasurer.state.chapterIndex = 3;
+  completeSoupCompositionForTest(treasurer);
+  treasurer.state.turn.phase = 'eating';
+  assert.equal(treasurer.startNextChapter(), true);
+  assert.equal(treasurer.state.chapterIndex, 2);
+  completeSaladCompositionForTest(treasurer);
+  treasurer.state.turn.phase = 'eating';
   const before = treasurer.state.ingredients.filter((ingredient) => ingredient.chapterIndex === 3 && ingredient.status === 'discovered').length;
-  assert.equal(treasurer.secureTreasurerIngredient(), true);
+  assert.equal(treasurer.startNextChapter(), true);
+  assert.equal(treasurer.state.chapterIndex, 3);
   assert.equal(treasurer.state.ingredients.filter((ingredient) => ingredient.chapterIndex === 3 && ingredient.status === 'discovered').length, before + 1);
   assert.equal(treasurer.secureTreasurerIngredient(), false);
 });
@@ -214,4 +244,27 @@ test('active abilities can be used at most once before the tablet is handed over
   assert.equal(engine.state.turn.activeAbilityUsed, true);
   engine.state.turn.phase = 'draw';
   assert.equal(engine.useActiveAbility(), false);
+});
+
+test('ingredient bonus effects can add at most one extra ingredient before handover', () => {
+  const engine = createEngine(970);
+  beginAbilityIngredientFlow(engine);
+  engine.activeBonuses.ignoreNextIngredientEffect = 3;
+  assert.equal(engine.queueIngredientDraw(), true);
+  assert.equal(engine.queueIngredientDraw(), true);
+  assert.equal(engine.queueIngredientDraw(), false, 'a third ingredient in the same turn is capped');
+
+  engine.continueIngredientFlow();
+  assert.equal(engine.state.turn.phase, 'ingredientChoice');
+  assert.equal(engine.chooseIngredient(engine.state.turn.pendingIngredientIds[0]), true);
+  assert.equal(engine.state.turn.phase, 'ingredientChoice');
+  assert.equal(engine.chooseIngredient(engine.state.turn.pendingIngredientIds[0]), true);
+  assert.equal(engine.state.turn.ingredientsAddedThisTurn, 2);
+  assert.equal(engine.prepareIngredientChoice(), false);
+  assert.equal(engine.state.history.filter((entry) => entry.type === 'ingredientDiscovered').length, 2);
+  engine.state.turn.phase = 'resolved';
+  engine.state.turn.chainPending = true;
+  assert.equal(engine.endTurn(), 'chain');
+  assert.equal(engine.state.turn.ingredientsAddedThisTurn, 2, 'an event chain is still the same turn');
+  assert.equal(engine.canAddIngredientThisTurn(), false);
 });

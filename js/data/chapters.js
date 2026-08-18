@@ -19,7 +19,7 @@ export const CHAPTERS = Object.freeze([
     course: { de: 'Suppe', en: 'Soup' },
     subtitle: { de: 'Die Suche nach dem Suppenkessel', en: 'The search for the soup cauldron' },
     atmosphere: { de: 'Nebel zieht durch die Täler und verbirgt neue Vorräte.', en: 'Mist drifts through the valleys and hides new provisions.' },
-    description: { de: 'Eine improvisierte Cremesuppe aus den erspielten Gemüsen und Einlagen.', en: 'An improvised cream soup made from the vegetables and extras won in play.' },
+    description: { de: 'Eine improvisierte klare Suppe oder Cremesuppe aus den erspielten Gemüsen und Einlagen.', en: 'An improvised clear or cream soup made from the vegetables and extras won in play.' },
     locations: [
       { de: 'Nebelquelle', en: 'Mist Spring' }, { de: 'Kräuterhütte', en: 'Herb Hut' },
       { de: 'Pilzwald', en: 'Mushroom Wood' }, { de: 'Moorsteg', en: 'Mooring Walk' },

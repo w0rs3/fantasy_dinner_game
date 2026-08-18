@@ -11,10 +11,10 @@ const ARCHETYPES = Object.freeze([
     id: 'provision', stage: 'ingredients', type: 'choice',
     title: { de: 'Die Vorratskiste von {location}', en: 'The Provision Crate of {location}' },
     scene: {
-      de: 'Eine versiegelte Vorratskiste trägt zwei Zeichen. Die Crew darf beraten; die aktive Person entscheidet, wie der Speiseplan weiterwächst.',
-      en: 'A sealed provision crate bears two marks. The crew may discuss them; the active player decides how the menu develops.'
+      de: 'Eine versiegelte Vorratskiste trägt drei Zeichen. Die Crew darf beraten; die aktive Person kann den Gang erweitern, festlegen oder eine Korbzutat zurücklegen.',
+      en: 'A sealed provision crate bears three marks. The crew may discuss them; the active player can expand the course, lock it in, or return a basket ingredient.'
     },
-    mechanics: ['discoverIngredient', 'lockIngredient']
+    mechanics: ['discoverIngredient', 'lockIngredient', 'returnIngredient']
   },
   {
     id: 'market', stage: 'ingredients', type: 'dice',
@@ -29,19 +29,19 @@ const ARCHETYPES = Object.freeze([
     id: 'tasting', stage: 'ingredients', type: 'choice',
     title: { de: 'Die Probe in {location}', en: 'The Tasting at {location}' },
     scene: {
-      de: 'Eine bereits entdeckte Zutat wird noch einmal geprüft. Jetzt kann sie ausgetauscht oder verbindlich in den Gang aufgenommen werden.',
-      en: 'A discovered ingredient is examined once more. It can now be exchanged or committed to the course.'
+      de: 'Eine bereits entdeckte Zutat wird noch einmal geprüft. Jetzt kann sie ausgetauscht, verbindlich aufgenommen oder in den globalen Vorrat zurückgelegt werden.',
+      en: 'A discovered ingredient is examined once more. It can now be exchanged, committed to the course, or returned to the global pantry.'
     },
-    mechanics: ['swapIngredient', 'lockIngredient']
+    mechanics: ['swapIngredient', 'lockIngredient', 'returnIngredient']
   },
   {
     id: 'chart', stage: 'ingredients', type: 'choice',
     title: { de: 'Die Speisekarte aus {location}', en: 'The Menu Chart from {location}' },
     scene: {
-      de: 'Auf einer alten Karte sind zwei sinnvolle Wege markiert: den Vorrat erweitern oder eine gefundene Zutat endgültig sichern.',
-      en: 'An old chart marks two sensible routes: expand the provisions or secure a discovered ingredient for good.'
+      de: 'Auf einer alten Karte sind zwei sinnvolle Wege markiert: den Gang erweitern oder eine noch offene Korbzutat wieder freigeben.',
+      en: 'An old chart marks two sensible routes: expand the course or release an unlocked basket ingredient.'
     },
-    mechanics: ['discoverIngredient', 'lockIngredient']
+    mechanics: ['discoverIngredient', 'returnIngredient']
   },
   {
     id: 'omen', stage: 'ingredients', type: 'dice',
@@ -119,8 +119,8 @@ const ARCHETYPES = Object.freeze([
     id: 'respite', stage: 'cooking', type: 'choice',
     title: { de: 'Ruhiges Fahrwasser bei {location}', en: 'Calm Waters near {location}' },
     scene: {
-      de: 'Die See wird still. Die Crew darf bewusst fünf Minuten durchatmen oder die freie Zeit für eine kurze Herausforderung nutzen.',
-      en: 'The sea turns calm. The crew may deliberately take a five-minute breather or use the free time for a short challenge.'
+      de: 'Die See wird still. Wenn keine Küchenaufgabe mehr offen ist, darf die Crew fünf Minuten durchatmen; andernfalls nutzt sie den Moment für eine kurze Herausforderung.',
+      en: 'The sea turns calm. If no kitchen task remains open, the crew may take a five-minute breather; otherwise it uses the moment for a short challenge.'
     },
     mechanics: ['fiveMinuteBreak', 'watchChallenge']
   },
@@ -135,6 +135,26 @@ const ARCHETYPES = Object.freeze([
   }
 ]);
 
+const INGREDIENT_FUN_ARCHETYPE = Object.freeze({
+  id: 'pantry-mischief', stage: 'ingredients', type: 'choice',
+  title: { de: 'Schabernack im Vorrat von {location}', en: 'Pantry Mischief at {location}' },
+  scene: {
+    de: 'Zwischen den Zutaten versteckt sich eine verspielte Botschaft. Für einen Moment darf die Crew lachen, eine kleine Herausforderung annehmen oder nebenbei ein paar Münzen erspielen.',
+    en: 'A playful message is hidden among the ingredients. For a moment, the crew may laugh, take on a small challenge, or earn a few coins along the way.'
+  },
+  mechanics: ['watchChallenge', 'storyMoment', 'treasureAndWatch']
+});
+
+const TASK_FUN_ARCHETYPE = Object.freeze({
+  id: 'work-mischief', stage: 'tasks', type: 'dice',
+  title: { de: 'Schabernack zwischen den Aufträgen von {location}', en: 'Mischief between Orders at {location}' },
+  scene: {
+    de: 'Zwischen zwei Questschritten taucht eine versiegelte Spaßkarte auf. Der Würfel bringt eine harmlose Challenge, eine kleine Flaute in der Bordkasse oder einen reinen Storymoment.',
+    en: 'Between two quest steps, a sealed fun card appears. The die brings a harmless challenge, a small dip in the ship’s purse, or a pure story moment.'
+  },
+  mechanics: ['coinLoss', 'watchChallenge', 'storyMoment']
+});
+
 function interpolate(value, location) {
   return {
     de: value.de.replace('{location}', location.de),
@@ -144,7 +164,7 @@ function interpolate(value, location) {
 
 export function buildEventDeck(chapterIndex) {
   const chapter = CHAPTERS[chapterIndex];
-  return chapter.locations.flatMap((location, locationIndex) =>
+  const regularEvents = chapter.locations.flatMap((location, locationIndex) =>
     ARCHETYPES.map((archetype, archetypeIndex) => {
       const number = locationIndex * ARCHETYPES.length + archetypeIndex + 1;
       const baseTitle = interpolate(archetype.title, location);
@@ -169,6 +189,48 @@ export function buildEventDeck(chapterIndex) {
       };
     })
   );
+  const ingredientFunEvents = chapter.locations.flatMap((location, locationIndex) => {
+    if (locationIndex % 2 !== 0) return [];
+    const title = interpolate(INGREDIENT_FUN_ARCHETYPE.title, location);
+    return [{
+      id: `F${chapterIndex + 1}-${String(locationIndex + 1).padStart(2, '0')}`,
+      chapterId: chapter.id,
+      locationIndex,
+      archetype: INGREDIENT_FUN_ARCHETYPE.id,
+      stage: INGREDIENT_FUN_ARCHETYPE.stage,
+      type: INGREDIENT_FUN_ARCHETYPE.type,
+      title: {
+        de: `${title.de} · ${chapter.name.de}`,
+        en: `${title.en} · ${chapter.name.en}`
+      },
+      story: {
+        de: `In ${location.de} beginnt die Szene: ${INGREDIENT_FUN_ARCHETYPE.scene.de} ${chapter.atmosphere.de}`,
+        en: `The scene begins at ${location.en}: ${INGREDIENT_FUN_ARCHETYPE.scene.en} ${chapter.atmosphere.en}`
+      },
+      options: [...INGREDIENT_FUN_ARCHETYPE.mechanics],
+      variant: locationIndex
+    }];
+  });
+  const taskFunEvents = chapter.locations.flatMap((location, locationIndex) => {
+    if (locationIndex % 2 === 0) return [];
+    const title = interpolate(TASK_FUN_ARCHETYPE.title, location);
+    return [{
+      id: `T${chapterIndex + 1}-${String(locationIndex + 1).padStart(2, '0')}`,
+      chapterId: chapter.id,
+      locationIndex,
+      archetype: TASK_FUN_ARCHETYPE.id,
+      stage: TASK_FUN_ARCHETYPE.stage,
+      type: TASK_FUN_ARCHETYPE.type,
+      title: { de: `${title.de} · ${chapter.name.de}`, en: `${title.en} · ${chapter.name.en}` },
+      story: {
+        de: `In ${location.de} beginnt die Szene: ${TASK_FUN_ARCHETYPE.scene.de} ${chapter.atmosphere.de}`,
+        en: `The scene begins at ${location.en}: ${TASK_FUN_ARCHETYPE.scene.en} ${chapter.atmosphere.en}`
+      },
+      outcomes: [...TASK_FUN_ARCHETYPE.mechanics],
+      variant: locationIndex
+    }];
+  });
+  return [...regularEvents, ...ingredientFunEvents, ...taskFunEvents];
 }
 
 export const EVENT_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildEventDeck(index)));
@@ -180,6 +242,7 @@ export const EFFECT_TEXT = Object.freeze({
   discoverIngredient: { de: 'Öffnet dieses Vorratsereignis und wählt eine der angebotenen Zutaten.', en: 'Open this provision event and choose one of the offered ingredients.' },
   treasureAndIngredient: { de: 'Gewinnt Münzen und wählt danach eine neue Zutat.', en: 'Gain coins, then choose a new ingredient.' },
   lockIngredient: { de: 'Legt die zuletzt entdeckte, noch veränderbare Zutat verbindlich für diesen Gang fest.', en: 'Lock the most recently discovered, still changeable ingredient into this course.' },
+  returnIngredient: { de: 'Legt die zuletzt entdeckte, noch veränderbare Zutat aus dem Gangkorb zurück in den globalen Vorrat.', en: 'Return the most recently discovered, still changeable ingredient from the course basket to the global pantry.' },
   swapIngredient: { de: 'Tauscht die zuletzt entdeckte, noch nicht festgelegte Zutat gegen eine passende Alternative.', en: 'Swap the most recently discovered, unlocked ingredient for a suitable alternative.' },
   watchChallenge: { de: 'Wählt die erste kurze Bordaufgabe und führt sie sofort aus.', en: 'Choose the first short deck duty and do it now.' },
   watchChallengeAlt: { de: 'Wählt die zweite kurze Bordaufgabe und führt sie sofort aus.', en: 'Choose the second short deck duty and do it now.' },
@@ -187,25 +250,30 @@ export const EFFECT_TEXT = Object.freeze({
   treasureAndChain: { de: 'Gewinnt Münzen und deckt sofort eine weitere Ereigniskarte auf.', en: 'Gain coins and immediately reveal another event.' },
   splitCrew: { de: 'Teilt die Crew möglichst gleichmäßig in zwei Gruppen.', en: 'Split the crew into two groups as evenly as possible.' },
   chain: { de: 'Deckt sofort eine weitere Ereigniskarte auf.', en: 'Immediately reveal another event card.' },
-  treasure: { de: 'Gewinnt fünf Münzen.', en: 'Gain five coins.' },
-  coinLoss: { de: 'Die Bordkasse verliert drei Münzen.', en: 'The ship’s purse loses three coins.' },
+  treasure: { de: 'Gewinnt zwei Münzen.', en: 'Gain two coins.' },
+  coinLoss: { de: 'Die Bordkasse verliert fünfzehn Münzen.', en: 'The ship’s purse loses fifteen coins.' },
   storyMoment: { de: 'Genießt diesen kleinen Storymoment – er hat keine weitere Auswirkung.', en: 'Enjoy this small story moment — it has no further effect.' },
   fiveMinuteBreak: { de: 'Startet eine echte fünfminütige Pause für die ganze Crew.', en: 'Start a real five-minute break for the whole crew.' },
   singleTask: { de: 'Übernehmt den nächsten geeigneten Auftrag mit möglichst kleiner Besetzung.', en: 'Take the next suitable job with the smallest practical crew.' },
-  watchComplete: { de: 'Die Bordaufgabe ist erledigt; die laufende Küchenzeit wurde sinnvoll genutzt.', en: 'The deck duty is complete; the running kitchen time was used productively.' }
+  watchComplete: { de: 'Die Bordaufgabe ist erledigt; die laufende Küchenzeit wurde sinnvoll genutzt.', en: 'The deck duty is complete; the running kitchen time was used productively.' },
+  watchActive: { de: 'Die Challenge läuft über weitere Züge und blockiert die Übergabe nicht.', en: 'The challenge continues across later turns without blocking handover.' }
 });
 
 const challenge = (id, de, en, options = {}) => ({
   id, de, en, title: options.title ?? { de: 'Kurze Challenge', en: 'Quick challenge' },
-  minutes: options.minutes ?? 1, coins: options.coins ?? 2, secret: options.secret ?? false,
-  followUpId: options.followUpId ?? null
+  minutes: options.minutes ?? 1,
+  coins: options.coins === 0 ? 0 : Math.max(1, Math.ceil((options.coins ?? 2) / 3)),
+  secret: options.secret ?? false,
+  followUpId: options.followUpId ?? null, flow: options.flow ?? 'immediate',
+  endTrigger: options.endTrigger ?? null, mandatory: options.mandatory ?? false,
+  followUpOnly: options.followUpOnly ?? false
 });
 
 export const WATCH_CHALLENGES = Object.freeze([
-  challenge('clear-surface', 'Räumt gemeinsam eine Arbeitsfläche vollständig frei und wischt sie sauber.', 'Clear one work surface completely and wipe it clean together.'),
+  challenge('clear-surface', 'Die aktive Person erfindet in 60 Sekunden einen Piratennamen für eine sichtbare, gerade freie Ablagefläche. Niemand unterbricht dafür die Küchenarbeit oder räumt etwas um.', 'The active player has 60 seconds to invent a pirate name for a visible, currently unused surface. Nobody interrupts kitchen work or moves anything for it.', { title: { de: 'Die geheime Schatzablage', en: 'The Secret Treasure Shelf' } }),
   challenge('next-steps', 'Prüft alle laufenden Aufgaben und nennt laut, was als Nächstes gebraucht wird.', 'Review every active task and say aloud what will be needed next.'),
   challenge('fresh-water', 'Stellt für jedes Crewmitglied frisches Wasser bereit.', 'Set out fresh water for every crew member.'),
-  challenge('sort-tools', 'Sortiert Messer, Bretter und Schüsseln sicher nach ihrem nächsten Einsatz.', 'Sort knives, boards, and bowls safely for their next use.'),
+  challenge('sort-tools', 'Die aktive Person erfindet in 60 Sekunden für drei sichtbare Küchenwerkzeuge je einen Piratennamen. Fasst nichts an, was gerade benutzt wird, und unterbrecht keine Küchenarbeit.', 'The active player has 60 seconds to invent a pirate name for each of three visible kitchen tools. Do not touch anything currently in use or interrupt kitchen work.', { title: { de: 'Die Taufe der Kombüsenwerkzeuge', en: 'Naming the Galley Tools' } }),
   challenge('name-course', 'Erfindet in höchstens 60 Sekunden einen Namen für den entstehenden Gang.', 'Invent a name for the emerging course in no more than 60 seconds.'),
   challenge('ingredient-round', 'Nennt reihum je eine Zutat, die heute bereits sinnvoll verwendet wurde.', 'Go around once and name one ingredient already used well tonight.'),
   challenge('table-check', 'Prüft den Tisch: Fehlt Besteck, Wasser, ein Untersetzer oder Platz zum Servieren?', 'Check the table: is cutlery, water, a trivet, or serving space missing?'),
@@ -213,14 +281,34 @@ export const WATCH_CHALLENGES = Object.freeze([
   challenge('portion-captain', 'Bestimmt eine Person, die beim nächsten Servieren Portionsgrößen kontrolliert.', 'Choose one person to check portion sizes at the next serving.'),
   challenge('timer-check', 'Schaut auf alle Challenges und wiederholt gemeinsam die nächste Warnschwelle.', 'Look at every challenge and repeat the next alert threshold together.'),
   challenge('sea-story', 'Gebt {activePlayer} 60 Sekunden für eine kurze Seefahrergeschichte.', 'Give {activePlayer} 60 seconds for a short seafaring story.'),
+  challenge('pirate-verse', 'Erfindet in höchstens 90 Sekunden ein kurzes Piratenlied oder Piratengedicht mit mindestens zwei Zeilen. Singt es gemeinsam oder tragt es dramatisch vor – beides zählt vollständig.', 'In no more than 90 seconds, invent a short pirate song or pirate poem of at least two lines. Sing it together or perform it dramatically — either counts in full.', { minutes: 2, coins: 3, title: { de: 'Die Ballade der wilden Kombüse', en: 'Ballad of the Wild Galley' } }),
   challenge('safety-check', 'Kontrolliert, dass heiße, scharfe und rohe Arbeitsbereiche klar getrennt sind.', 'Confirm that hot, sharp, and raw-food work areas are clearly separated.'),
-  challenge('odd-dance', 'Steh auf und tanze 20 Sekunden so merkwürdig wie möglich. Danach geht das Spiel normal weiter.', 'Stand up and dance as strangely as possible for 20 seconds. Then continue normally.', { coins: 3, title: { de: 'Tanz auf Deck', en: 'Deck Dance' } }),
+  challenge('odd-dance', 'Steh auf und tanze 20 Sekunden so merkwürdig wie möglich. Danach geht das Spiel normal weiter.', 'Stand up and dance as strangely as possible for 20 seconds. Then continue normally.', { coins: 3, title: { de: 'Tanz auf Deck', en: 'Deck Dance' }, secret: true }),
   challenge('table-lap', 'Steh auf, geh einmal um den Tisch und setz dich wieder hin, als wäre nichts passiert.', 'Stand up, walk once around the table, and sit down again as though nothing happened.', { title: { de: 'Geheimer Rundgang', en: 'Secret Circuit' }, secret: true }),
-  challenge('compliments', 'Bis zu deinem nächsten Zug machst du der jeweils aktiven Person ein ehrliches, kurzes Kompliment.', 'Until your next turn, give the active player one brief, genuine compliment.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true }),
-  challenge('love-decisions', 'Bis zu deinem nächsten Zug findest du jede Entscheidung deiner Crew großartig. Übertreib freundlich, aber verrate die Karte nicht.', 'Until your next turn, you think every crew decision is wonderful. Exaggerate kindly, but do not reveal the card.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true }),
-  challenge('laugh-turn', 'In {targetPlayer}s nächstem Zug findest du alles erstaunlich lustig. Bleib freundlich und löse die Karte danach auf.', 'During {targetPlayer}’s next turn, find everything remarkably funny. Stay kind and end the bit afterwards.', { coins: 3, title: { de: 'Geheimes Lachen', en: 'Secret Laughter' }, secret: true }),
-  challenge('chicken', 'Gackere einmal pro Minute leise wie ein Huhn. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Cluck quietly like a chicken once per minute. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Der Hühnerfluch', en: 'The Chicken Curse' }, secret: true, followUpId: 'stop-chicken' }),
-  challenge('stop-chicken', 'Sage {targetPlayer} irgendwann in diesem Zug: „Der Hühnerfluch ist gebrochen.“ Erklärt euch erst danach gegenseitig die Karten.', 'At some point this turn, tell {targetPlayer}: “The chicken curse is broken.” Only then explain the cards to each other.', { coins: 2, title: { de: 'Das Gegenmittel', en: 'The Antidote' }, secret: true }),
+  challenge('compliments', 'Bis zu deinem nächsten Zug machst du der jeweils aktiven Person ein ehrliches, kurzes Kompliment.', 'Until your next turn, give the active player one brief, genuine compliment.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('love-decisions', 'Bis zu deinem nächsten Zug findest du jede Entscheidung deiner Crew großartig. Übertreib freundlich, aber verrate die Karte nicht.', 'Until your next turn, you think every crew decision is wonderful. Exaggerate kindly, but do not reveal the card.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('laugh-turn', 'In {targetPlayer}s nächstem Zug findest du alles erstaunlich lustig. Bleib freundlich und löse die Karte danach auf.', 'During {targetPlayer}’s next turn, find everything remarkably funny. Stay kind and end the bit afterwards.', { coins: 3, title: { de: 'Geheimes Lachen', en: 'Secret Laughter' }, secret: true, flow: 'ongoing', endTrigger: 'targetTurnEnd' }),
+  challenge('chicken', 'Gackere einmal pro Minute leise wie ein Huhn. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Cluck quietly like a chicken once per minute. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Der Hühnerfluch', en: 'The Chicken Curse' }, secret: true, followUpId: 'stop-chicken', flow: 'ongoing', endTrigger: 'followUp' }),
+  challenge('stop-chicken', 'Verbindliche Anweisung: Sage jetzt zu {targetPlayer}: „Der Hühnerfluch ist gebrochen.“ Erklärt euch erst danach gegenseitig die Karten.', 'Mandatory instruction: Tell {targetPlayer} now: “The chicken curse is broken.” Only then explain the cards to each other.', { coins: 2, title: { de: 'Das Gegenmittel', en: 'The Antidote' }, secret: true, mandatory: true, followUpOnly: true }),
+  challenge('nose-voice', 'Halte dir beim Reden sanft die Nase zu. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Gently hold your nose while speaking. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Die verschnupfte Freibeuterin', en: 'The Snuffly Buccaneer' }, secret: true, followUpId: 'stop-nose', flow: 'ongoing', endTrigger: 'followUp' }),
+  challenge('stop-nose', 'Verbindliche Anweisung: Sage jetzt zu {targetPlayer}: „Du kannst wieder frei sprechen.“ Verratet erst danach, was auf euren Karten stand.', 'Mandatory instruction: Tell {targetPlayer} now: “You may speak freely again.” Only then reveal what your cards said.', { coins: 2, title: { de: 'Freie Nase voraus', en: 'Clear Air Ahead' }, secret: true, mandatory: true, followUpOnly: true }),
+  challenge('impatient-fingers', 'Tippe bis zu deinem nächsten Zug immer wieder ungeduldig mit den Fingern auf den Tisch, als hättest du großen Zeitdruck. Verrate nicht warum.', 'Until your next turn, drum your fingers impatiently on the table as though time were running out. Do not reveal why.', { coins: 3, title: { de: 'Die ungeduldige Wache', en: 'The Impatient Watch' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('three-hops', 'Steh auf und hüpf dreimal auf der Stelle, wenn das für dich sicher ist. Alternativ wippst du dreimal übertrieben auf den Zehenspitzen. Setz dich danach kommentarlos wieder hin.', 'Stand and hop three times in place if that is safe for you. Otherwise rise dramatically onto your toes three times. Sit down again without comment.', { title: { de: 'Dreifacher Seegang', en: 'Triple Sea Legs' }, secret: true }),
+  challenge('under-table-search', 'Schau auffällig unter den Tisch, als hättest du dort etwas Wichtiges verloren. Krabble nicht und blockiere keine Laufwege. Setz dich danach wieder hin, ohne etwas zu erklären.', 'Look conspicuously under the table as though you lost something important there. Do not crawl or block walkways. Sit back down without explaining.', { title: { de: 'Unter Deck gesucht', en: 'Search Below Deck' }, secret: true }),
+  challenge('soap-opera-pirate', 'Spiele bis zu deinem nächsten Zug eine völlig überdramatische Figur aus einer Piraten-Seifenoper. Seufze bedeutungsvoll und reagiere theatralisch, ohne eine reale Person oder Gruppe nachzuahmen.', 'Until your next turn, play an outrageously dramatic character from a pirate soap opera. Sigh meaningfully and react theatrically without imitating a real person or group.', { coins: 3, title: { de: 'Piraten-Seifenoper', en: 'Pirate Soap Opera' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('accent-shift', 'Sprich bis zu deinem nächsten Zug in einem freundlichen Dialekt oder Fantasieakzent, den du gut kannst – zum Beispiel kölsch oder sächsisch. Karikiere keine Person oder Herkunft.', 'Until your next turn, use a friendly regional or invented accent you know well. Do not caricature any person or background.', { coins: 3, title: { de: 'Neue Stimme an Bord', en: 'A New Voice Aboard' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('self-compliments', 'Mach dir bis zu deinem nächsten Zug bei passenden Gelegenheiten kurze, völlig übertriebene Komplimente. Verrate nicht, warum du heute so begeistert von dir bist.', 'Until your next turn, give yourself brief, wildly exaggerated compliments whenever an opportunity appears. Do not reveal why you are so impressed with yourself.', { coins: 3, title: { de: 'Eigenlob mit Rückenwind', en: 'Self-Praise with Tailwind' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('aye-aye-sentences', 'Beginne bis zum Beginn deines nächsten Zuges jeden gesprochenen Satz mit „Ai, ai“. Verrate nicht, warum du das tust.', 'Until the start of your next turn, begin every spoken sentence with “Aye, aye”. Do not reveal why you are doing it.', { coins: 3, title: { de: 'Ai, ai vorweg', en: 'Aye, Aye First' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('arr-sentences', 'Beende bis zum Beginn deines nächsten Zuges jeden gesprochenen Satz mit einem deutlichen „Arr“. Verrate nicht, warum du das tust.', 'Until the start of your next turn, end every spoken sentence with a clear “Arr”. Do not reveal why you are doing it.', { coins: 3, title: { de: 'Arr zum Schluss', en: 'Arr at the End' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('captain-permission', 'Ernenne {targetPlayer} innerlich zum Kapitän. Bis zum Beginn deines nächsten Zuges musst du vor jeder eigenen Entscheidung oder Aktion höflich um Erlaubnis bitten. Erkläre die Karte nicht.', 'Silently appoint {targetPlayer} as captain. Until the start of your next turn, politely ask the captain for permission before each decision or action of your own. Do not explain the card.', { coins: 4, title: { de: 'Befehl des Kapitäns', en: 'Captain’s Orders' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('self-talk', 'Führe 20 Sekunden lang ein ernstes Gespräch mit dir selbst und beantworte dabei deine eigenen Fragen. Mach danach kommentarlos weiter.', 'Hold a serious 20-second conversation with yourself and answer your own questions. Then continue without comment.', { title: { de: 'Zwiegespräch an Deck', en: 'A Talk with Yourself' }, secret: true }),
+  challenge('bad-joke', 'Erzähle der Crew einen absichtlich richtig schlechten, harmlosen Witz. Erkläre nicht, warum du ihn plötzlich erzählen musstest.', 'Tell the crew an intentionally terrible, harmless joke. Do not explain why you suddenly had to tell it.', { title: { de: 'Flachwitz aus der Bilge', en: 'A Joke from the Bilge' }, secret: true }),
+  challenge('hiccups', 'Simuliere bis zu deinem nächsten Zug gelegentlich einen harmlosen Schluckauf. Übertreib nicht so stark, dass Gespräche oder Küchenarbeit gestört werden.', 'Until your next turn, occasionally pretend to hiccup. Do not overdo it enough to disrupt conversation or kitchen work.', { coins: 3, title: { de: 'Schluckauf auf See', en: 'Hiccups at Sea' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('mime-self-slap', 'Spiele pantomimisch und mit deutlichem Abstand eine dramatische Backpfeife gegen dich selbst. Berühre oder schlage dich dabei nicht wirklich.', 'Mime a dramatic self-slap while keeping a clear distance. Do not actually touch or hit yourself.', { title: { de: 'Dramatische Erkenntnis', en: 'Dramatic Realisation' }, secret: true }),
+  challenge('hand-trumpet', 'Simuliere einen richtig lauten Pfurz, indem du in deine Hand pustest wie in eine Trompete. Bleib danach völlig ernst.', 'Simulate a very loud fart by blowing into your hand like a trumpet. Keep a completely straight face afterwards.', { title: { de: 'Die Nebelhornprobe', en: 'The Foghorn Test' }, secret: true }),
+  challenge('chair-circle', 'Dreh dich sicher einmal mit einem geeigneten Drehstuhl im Kreis. Falls der Stuhl nicht dafür geeignet ist, steh auf und geh einmal um ihn herum.', 'Safely spin once in a suitable swivel chair. If the chair is not suitable, stand and walk around it once instead.', { title: { de: 'Einmal rund um die Insel', en: 'Once Around the Island' }, secret: true }),
+  challenge('ceremonial-greeting', 'Bestehe freundlich darauf, deinen Sitznachbarn feierlich zu begrüßen. Die andere Person wählt zwischen Handschlag, Faustgruß oder Winken.', 'Politely insist on ceremonially greeting the person beside you. They choose between a handshake, fist bump, or wave.', { title: { de: 'Feierlicher Matrosengruß', en: 'Ceremonial Sailor Greeting' }, secret: true }),
+  challenge('folded-note', 'Nimm einen Zettel und schreibe: „Nicht sagen, was hier draufsteht.“ Falte ihn und gib ihn einer beliebigen Person. Erkläre nichts weiter.', 'Take a note and write: “Do not say what is written here.” Fold it and hand it to any player. Explain nothing further.', { title: { de: 'Die streng geheime Nachricht', en: 'The Highly Secret Note' }, secret: true }),
   challenge('five-minute-break', 'Fünf Minuten Pause: Trinkt etwas, setzt euch hin und lasst die Küche sicher ruhen. Laufende Geräte bleiben natürlich beaufsichtigt.', 'Five-minute break: have a drink, sit down, and let the kitchen rest safely. Running appliances must of course remain supervised.', { minutes: 5, coins: 0, title: { de: 'Ruhiges Fahrwasser', en: 'Calm Waters' } })
 ]);
 
@@ -240,6 +328,6 @@ export function validateEventCatalog() {
     uniqueGermanStories: storiesDe.size,
     uniqueEnglishStories: storiesEn.size,
     stageCounts,
-    valid: events.length === 504 && ids.size === 504 && titlesDe.size === 504 && titlesEn.size === 504 && storiesDe.size === 504 && storiesEn.size === 504 && EVENT_STAGES.every((stage) => stageCounts[stage] > 0)
+    valid: ids.size === events.length && titlesDe.size === events.length && titlesEn.size === events.length && storiesDe.size === events.length && storiesEn.size === events.length && EVENT_STAGES.every((stage) => stageCounts[stage] > 0)
   };
 }

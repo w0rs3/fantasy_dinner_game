@@ -54,8 +54,8 @@ export const UI_TEXT = Object.freeze({
   deleteConfirm: { de: 'Diese Reise dauerhaft löschen?', en: 'Permanently delete this voyage?' },
   reset: { de: 'Aktuelle Reise zurücksetzen', en: 'Reset current voyage' },
   rulesTitle: { de: 'So wird gespielt', en: 'How to play' },
-  rolePassive: { de: 'Passiv', en: 'Passive' },
-  roleActive: { de: 'Aktiv', en: 'Active' },
+  rolePassive: { de: 'Passive Fähigkeit', en: 'Passive ability' },
+  roleActive: { de: 'Aktive Fähigkeit', en: 'Active ability' },
   usesLeft: { de: 'Einsätze übrig', en: 'uses left' },
   useAbility: { de: 'Fähigkeit einsetzen', en: 'Use ability' },
   locationComplete: { de: 'Ort abgeschlossen – die Crew zieht automatisch weiter.', en: 'Location complete — the crew moves on automatically.' },
@@ -95,8 +95,6 @@ export const UI_TEXT = Object.freeze({
   outcome: { de: 'Ergebnis', en: 'Outcome' },
   eventDecision: { de: 'Die Crew entscheidet', en: 'The crew decides' },
   eventDice: { de: 'Der aktive Spieler würfelt', en: 'The active player rolls' },
-  timerNotice5: { de: 'Noch fünf Minuten', en: 'Five minutes remaining' },
-  timerNotice1: { de: 'Noch eine Minute', en: 'One minute remaining' },
   timerDone: { de: 'Challenge-Zeit beendet', en: 'Challenge time finished' },
   installHint: { de: 'Für zuverlässige Offline-Nutzung zum Home-Bildschirm hinzufügen.', en: 'Add to the home screen for reliable offline play.' }
 });

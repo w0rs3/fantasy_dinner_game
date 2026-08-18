@@ -42,13 +42,14 @@ export function renderTasks(engine, language) {
         const card = engine.getTaskCard(instance);
         const assigned = instance.assignedPlayerIds.map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name).filter(Boolean);
         const remaining = getRemainingSeconds(instance);
-        const challengeMinutes = instance.challengeMinutes || card.timerMinutes || card.estimatedMinutes;
-        const timerProgress = challengeMinutes && instance.startedAt
-          ? percent(Math.max(0, Date.now() - instance.startedAt), challengeMinutes * 60_000)
+        const timingMode = instance.timingMode ?? card.timingMode ?? 'challenge';
+        const timerMinutes = timingMode === 'background' ? (instance.backgroundMinutes || card.backgroundMinutes) : (instance.challengeMinutes || card.challengeMinutes);
+        const timerProgress = timerMinutes && instance.startedAt
+          ? percent(Math.max(0, Date.now() - instance.startedAt), timerMinutes * 60_000)
           : 0;
         return `<li class="task-item" data-status="${instance.status}">
           <div class="card-row">
-            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${escapeHtml(card.id)}</p><h3>${t(card.title, language)}</h3></div>
+            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${card.questStep}</p><h3>${t(card.title, language)}</h3></div>
             ${statusTag(taskStatusLabel(instance.status, language), STATUS_TONE[instance.status])}
           </div>
           <p>${t(card.instruction, language)}</p>
@@ -56,14 +57,16 @@ export function renderTasks(engine, language) {
           <div class="stat-strip">
             ${statusTag(`${tx('assignedTo', language)}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
             ${statusTag(card.people[0] === card.people[1] ? `${card.people[0]} ♙` : `${card.people[0]}–${card.people[1]} ♙`)}
-            ${statusTag(`${challengeMinutes} min ${language === 'de' ? 'Challenge' : 'challenge'}`, 'gold')}
-            ${instance.challengeResult ? statusTag(t({ de: { veryFast: 'Blitzschnell · +3', onTime: 'Rechtzeitig · +1', late: 'Verspätet · −1', veryLate: 'Stark verspätet · −3' }[instance.challengeResult], en: { veryFast: 'Lightning fast · +3', onTime: 'On time · +1', late: 'Late · −1', veryLate: 'Very late · −3' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
+            ${timingMode === 'background'
+              ? statusTag(`${timerMinutes} min ${language === 'de' ? 'Hintergrundzeit · ohne Münzdruck' : 'background time · no coin pressure'}`, 'blue')
+              : statusTag(`${timerMinutes} min ${language === 'de' ? 'Arbeits-Challenge' : 'work challenge'}`, 'gold')}
+            ${instance.challengeResult && instance.challengeResult !== 'background' ? statusTag(t({ de: { veryFast: 'Blitzschnell · +2', onTime: 'Rechtzeitig · +1', late: 'Verspätet · −2', veryLate: 'Stark verspätet · −5' }[instance.challengeResult], en: { veryFast: 'Lightning fast · +2', onTime: 'On time · +1', late: 'Late · −2', veryLate: 'Very late · −5' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
           </div>
-          ${instance.endAt ? `<div class="card-row"><span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span><span class="muted">${tx('remaining', language)}</span></div><div class="progress-track"><span style="--progress:${timerProgress}%"></span></div>` : ''}
+          ${instance.endAt ? `<div class="card-row"><span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span><span class="muted">${timingMode === 'background' ? (language === 'de' ? 'Erinnerung bis zum nächsten Questschritt' : 'reminder until the next quest step') : tx('remaining', language)}</span></div><div class="progress-track"><span data-task-progress="${escapeHtml(instance.instanceId)}" style="--progress:${timerProgress}%"></span></div>` : ''}
           <div class="button-row" style="margin-top:.8rem">
-            ${instance.status === 'queued' ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Challenge starten' : 'Start challenge'}</button>` : ''}
+            ${instance.status === 'queued' ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
             ${['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${tx('completeTask', language)}</button>` : ''}
-            ${instance.status === 'done' && instance.chapterIndex === engine.state.chapterIndex && !engine.state.chapter.served ? `<button class="quiet-button" type="button" data-action="undo-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Haken zurücknehmen' : 'Undo completion'}</button>` : ''}
+            ${engine.canUndoTaskCompletion(instance.instanceId) ? `<button class="quiet-button" type="button" data-action="undo-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Haken zurücknehmen' : 'Undo completion'}</button>` : ''}
           </div>
         </li>`;
       }).join('')}</ul>` : `<div class="empty-state"><h2>${tx('noTasks', language)}</h2></div>`}
@@ -105,17 +108,18 @@ export function renderPantry(engine, language) {
         <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
       </div>
       <div class="content-grid">
-        <section class="panel ingredient-global">
-          <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Noch keinem Gang zugeordnet' : 'Not assigned to a course yet'}</p><h2>${language === 'de' ? 'Global verfügbar' : 'Globally available'}</h2></div>${statusTag(String(available.length))}</div>
-          <ul class="ingredient-list">${available.map(ingredientRow).join('')}</ul>
-        </section>
         ${CHAPTERS.map((chapter, chapterIndex) => {
           const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === chapterIndex);
           return `<section class="panel">
             <div class="panel-header"><div><p class="eyebrow">${chapter.number}. ${t(chapter.name, language)}</p><h2>${t(chapter.course, language)}</h2></div>${chapterIndex === engine.state.chapterIndex ? statusTag(language === 'de' ? 'aktuell' : 'current', 'gold') : ''}</div>
             <ul class="ingredient-list">${ingredients.map(ingredientRow).join('')}</ul>
-          </section>`;
+            </section>`;
         }).join('')}
+        <section class="panel ingredient-global">
+          <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Nach den einzelnen Gängen' : 'After the individual courses'}</p><h2>${language === 'de' ? 'Global verfügbar' : 'Globally available'}</h2></div>${statusTag(String(available.length))}</div>
+          <p class="muted">${language === 'de' ? 'Diese Zutaten sind noch keinem Gang zugeordnet und bleiben im gemeinsamen Vorrat.' : 'These ingredients are not assigned to a course yet and remain in the shared pantry.'}</p>
+          <ul class="ingredient-list">${available.map(ingredientRow).join('')}</ul>
+        </section>
       </div>
     </section>`;
 }
@@ -172,12 +176,16 @@ export function renderCrew(engine, language) {
           const role = getRole(player.roleId);
           const isActive = index === engine.state.activePlayerIndex;
           const passiveDisabled = !engine.isPassiveEnabled(player);
+          const openTasks = engine.openTasksForPlayer(player.id);
+          const taskAvailability = openTasks.length
+            ? statusTag(language === 'de' ? 'Aufgabe läuft' : 'task in progress', 'coral')
+            : statusTag(language === 'de' ? 'frei für neue Aufgabe' : 'free for a new task', 'green');
           return `<article class="role-card" data-active="${isActive}">
-            <div class="card-row">${avatar(player)}${isActive ? statusTag(tx('activePlayer', language), 'gold') : statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)}</div>
+            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability}</span></div>
             <p class="eyebrow" style="margin-top:1rem">${role.icon} ${t(role.name, language)}</p>
             <h2>${escapeHtml(player.name)}</h2>
-            <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p>${t(role.passive, language)}</p></div>
-            <div class="role-ability"><strong>${tx('roleActive', language)} · ${player.activeUsesRemaining} ${tx('usesLeft', language)}${isActive && engine.state.turn.activeAbilityUsed ? ` · ${language === 'de' ? 'in diesem Zug genutzt' : 'used this turn'}` : ''}</strong><p>${t(role.active, language)} ${language === 'de' ? 'Nur einmal pro eigenem Zug.' : 'Once per own turn only.'}</p></div>
+            <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p><b>${t(role.passive, language)}</b></p><p class="muted">${t(role.passiveUsage, language)}</p></div>
+            <div class="role-ability"><strong>${tx('roleActive', language)} · ${player.activeUsesRemaining} ${tx('usesLeft', language)}${isActive && engine.state.turn.activeAbilityUsed ? ` · ${language === 'de' ? 'in diesem Zug genutzt' : 'used this turn'}` : ''}</strong><p><b>${t(role.active, language)}</b></p><p class="muted">${t(role.activeUsage, language)}</p></div>
             <div class="field" style="margin-top:.8rem">
               <label for="language-${escapeHtml(player.id)}">${language === 'de' ? 'Spielersprache' : 'Player language'}</label>
               <select id="language-${escapeHtml(player.id)}" data-action="player-language" data-player-id="${escapeHtml(player.id)}">
@@ -203,26 +211,32 @@ function historyLabel(entry, language) {
     eventIgnoredByBonus: 'Ereignisbonus eingesetzt', eventIgnoredByTactician: 'Ereignis taktisch ignoriert',
     eventChainContinued: 'Ereigniskette fortgesetzt', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
     treasureFound: 'Münzen gefunden', coinsChanged: 'Münzstand verändert', ingredientDiscovered: 'Zutat in den Gangkorb gelegt', ingredientLocked: 'Zutat festgelegt', ingredientReturned: 'Zutat zurückgelegt', bonusIngredientDiscovered: 'Bonuszutat entdeckt',
-    ingredientSwapped: 'Zutat getauscht', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
+    ingredientSwapped: 'Zutat getauscht', taskAssigneeChoiceStarted: 'Aufgabenbesetzung geöffnet', taskAssigneesChosen: 'Aufgabenbesetzung gewählt', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
     taskCompleted: 'Aufgabe erledigt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt', crewSplit: 'Crew aufgeteilt',
     crewReunited: 'Crew wieder vereint', locationCompleted: 'Ort abgeschlossen', turnEnded: 'Zug beendet',
     chapterReady: 'Gang bereit', courseServed: 'Gang serviert', chapterStarted: 'Neuer Gang gestartet',
     voyageCompleted: 'Reise abgeschlossen', activeAbilityUsed: 'Rollenfähigkeit eingesetzt',
     playerLanguageChanged: 'Spielersprache geändert', optionalIngredientChanged: 'Optionale Zutat geändert',
-    watchChallengeStarted: 'Deckwache gestartet', watchChallengeCompleted: 'Deckwache erledigt',
+    watchChallengeStarted: 'Deckwache geöffnet', watchChallengeActionStarted: 'Geheime Challenge gestartet', watchChallengeActivated: 'Mehrzug-Challenge aktiviert', watchChallengeCompleted: 'Deckwache erledigt', watchChallengeExpired: 'Challenge mit der Reise beendet',
+    watchFollowUpScheduled: 'Verknüpfte Challenge vorgemerkt', watchFollowUpsReleased: 'Verknüpfte Challenge freigegeben',
+    turnSkippedForTask: 'Beschäftigte Person übersprungen', allPlayersBusy: 'Ganze Crew beschäftigt', crewTurnResumed: 'Crewzug fortgesetzt',
+    soupStyleChosen: 'Suppenstil festgelegt', ingredientBasketAutoCleared: 'Gangkorb automatisch geleert',
     chapterStageChanged: 'Kartendeck gewechselt', taskBriefingShown: 'Auftrag geöffnet'
   } : {
     voyageStarted: 'Voyage started', eventDrawn: 'Event card drawn', eventResolved: 'Event resolved',
     eventIgnoredByBonus: 'Event bonus used', eventIgnoredByTactician: 'Event ignored tactically',
     eventChainContinued: 'Event chain continued', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
     treasureFound: 'Coins found', coinsChanged: 'Coin balance changed', ingredientDiscovered: 'Ingredient put in course basket', ingredientLocked: 'Ingredient locked', ingredientReturned: 'Ingredient returned', bonusIngredientDiscovered: 'Bonus ingredient discovered',
-    ingredientSwapped: 'Ingredient swapped', taskAssigned: 'Task assigned', taskStarted: 'Task started',
+    ingredientSwapped: 'Ingredient swapped', taskAssigneeChoiceStarted: 'Task crew selection opened', taskAssigneesChosen: 'Task crew selected', taskAssigned: 'Task assigned', taskStarted: 'Task started',
     taskCompleted: 'Task completed', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins', crewSplit: 'Crew split',
     crewReunited: 'Crew reunited', locationCompleted: 'Location completed', turnEnded: 'Turn ended',
     chapterReady: 'Course ready', courseServed: 'Course served', chapterStarted: 'New course started',
     voyageCompleted: 'Voyage completed', activeAbilityUsed: 'Role ability used',
     playerLanguageChanged: 'Player language changed', optionalIngredientChanged: 'Optional ingredient changed',
-    watchChallengeStarted: 'Deck watch started', watchChallengeCompleted: 'Deck watch completed',
+    watchChallengeStarted: 'Deck watch opened', watchChallengeActionStarted: 'Secret challenge started', watchChallengeActivated: 'Multi-turn challenge activated', watchChallengeCompleted: 'Deck watch completed', watchChallengeExpired: 'Challenge ended with the voyage',
+    watchFollowUpScheduled: 'Linked challenge scheduled', watchFollowUpsReleased: 'Linked challenge released',
+    turnSkippedForTask: 'Busy player skipped', allPlayersBusy: 'Whole crew busy', crewTurnResumed: 'Crew turn resumed',
+    soupStyleChosen: 'Soup style chosen', ingredientBasketAutoCleared: 'Course basket cleared automatically',
     chapterStageChanged: 'Event deck changed', taskBriefingShown: 'Work order opened'
   };
   const label = labels[entry.type] ?? entry.type;
@@ -265,25 +279,25 @@ export function renderSessions(sessions, currentSessionId, language) {
 
 export function renderRules(language) {
   const sections = language === 'de' ? [
-    ['1. Reihum spielen', 'Die hervorgehobene Person führt den Zug aus. Nach Abschluss zeigt das Spiel, an wen das Tablet weitergegeben wird. Entscheidungen dürfen gemeinsam besprochen werden.'],
-    ['2. Jeder Gang hat drei Kartendecks', 'Zuerst erscheinen Vorratsereignisse, danach Auftragsereignisse. Während Küchenarbeit läuft, sorgen freie Eventkarten mit Pausen, Geschichten, Münzen und harmlosen geheimen Challenges für Abwechslung.'],
-    ['3. Aktive Person entscheidet', 'Binäre Entscheidungen dürfen von der ganzen Crew diskutiert werden. Die hervorgehobene Person trifft die endgültige Wahl, würfelt oder übernimmt den Auftrag. Unmögliche Optionen werden nicht angezeigt.'],
-    ['4. Aufgaben als Münz-Challenges', 'Jede offene Küchenaufgabe kann jederzeit in der Aufgabenliste erledigt markiert werden. Sehr schnelles Erledigen bringt drei Münzen, rechtzeitiges eine; verspätete Aufgaben kosten eine oder drei Münzen. Ein versehentlicher Haken kann zurückgenommen werden.'],
-    ['5. Parallel kochen', 'Nach der Übernahme läuft eine Aufgabe unabhängig von den nächsten Zügen weiter. Die angezeigte Zeit ist eine Challenge und keine Sperre. Andere Personen ziehen derweil weitere Events.'],
+    ['1. Reihum spielen – Beschäftigte werden übersprungen', 'Die hervorgehobene freie Person führt den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde.'],
+    ['2. Drei Decks plus Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Harmlose Spaßkarten können schon in Zutaten- und Auftragsrunden erscheinen. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
+    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Weitere freie Personen dürfen bei manchen Karten ausdrücklich gewählt werden.'],
+    ['4. Vorgefertigte Questlinien', 'Aufträge sind nach fachlichen Questlinien und Schritten sortiert. Speckdatteln werden erst gerollt, später gebacken und herausgeholt; Brot wird eingeschoben, gebacken, herausgeholt, geschnitten und serviert. Abhängige Schritte erscheinen erst, wenn ihre Voraussetzung erledigt ist.'],
+    ['5. Arbeits-Challenge oder Hintergrundzeit', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Backen, Garen, Ruhen und Kühlen laufen als unbewertete Hintergrundtimer. Jede offene Aufgabe kann jederzeit in der Aufgabenliste abgehakt werden.'],
     ['6. Orte automatisch bereisen', 'Jede abgeschlossene Ortsaktion bewegt die Gruppe sichtbar voran. Nach genug Aktionen zieht sie automatisch zum nächsten Ort; aufgeteilte Gruppen werden am gemeinsamen Ziel wieder vereint.'],
-    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit möglichen Gang-Tags. Gefundene Zutaten landen zuerst im Gangkorb und werden von dort fest zugeordnet oder zurückgelegt. Jede Pflichtzutat wird genau einmal verwendet; nur optionale Zutaten dürfen übrig bleiben.'],
+    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Die Suppe wird zuerst als klar oder cremig festgelegt; Brühe und Sahne sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
     ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
-    ['9. Münzen und Fähigkeiten', '100 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 50 Münzen wird die Hälfte verteilt. Der Stand darf negativ werden. Eine aktive Spezialfähigkeit darf höchstens einmal zwischen Übernahme und Weitergabe des Tablets benutzt werden.']
+    ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
   ] : [
-    ['1. Play in round robin order', 'The highlighted person leads the turn. When it ends, the game shows who receives the tablet next. Decisions may be discussed together.'],
-    ['2. Every course has three event decks', 'Provision events come first, followed by work-order events. While kitchen work runs, open event cards add breaks, stories, coins, and harmless secret challenges.'],
-    ['3. The active player decides', 'The whole crew may discuss binary decisions. The highlighted player makes the final choice, rolls, or takes the job. Impossible options are never shown.'],
-    ['4. Tasks as coin challenges', 'Every open kitchen task can be marked complete from the task list at any time. Very fast completion earns three coins and on-time completion one; late tasks cost one or three coins. An accidental check can be undone.'],
-    ['5. Cook in parallel', 'Once accepted, a task continues independently of later turns. The displayed time is a challenge, not a lock. Other players keep drawing events.'],
+    ['1. Round robin – busy players are skipped', 'The highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off.'],
+    ['2. Three decks plus fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. Harmless fun cards can appear during ingredient and task rounds. A real break appears only when no kitchen task is open.'],
+    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Some cards let them choose additional free players.'],
+    ['4. Prepared quest lines', 'Jobs are ordered into practical quest lines and steps. Bacon dates are wrapped, baked, and removed later; bread is inserted, baked, removed, sliced, and served. Dependent steps appear only when their prerequisites are complete.'],
+    ['5. Work challenge or background time', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Baking, cooking, resting, and chilling use unscored background timers. Every open job can be checked off from the task list at any time.'],
     ['6. Travel automatically', 'Every resolved location action advances the group. After enough actions it moves automatically; split groups reunite at their shared target.'],
-    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with possible course tags. Finds enter the course basket and are either locked in or returned. Every essential ingredient is used exactly once; only optional ingredients may remain.'],
+    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. Soup is first chosen as clear or cream; stock and cream are pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
     ['8. Work safely', 'Follow packaging and appliance instructions. Separate raw meat from ready-to-eat food, then clean hands, equipment, and surfaces. Cook meat thoroughly and evenly; if in doubt, verify at least 70 °C for two minutes throughout. Safety overrides every card.'],
-    ['9. Coins and abilities', '100 coins equal the complete sweet reward; 50 coins mean half is shared. The balance may become negative. One active special ability may be used between receiving and passing on the tablet.']
+    ['9. Coins, effects, and secret follow-ups', '500 coins equal the complete sweet reward; 250 coins mean half is shared. Losses can reduce the balance to zero. Ingredient effects are stored for the player who drew them. Active abilities are once per turn. Counter-cards to secret curses appear randomly three to five turns later and must resolve before the course ends.']
   ];
   return `
     <section class="screen-padding">

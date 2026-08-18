@@ -3,7 +3,7 @@
   'use strict';
 
 /* js/config.js */
-const APP_VERSION = '1.3.2';
+const APP_VERSION = '1.4.0';
 const STATE_VERSION = 3;
 const STORAGE_KEYS = Object.freeze({
   sessions: 'adventure-dinner:sessions:v3',
@@ -12,18 +12,18 @@ const STORAGE_KEYS = Object.freeze({
 });
 
 const PLAYER_LIMITS = Object.freeze({ min: 6, max: 10 });
-const COIN_GOAL = 100;
+const COIN_GOAL = 500;
 const COIN_VALUES = Object.freeze({
-  event: 5,
+  event: 2,
   challenge: 2,
-  veryFastTask: 3,
+  veryFastTask: 2,
   onTimeTask: 1,
-  lateTask: -1,
-  veryLateTask: -3
+  lateTask: -2,
+  veryLateTask: -5
 });
 const LOCATION_PROGRESS_PER_TWO_PLAYERS = 1;
 const MAX_HISTORY_ITEMS = 5000;
-const TIMER_ALERT_SECONDS = Object.freeze([300, 60, 0]);
+const TIMER_ALERT_SECONDS = Object.freeze([0]);
 const DEFAULT_PREFERENCES = Object.freeze({
   language: 'de',
   audio: true,
@@ -113,7 +113,7 @@ const CHAPTERS = Object.freeze([
     course: { de: 'Suppe', en: 'Soup' },
     subtitle: { de: 'Die Suche nach dem Suppenkessel', en: 'The search for the soup cauldron' },
     atmosphere: { de: 'Nebel zieht durch die Täler und verbirgt neue Vorräte.', en: 'Mist drifts through the valleys and hides new provisions.' },
-    description: { de: 'Eine improvisierte Cremesuppe aus den erspielten Gemüsen und Einlagen.', en: 'An improvised cream soup made from the vegetables and extras won in play.' },
+    description: { de: 'Eine improvisierte klare Suppe oder Cremesuppe aus den erspielten Gemüsen und Einlagen.', en: 'An improvised clear or cream soup made from the vegetables and extras won in play.' },
     locations: [
       { de: 'Nebelquelle', en: 'Mist Spring' }, { de: 'Kräuterhütte', en: 'Herb Hut' },
       { de: 'Pilzwald', en: 'Mushroom Wood' }, { de: 'Moorsteg', en: 'Mooring Walk' },
@@ -246,8 +246,8 @@ const UI_TEXT = Object.freeze({
   deleteConfirm: { de: 'Diese Reise dauerhaft löschen?', en: 'Permanently delete this voyage?' },
   reset: { de: 'Aktuelle Reise zurücksetzen', en: 'Reset current voyage' },
   rulesTitle: { de: 'So wird gespielt', en: 'How to play' },
-  rolePassive: { de: 'Passiv', en: 'Passive' },
-  roleActive: { de: 'Aktiv', en: 'Active' },
+  rolePassive: { de: 'Passive Fähigkeit', en: 'Passive ability' },
+  roleActive: { de: 'Aktive Fähigkeit', en: 'Active ability' },
   usesLeft: { de: 'Einsätze übrig', en: 'uses left' },
   useAbility: { de: 'Fähigkeit einsetzen', en: 'Use ability' },
   locationComplete: { de: 'Ort abgeschlossen – die Crew zieht automatisch weiter.', en: 'Location complete — the crew moves on automatically.' },
@@ -287,8 +287,6 @@ const UI_TEXT = Object.freeze({
   outcome: { de: 'Ergebnis', en: 'Outcome' },
   eventDecision: { de: 'Die Crew entscheidet', en: 'The crew decides' },
   eventDice: { de: 'Der aktive Spieler würfelt', en: 'The active player rolls' },
-  timerNotice5: { de: 'Noch fünf Minuten', en: 'Five minutes remaining' },
-  timerNotice1: { de: 'Noch eine Minute', en: 'One minute remaining' },
   timerDone: { de: 'Challenge-Zeit beendet', en: 'Challenge time finished' },
   installHint: { de: 'Für zuverlässige Offline-Nutzung zum Home-Bildschirm hinzufügen.', en: 'Add to the home screen for reliable offline play.' }
 });
@@ -382,8 +380,67 @@ const ROLES = Object.freeze([
   }
 ]);
 
+const ROLE_USAGE = Object.freeze({
+  cook: {
+    passiveUsage: { de: 'Bei der Auswahl einer Zutatenkarte mit Effekt erscheint „Nehmen, Effekt als Koch ignorieren“. Die Zutat bleibt im Gangkorb; nur ihr Karteneffekt entfällt.', en: 'When choosing an ingredient card with an effect, “Take it and ignore the effect as Cook” appears. The ingredient stays in the course basket; only its card effect is skipped.' },
+    activeUsage: { de: 'Während der Zutatenphase, nachdem eine noch nicht fest zugeordnete Zutatenkarte mit Effekt gezogen wurde. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage, after drawing an ingredient card with an effect that is not yet locked. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Letzten Zutateneffekt wiederholen', en: 'Repeat last ingredient effect' }
+  },
+  scout: {
+    passiveUsage: { de: 'Automatisch im Ziehschritt: Vor dem Ziehen wird der Titel der nächsten passenden Ereigniskarte angezeigt. Dafür gibt es keinen Button und keinen begrenzten Einsatz.', en: 'Automatic during the draw step: the title of the next matching event card is shown before it is drawn. It has no button and no limited uses.' },
+    activeUsage: { de: 'Solange eine Ereigniskarte offen und noch nicht abgeschlossen ist. Die offene Karte wird abgelegt und sofort ersetzt; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'While an event card is face up and not yet resolved. The open card is discarded and immediately replaced; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Offenes Ereignis ersetzen', en: 'Replace open event' }
+  },
+  merchant: {
+    passiveUsage: { de: 'Automatisch bei jedem Zutatenfund: Es werden mindestens zwei gültige Zutaten angeboten und eine davon wird gewählt. Dafür gibt es keinen eigenen Button.', en: 'Automatic on every ingredient find: at least two valid ingredients are offered and one is chosen. It has no separate button.' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei beliebige gültige Zutaten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid ingredients of any kind to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei beliebige Zutaten ziehen', en: 'Draw two ingredients' }
+  },
+  smith: {
+    passiveUsage: { de: 'Nach einem Würfelwurf und vor dessen Bestätigung erscheint „Noch einmal würfeln · Schmied“. Das alte Ergebnis wird ersetzt; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'After a die roll and before confirming it, “Roll again · Smith” appears. The old result is replaced; this does not consume the active ability.' },
+    activeUsage: { de: 'Nach einem Würfelwurf und vor dessen Bestätigung. Wählt −1 oder +1; das Ergebnis bleibt zwischen 1 und 6. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'After a die roll and before confirming it. Choose −1 or +1; the result stays between 1 and 6. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Würfelergebnis verändern', en: 'Adjust die result' }
+  },
+  herbalist: {
+    passiveUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Der Button zieht genau eine gültige Gemüsekarte; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'During the ingredient stage in a free draw or event step. The button draws exactly one valid vegetable card; this does not consume the active ability.' },
+    passiveButton: { de: 'Eine Gemüsekarte ziehen (passiv)', en: 'Draw one vegetable card (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei gültige Gemüsekarten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid vegetable cards to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei Gemüsekarten ziehen', en: 'Draw two vegetable cards' }
+  },
+  hunter: {
+    passiveUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Der Button zieht genau eine gültige Fleischkarte; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'During the ingredient stage in a free draw or event step. The button draws exactly one valid meat card; this does not consume the active ability.' },
+    passiveButton: { de: 'Eine Fleischkarte ziehen (passiv)', en: 'Draw one meat card (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei gültige Fleischkarten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid meat cards to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei Fleischkarten ziehen', en: 'Draw two meat cards' }
+  },
+  gatherer: {
+    passiveUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Der Button zieht genau eine gültige Obstkarte; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'During the ingredient stage in a free draw or event step. The button draws exactly one valid fruit card; this does not consume the active ability.' },
+    passiveButton: { de: 'Eine Obstkarte ziehen (passiv)', en: 'Draw one fruit card (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei gültige Obstkarten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid fruit cards to choose from; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Zwei Obstkarten ziehen', en: 'Draw two fruit cards' }
+  },
+  treasurer: {
+    passiveUsage: { de: 'Automatisch beim Start des Hauptgerichts: Eine passende, global verfügbare Zutat landet im Gangkorb. Dafür gibt es keinen Button und die aktive Fähigkeit wird nicht verbraucht.', en: 'Automatic when the main course starts: one suitable globally available ingredient is placed in the course basket. It has no button and does not consume the active ability.' },
+    activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet alle gültigen globalen Zutaten zur Auswahl und legt eine in den Gangkorb; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens all valid global ingredients and places one in the course basket; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Freie Zutat für den Gang sichern', en: 'Secure a free ingredient for the course' }
+  },
+  alchemist: {
+    passiveUsage: { de: 'Während der Zutatenphase nach einer noch nicht fest zugeordneten Zutat, wenn eine gültige Alternative derselben Kategorie verfügbar ist. Der Tausch verbraucht keinen aktiven Einsatz.', en: 'During the ingredient stage after an ingredient that is not yet locked, when a valid alternative in the same category is available. The swap does not consume an active use.' },
+    passiveButton: { de: 'Letzte Zutat tauschen (passiv)', en: 'Swap last ingredient (passive)' },
+    activeUsage: { de: 'Während der Zutatenphase nach einer noch nicht fest zugeordneten Zutat, wenn eine passende Alternative verfügbar ist. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage after an ingredient that is not yet locked, when a suitable alternative is available. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Letzte Zutat tauschen (aktiv)', en: 'Swap last ingredient (active)' }
+  },
+  tactician: {
+    passiveUsage: { de: 'Solange eine Ereigniskarte offen und noch nicht ausgeführt ist. Der Button schließt genau dieses Ereignis ohne seinen Effekt ab; die aktive Fähigkeit wird dabei nicht verbraucht.', en: 'While an event card is face up and has not yet been carried out. The button completes that event without its effect; this does not consume the active ability.' },
+    passiveButton: { de: 'Ereignis ohne Wirkung abschließen (passiv)', en: 'Complete event without effect (passive)' },
+    activeUsage: { de: 'Solange eine Ereigniskarte offen und noch nicht abgeschlossen ist. Die offene Karte wird zurückgemischt und durch eine neue ersetzt; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'While an event card is face up and not yet resolved. The open card is shuffled back and replaced; costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Ereignisstapel mischen und neu ziehen', en: 'Shuffle event deck and redraw' }
+  }
+});
+
 function getRole(roleId) {
-  return ROLES.find((role) => role.id === roleId);
+  const role = ROLES.find((entry) => entry.id === roleId);
+  return role ? { ...role, ...ROLE_USAGE[roleId] } : null;
 }
 
 
@@ -395,12 +452,14 @@ const item = (id, category, nameDe, nameEn, quantity, courseTags, options = {}) 
 });
 
 const COURSE_INGREDIENT_RULES = Object.freeze({
-  tapas: { minimum: 9, categoryMinimums: {}, categoryLimits: {} },
-  soup: { minimum: 7, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
-  salad: { minimum: 8, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
-  main: { minimum: 10, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
-  dessert: { minimum: 6, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
-  cocktails: { minimum: 4, categoryMinimums: { fruit: 1, drinks: 3 }, categoryLimits: { vegetable: 1, meat: 0 } }
+  // The five flexible courses consume exactly all 40 essential, non-Tapas
+  // ingredients. Optional cocktail extras do not count towards these targets.
+  tapas: { target: 9, optionalLimit: 0, categoryMinimums: {}, categoryLimits: {} },
+  soup: { target: 6, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
+  salad: { target: 9, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
+  main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
+  dessert: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
+  cocktails: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, drinks: 3 }, categoryLimits: { vegetable: 1, meat: 0 } }
 });
 
 const INGREDIENT_EFFECT_TEXT = Object.freeze({
@@ -449,7 +508,7 @@ const INGREDIENTS = Object.freeze([
   item('ginger', 'vegetable', 'Ingwer', 'Ginger', q(100, 100, 'g'), ['soup', 'salad', 'main', 'dessert', 'cocktails'], { effect: 'adjustDie' }),
   item('chestnuts', 'pantry', 'Maronen', 'Chestnuts', q(200, 300, 'g'), ['soup', 'salad', 'main', 'dessert'], { effect: 'drawIngredient' }),
   item('lettuce', 'vegetable', 'Blattsalat', 'Mixed leaves', q(500, 800, 'g'), ['salad']),
-  item('cucumber', 'vegetable', 'Gurke', 'Cucumber', q(1, 2, 'Stück', 'pieces'), ['soup', 'salad', 'main']),
+  item('cucumber', 'vegetable', 'Gurke', 'Cucumber', q(1, 2, 'Stück', 'pieces'), ['salad', 'main']),
   item('herbs', 'vegetable', 'Frische Kräuter', 'Fresh herbs', q(3, 4, 'Bund', 'bunches'), ['soup', 'salad', 'main']),
 
   item('chicken', 'meat', 'Hähnchen', 'Chicken', q(450, 600, 'g'), ['soup', 'salad', 'main'], { effect: 'drawIngredient' }),
@@ -457,11 +516,10 @@ const INGREDIENTS = Object.freeze([
   item('pork', 'meat', 'Schwein', 'Pork', q(400, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'chain' }),
   item('lamb', 'meat', 'Lamm', 'Lamb', q(350, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'reserveIngredient' }),
 
-  item('broth', 'pantry', 'Brühe', 'Stock', q(2.2, 3, 'l'), ['soup']),
+  item('peppermint', 'pantry', 'Pfefferminze', 'Peppermint', q(2, 3, 'Bund', 'bunches'), ['salad', 'dessert', 'cocktails'], { effect: 'revealEvent' }),
   item('croutons', 'pantry', 'Croûtons', 'Croutons', q(150, 250, 'g'), ['soup', 'salad']),
   item('nuts', 'pantry', 'Nüsse', 'Nuts', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert']),
   item('seeds', 'pantry', 'Kerne', 'Seeds', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert']),
-  item('yoghurt', 'pantry', 'Joghurt', 'Yoghurt', q(400, 500, 'g'), ['soup', 'salad', 'dessert', 'cocktails']),
   item('vinegar', 'pantry', 'Essig', 'Vinegar', q(180, 250, 'ml'), ['salad', 'main']),
   item('mustard', 'pantry', 'Senf', 'Mustard', q(1, 1, 'Glas', 'jar'), ['salad', 'main']),
   item('honey', 'pantry', 'Honig', 'Honey', q(1, 1, 'Glas', 'jar'), ['salad', 'main', 'dessert', 'cocktails']),
@@ -514,7 +572,8 @@ function buildIngredientPlan(initialSeed, playerCount) {
       en: suggestQuantity(ingredient, playerCount, 'en')
     }
   }));
-  const shuffled = shuffle(plan.filter((entry) => entry.chapterIndex == null).map((entry) => entry.id), state);
+  // Keep the established RNG cadence after retiring yoghurt so existing seeds do not reshuffle every later deck.
+  const shuffled = shuffle([...plan.filter((entry) => entry.chapterIndex == null).map((entry) => entry.id), 'retired-yoghurt-slot'], state);
   state = shuffled.state;
   return { state, plan };
 }
@@ -544,10 +603,10 @@ const ARCHETYPES = Object.freeze([
     id: 'provision', stage: 'ingredients', type: 'choice',
     title: { de: 'Die Vorratskiste von {location}', en: 'The Provision Crate of {location}' },
     scene: {
-      de: 'Eine versiegelte Vorratskiste trägt zwei Zeichen. Die Crew darf beraten; die aktive Person entscheidet, wie der Speiseplan weiterwächst.',
-      en: 'A sealed provision crate bears two marks. The crew may discuss them; the active player decides how the menu develops.'
+      de: 'Eine versiegelte Vorratskiste trägt drei Zeichen. Die Crew darf beraten; die aktive Person kann den Gang erweitern, festlegen oder eine Korbzutat zurücklegen.',
+      en: 'A sealed provision crate bears three marks. The crew may discuss them; the active player can expand the course, lock it in, or return a basket ingredient.'
     },
-    mechanics: ['discoverIngredient', 'lockIngredient']
+    mechanics: ['discoverIngredient', 'lockIngredient', 'returnIngredient']
   },
   {
     id: 'market', stage: 'ingredients', type: 'dice',
@@ -562,19 +621,19 @@ const ARCHETYPES = Object.freeze([
     id: 'tasting', stage: 'ingredients', type: 'choice',
     title: { de: 'Die Probe in {location}', en: 'The Tasting at {location}' },
     scene: {
-      de: 'Eine bereits entdeckte Zutat wird noch einmal geprüft. Jetzt kann sie ausgetauscht oder verbindlich in den Gang aufgenommen werden.',
-      en: 'A discovered ingredient is examined once more. It can now be exchanged or committed to the course.'
+      de: 'Eine bereits entdeckte Zutat wird noch einmal geprüft. Jetzt kann sie ausgetauscht, verbindlich aufgenommen oder in den globalen Vorrat zurückgelegt werden.',
+      en: 'A discovered ingredient is examined once more. It can now be exchanged, committed to the course, or returned to the global pantry.'
     },
-    mechanics: ['swapIngredient', 'lockIngredient']
+    mechanics: ['swapIngredient', 'lockIngredient', 'returnIngredient']
   },
   {
     id: 'chart', stage: 'ingredients', type: 'choice',
     title: { de: 'Die Speisekarte aus {location}', en: 'The Menu Chart from {location}' },
     scene: {
-      de: 'Auf einer alten Karte sind zwei sinnvolle Wege markiert: den Vorrat erweitern oder eine gefundene Zutat endgültig sichern.',
-      en: 'An old chart marks two sensible routes: expand the provisions or secure a discovered ingredient for good.'
+      de: 'Auf einer alten Karte sind zwei sinnvolle Wege markiert: den Gang erweitern oder eine noch offene Korbzutat wieder freigeben.',
+      en: 'An old chart marks two sensible routes: expand the course or release an unlocked basket ingredient.'
     },
-    mechanics: ['discoverIngredient', 'lockIngredient']
+    mechanics: ['discoverIngredient', 'returnIngredient']
   },
   {
     id: 'omen', stage: 'ingredients', type: 'dice',
@@ -652,8 +711,8 @@ const ARCHETYPES = Object.freeze([
     id: 'respite', stage: 'cooking', type: 'choice',
     title: { de: 'Ruhiges Fahrwasser bei {location}', en: 'Calm Waters near {location}' },
     scene: {
-      de: 'Die See wird still. Die Crew darf bewusst fünf Minuten durchatmen oder die freie Zeit für eine kurze Herausforderung nutzen.',
-      en: 'The sea turns calm. The crew may deliberately take a five-minute breather or use the free time for a short challenge.'
+      de: 'Die See wird still. Wenn keine Küchenaufgabe mehr offen ist, darf die Crew fünf Minuten durchatmen; andernfalls nutzt sie den Moment für eine kurze Herausforderung.',
+      en: 'The sea turns calm. If no kitchen task remains open, the crew may take a five-minute breather; otherwise it uses the moment for a short challenge.'
     },
     mechanics: ['fiveMinuteBreak', 'watchChallenge']
   },
@@ -668,6 +727,26 @@ const ARCHETYPES = Object.freeze([
   }
 ]);
 
+const INGREDIENT_FUN_ARCHETYPE = Object.freeze({
+  id: 'pantry-mischief', stage: 'ingredients', type: 'choice',
+  title: { de: 'Schabernack im Vorrat von {location}', en: 'Pantry Mischief at {location}' },
+  scene: {
+    de: 'Zwischen den Zutaten versteckt sich eine verspielte Botschaft. Für einen Moment darf die Crew lachen, eine kleine Herausforderung annehmen oder nebenbei ein paar Münzen erspielen.',
+    en: 'A playful message is hidden among the ingredients. For a moment, the crew may laugh, take on a small challenge, or earn a few coins along the way.'
+  },
+  mechanics: ['watchChallenge', 'storyMoment', 'treasureAndWatch']
+});
+
+const TASK_FUN_ARCHETYPE = Object.freeze({
+  id: 'work-mischief', stage: 'tasks', type: 'dice',
+  title: { de: 'Schabernack zwischen den Aufträgen von {location}', en: 'Mischief between Orders at {location}' },
+  scene: {
+    de: 'Zwischen zwei Questschritten taucht eine versiegelte Spaßkarte auf. Der Würfel bringt eine harmlose Challenge, eine kleine Flaute in der Bordkasse oder einen reinen Storymoment.',
+    en: 'Between two quest steps, a sealed fun card appears. The die brings a harmless challenge, a small dip in the ship’s purse, or a pure story moment.'
+  },
+  mechanics: ['coinLoss', 'watchChallenge', 'storyMoment']
+});
+
 function interpolate(value, location) {
   return {
     de: value.de.replace('{location}', location.de),
@@ -677,7 +756,7 @@ function interpolate(value, location) {
 
 function buildEventDeck(chapterIndex) {
   const chapter = CHAPTERS[chapterIndex];
-  return chapter.locations.flatMap((location, locationIndex) =>
+  const regularEvents = chapter.locations.flatMap((location, locationIndex) =>
     ARCHETYPES.map((archetype, archetypeIndex) => {
       const number = locationIndex * ARCHETYPES.length + archetypeIndex + 1;
       const baseTitle = interpolate(archetype.title, location);
@@ -702,6 +781,48 @@ function buildEventDeck(chapterIndex) {
       };
     })
   );
+  const ingredientFunEvents = chapter.locations.flatMap((location, locationIndex) => {
+    if (locationIndex % 2 !== 0) return [];
+    const title = interpolate(INGREDIENT_FUN_ARCHETYPE.title, location);
+    return [{
+      id: `F${chapterIndex + 1}-${String(locationIndex + 1).padStart(2, '0')}`,
+      chapterId: chapter.id,
+      locationIndex,
+      archetype: INGREDIENT_FUN_ARCHETYPE.id,
+      stage: INGREDIENT_FUN_ARCHETYPE.stage,
+      type: INGREDIENT_FUN_ARCHETYPE.type,
+      title: {
+        de: `${title.de} · ${chapter.name.de}`,
+        en: `${title.en} · ${chapter.name.en}`
+      },
+      story: {
+        de: `In ${location.de} beginnt die Szene: ${INGREDIENT_FUN_ARCHETYPE.scene.de} ${chapter.atmosphere.de}`,
+        en: `The scene begins at ${location.en}: ${INGREDIENT_FUN_ARCHETYPE.scene.en} ${chapter.atmosphere.en}`
+      },
+      options: [...INGREDIENT_FUN_ARCHETYPE.mechanics],
+      variant: locationIndex
+    }];
+  });
+  const taskFunEvents = chapter.locations.flatMap((location, locationIndex) => {
+    if (locationIndex % 2 === 0) return [];
+    const title = interpolate(TASK_FUN_ARCHETYPE.title, location);
+    return [{
+      id: `T${chapterIndex + 1}-${String(locationIndex + 1).padStart(2, '0')}`,
+      chapterId: chapter.id,
+      locationIndex,
+      archetype: TASK_FUN_ARCHETYPE.id,
+      stage: TASK_FUN_ARCHETYPE.stage,
+      type: TASK_FUN_ARCHETYPE.type,
+      title: { de: `${title.de} · ${chapter.name.de}`, en: `${title.en} · ${chapter.name.en}` },
+      story: {
+        de: `In ${location.de} beginnt die Szene: ${TASK_FUN_ARCHETYPE.scene.de} ${chapter.atmosphere.de}`,
+        en: `The scene begins at ${location.en}: ${TASK_FUN_ARCHETYPE.scene.en} ${chapter.atmosphere.en}`
+      },
+      outcomes: [...TASK_FUN_ARCHETYPE.mechanics],
+      variant: locationIndex
+    }];
+  });
+  return [...regularEvents, ...ingredientFunEvents, ...taskFunEvents];
 }
 
 const EVENT_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildEventDeck(index)));
@@ -713,6 +834,7 @@ const EFFECT_TEXT = Object.freeze({
   discoverIngredient: { de: 'Öffnet dieses Vorratsereignis und wählt eine der angebotenen Zutaten.', en: 'Open this provision event and choose one of the offered ingredients.' },
   treasureAndIngredient: { de: 'Gewinnt Münzen und wählt danach eine neue Zutat.', en: 'Gain coins, then choose a new ingredient.' },
   lockIngredient: { de: 'Legt die zuletzt entdeckte, noch veränderbare Zutat verbindlich für diesen Gang fest.', en: 'Lock the most recently discovered, still changeable ingredient into this course.' },
+  returnIngredient: { de: 'Legt die zuletzt entdeckte, noch veränderbare Zutat aus dem Gangkorb zurück in den globalen Vorrat.', en: 'Return the most recently discovered, still changeable ingredient from the course basket to the global pantry.' },
   swapIngredient: { de: 'Tauscht die zuletzt entdeckte, noch nicht festgelegte Zutat gegen eine passende Alternative.', en: 'Swap the most recently discovered, unlocked ingredient for a suitable alternative.' },
   watchChallenge: { de: 'Wählt die erste kurze Bordaufgabe und führt sie sofort aus.', en: 'Choose the first short deck duty and do it now.' },
   watchChallengeAlt: { de: 'Wählt die zweite kurze Bordaufgabe und führt sie sofort aus.', en: 'Choose the second short deck duty and do it now.' },
@@ -720,25 +842,30 @@ const EFFECT_TEXT = Object.freeze({
   treasureAndChain: { de: 'Gewinnt Münzen und deckt sofort eine weitere Ereigniskarte auf.', en: 'Gain coins and immediately reveal another event.' },
   splitCrew: { de: 'Teilt die Crew möglichst gleichmäßig in zwei Gruppen.', en: 'Split the crew into two groups as evenly as possible.' },
   chain: { de: 'Deckt sofort eine weitere Ereigniskarte auf.', en: 'Immediately reveal another event card.' },
-  treasure: { de: 'Gewinnt fünf Münzen.', en: 'Gain five coins.' },
-  coinLoss: { de: 'Die Bordkasse verliert drei Münzen.', en: 'The ship’s purse loses three coins.' },
+  treasure: { de: 'Gewinnt zwei Münzen.', en: 'Gain two coins.' },
+  coinLoss: { de: 'Die Bordkasse verliert fünfzehn Münzen.', en: 'The ship’s purse loses fifteen coins.' },
   storyMoment: { de: 'Genießt diesen kleinen Storymoment – er hat keine weitere Auswirkung.', en: 'Enjoy this small story moment — it has no further effect.' },
   fiveMinuteBreak: { de: 'Startet eine echte fünfminütige Pause für die ganze Crew.', en: 'Start a real five-minute break for the whole crew.' },
   singleTask: { de: 'Übernehmt den nächsten geeigneten Auftrag mit möglichst kleiner Besetzung.', en: 'Take the next suitable job with the smallest practical crew.' },
-  watchComplete: { de: 'Die Bordaufgabe ist erledigt; die laufende Küchenzeit wurde sinnvoll genutzt.', en: 'The deck duty is complete; the running kitchen time was used productively.' }
+  watchComplete: { de: 'Die Bordaufgabe ist erledigt; die laufende Küchenzeit wurde sinnvoll genutzt.', en: 'The deck duty is complete; the running kitchen time was used productively.' },
+  watchActive: { de: 'Die Challenge läuft über weitere Züge und blockiert die Übergabe nicht.', en: 'The challenge continues across later turns without blocking handover.' }
 });
 
 const challenge = (id, de, en, options = {}) => ({
   id, de, en, title: options.title ?? { de: 'Kurze Challenge', en: 'Quick challenge' },
-  minutes: options.minutes ?? 1, coins: options.coins ?? 2, secret: options.secret ?? false,
-  followUpId: options.followUpId ?? null
+  minutes: options.minutes ?? 1,
+  coins: options.coins === 0 ? 0 : Math.max(1, Math.ceil((options.coins ?? 2) / 3)),
+  secret: options.secret ?? false,
+  followUpId: options.followUpId ?? null, flow: options.flow ?? 'immediate',
+  endTrigger: options.endTrigger ?? null, mandatory: options.mandatory ?? false,
+  followUpOnly: options.followUpOnly ?? false
 });
 
 const WATCH_CHALLENGES = Object.freeze([
-  challenge('clear-surface', 'Räumt gemeinsam eine Arbeitsfläche vollständig frei und wischt sie sauber.', 'Clear one work surface completely and wipe it clean together.'),
+  challenge('clear-surface', 'Die aktive Person erfindet in 60 Sekunden einen Piratennamen für eine sichtbare, gerade freie Ablagefläche. Niemand unterbricht dafür die Küchenarbeit oder räumt etwas um.', 'The active player has 60 seconds to invent a pirate name for a visible, currently unused surface. Nobody interrupts kitchen work or moves anything for it.', { title: { de: 'Die geheime Schatzablage', en: 'The Secret Treasure Shelf' } }),
   challenge('next-steps', 'Prüft alle laufenden Aufgaben und nennt laut, was als Nächstes gebraucht wird.', 'Review every active task and say aloud what will be needed next.'),
   challenge('fresh-water', 'Stellt für jedes Crewmitglied frisches Wasser bereit.', 'Set out fresh water for every crew member.'),
-  challenge('sort-tools', 'Sortiert Messer, Bretter und Schüsseln sicher nach ihrem nächsten Einsatz.', 'Sort knives, boards, and bowls safely for their next use.'),
+  challenge('sort-tools', 'Die aktive Person erfindet in 60 Sekunden für drei sichtbare Küchenwerkzeuge je einen Piratennamen. Fasst nichts an, was gerade benutzt wird, und unterbrecht keine Küchenarbeit.', 'The active player has 60 seconds to invent a pirate name for each of three visible kitchen tools. Do not touch anything currently in use or interrupt kitchen work.', { title: { de: 'Die Taufe der Kombüsenwerkzeuge', en: 'Naming the Galley Tools' } }),
   challenge('name-course', 'Erfindet in höchstens 60 Sekunden einen Namen für den entstehenden Gang.', 'Invent a name for the emerging course in no more than 60 seconds.'),
   challenge('ingredient-round', 'Nennt reihum je eine Zutat, die heute bereits sinnvoll verwendet wurde.', 'Go around once and name one ingredient already used well tonight.'),
   challenge('table-check', 'Prüft den Tisch: Fehlt Besteck, Wasser, ein Untersetzer oder Platz zum Servieren?', 'Check the table: is cutlery, water, a trivet, or serving space missing?'),
@@ -746,14 +873,34 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('portion-captain', 'Bestimmt eine Person, die beim nächsten Servieren Portionsgrößen kontrolliert.', 'Choose one person to check portion sizes at the next serving.'),
   challenge('timer-check', 'Schaut auf alle Challenges und wiederholt gemeinsam die nächste Warnschwelle.', 'Look at every challenge and repeat the next alert threshold together.'),
   challenge('sea-story', 'Gebt {activePlayer} 60 Sekunden für eine kurze Seefahrergeschichte.', 'Give {activePlayer} 60 seconds for a short seafaring story.'),
+  challenge('pirate-verse', 'Erfindet in höchstens 90 Sekunden ein kurzes Piratenlied oder Piratengedicht mit mindestens zwei Zeilen. Singt es gemeinsam oder tragt es dramatisch vor – beides zählt vollständig.', 'In no more than 90 seconds, invent a short pirate song or pirate poem of at least two lines. Sing it together or perform it dramatically — either counts in full.', { minutes: 2, coins: 3, title: { de: 'Die Ballade der wilden Kombüse', en: 'Ballad of the Wild Galley' } }),
   challenge('safety-check', 'Kontrolliert, dass heiße, scharfe und rohe Arbeitsbereiche klar getrennt sind.', 'Confirm that hot, sharp, and raw-food work areas are clearly separated.'),
-  challenge('odd-dance', 'Steh auf und tanze 20 Sekunden so merkwürdig wie möglich. Danach geht das Spiel normal weiter.', 'Stand up and dance as strangely as possible for 20 seconds. Then continue normally.', { coins: 3, title: { de: 'Tanz auf Deck', en: 'Deck Dance' } }),
+  challenge('odd-dance', 'Steh auf und tanze 20 Sekunden so merkwürdig wie möglich. Danach geht das Spiel normal weiter.', 'Stand up and dance as strangely as possible for 20 seconds. Then continue normally.', { coins: 3, title: { de: 'Tanz auf Deck', en: 'Deck Dance' }, secret: true }),
   challenge('table-lap', 'Steh auf, geh einmal um den Tisch und setz dich wieder hin, als wäre nichts passiert.', 'Stand up, walk once around the table, and sit down again as though nothing happened.', { title: { de: 'Geheimer Rundgang', en: 'Secret Circuit' }, secret: true }),
-  challenge('compliments', 'Bis zu deinem nächsten Zug machst du der jeweils aktiven Person ein ehrliches, kurzes Kompliment.', 'Until your next turn, give the active player one brief, genuine compliment.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true }),
-  challenge('love-decisions', 'Bis zu deinem nächsten Zug findest du jede Entscheidung deiner Crew großartig. Übertreib freundlich, aber verrate die Karte nicht.', 'Until your next turn, you think every crew decision is wonderful. Exaggerate kindly, but do not reveal the card.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true }),
-  challenge('laugh-turn', 'In {targetPlayer}s nächstem Zug findest du alles erstaunlich lustig. Bleib freundlich und löse die Karte danach auf.', 'During {targetPlayer}’s next turn, find everything remarkably funny. Stay kind and end the bit afterwards.', { coins: 3, title: { de: 'Geheimes Lachen', en: 'Secret Laughter' }, secret: true }),
-  challenge('chicken', 'Gackere einmal pro Minute leise wie ein Huhn. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Cluck quietly like a chicken once per minute. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Der Hühnerfluch', en: 'The Chicken Curse' }, secret: true, followUpId: 'stop-chicken' }),
-  challenge('stop-chicken', 'Sage {targetPlayer} irgendwann in diesem Zug: „Der Hühnerfluch ist gebrochen.“ Erklärt euch erst danach gegenseitig die Karten.', 'At some point this turn, tell {targetPlayer}: “The chicken curse is broken.” Only then explain the cards to each other.', { coins: 2, title: { de: 'Das Gegenmittel', en: 'The Antidote' }, secret: true }),
+  challenge('compliments', 'Bis zu deinem nächsten Zug machst du der jeweils aktiven Person ein ehrliches, kurzes Kompliment.', 'Until your next turn, give the active player one brief, genuine compliment.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('love-decisions', 'Bis zu deinem nächsten Zug findest du jede Entscheidung deiner Crew großartig. Übertreib freundlich, aber verrate die Karte nicht.', 'Until your next turn, you think every crew decision is wonderful. Exaggerate kindly, but do not reveal the card.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('laugh-turn', 'In {targetPlayer}s nächstem Zug findest du alles erstaunlich lustig. Bleib freundlich und löse die Karte danach auf.', 'During {targetPlayer}’s next turn, find everything remarkably funny. Stay kind and end the bit afterwards.', { coins: 3, title: { de: 'Geheimes Lachen', en: 'Secret Laughter' }, secret: true, flow: 'ongoing', endTrigger: 'targetTurnEnd' }),
+  challenge('chicken', 'Gackere einmal pro Minute leise wie ein Huhn. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Cluck quietly like a chicken once per minute. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Der Hühnerfluch', en: 'The Chicken Curse' }, secret: true, followUpId: 'stop-chicken', flow: 'ongoing', endTrigger: 'followUp' }),
+  challenge('stop-chicken', 'Verbindliche Anweisung: Sage jetzt zu {targetPlayer}: „Der Hühnerfluch ist gebrochen.“ Erklärt euch erst danach gegenseitig die Karten.', 'Mandatory instruction: Tell {targetPlayer} now: “The chicken curse is broken.” Only then explain the cards to each other.', { coins: 2, title: { de: 'Das Gegenmittel', en: 'The Antidote' }, secret: true, mandatory: true, followUpOnly: true }),
+  challenge('nose-voice', 'Halte dir beim Reden sanft die Nase zu. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Gently hold your nose while speaking. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Die verschnupfte Freibeuterin', en: 'The Snuffly Buccaneer' }, secret: true, followUpId: 'stop-nose', flow: 'ongoing', endTrigger: 'followUp' }),
+  challenge('stop-nose', 'Verbindliche Anweisung: Sage jetzt zu {targetPlayer}: „Du kannst wieder frei sprechen.“ Verratet erst danach, was auf euren Karten stand.', 'Mandatory instruction: Tell {targetPlayer} now: “You may speak freely again.” Only then reveal what your cards said.', { coins: 2, title: { de: 'Freie Nase voraus', en: 'Clear Air Ahead' }, secret: true, mandatory: true, followUpOnly: true }),
+  challenge('impatient-fingers', 'Tippe bis zu deinem nächsten Zug immer wieder ungeduldig mit den Fingern auf den Tisch, als hättest du großen Zeitdruck. Verrate nicht warum.', 'Until your next turn, drum your fingers impatiently on the table as though time were running out. Do not reveal why.', { coins: 3, title: { de: 'Die ungeduldige Wache', en: 'The Impatient Watch' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('three-hops', 'Steh auf und hüpf dreimal auf der Stelle, wenn das für dich sicher ist. Alternativ wippst du dreimal übertrieben auf den Zehenspitzen. Setz dich danach kommentarlos wieder hin.', 'Stand and hop three times in place if that is safe for you. Otherwise rise dramatically onto your toes three times. Sit down again without comment.', { title: { de: 'Dreifacher Seegang', en: 'Triple Sea Legs' }, secret: true }),
+  challenge('under-table-search', 'Schau auffällig unter den Tisch, als hättest du dort etwas Wichtiges verloren. Krabble nicht und blockiere keine Laufwege. Setz dich danach wieder hin, ohne etwas zu erklären.', 'Look conspicuously under the table as though you lost something important there. Do not crawl or block walkways. Sit back down without explaining.', { title: { de: 'Unter Deck gesucht', en: 'Search Below Deck' }, secret: true }),
+  challenge('soap-opera-pirate', 'Spiele bis zu deinem nächsten Zug eine völlig überdramatische Figur aus einer Piraten-Seifenoper. Seufze bedeutungsvoll und reagiere theatralisch, ohne eine reale Person oder Gruppe nachzuahmen.', 'Until your next turn, play an outrageously dramatic character from a pirate soap opera. Sigh meaningfully and react theatrically without imitating a real person or group.', { coins: 3, title: { de: 'Piraten-Seifenoper', en: 'Pirate Soap Opera' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('accent-shift', 'Sprich bis zu deinem nächsten Zug in einem freundlichen Dialekt oder Fantasieakzent, den du gut kannst – zum Beispiel kölsch oder sächsisch. Karikiere keine Person oder Herkunft.', 'Until your next turn, use a friendly regional or invented accent you know well. Do not caricature any person or background.', { coins: 3, title: { de: 'Neue Stimme an Bord', en: 'A New Voice Aboard' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('self-compliments', 'Mach dir bis zu deinem nächsten Zug bei passenden Gelegenheiten kurze, völlig übertriebene Komplimente. Verrate nicht, warum du heute so begeistert von dir bist.', 'Until your next turn, give yourself brief, wildly exaggerated compliments whenever an opportunity appears. Do not reveal why you are so impressed with yourself.', { coins: 3, title: { de: 'Eigenlob mit Rückenwind', en: 'Self-Praise with Tailwind' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('aye-aye-sentences', 'Beginne bis zum Beginn deines nächsten Zuges jeden gesprochenen Satz mit „Ai, ai“. Verrate nicht, warum du das tust.', 'Until the start of your next turn, begin every spoken sentence with “Aye, aye”. Do not reveal why you are doing it.', { coins: 3, title: { de: 'Ai, ai vorweg', en: 'Aye, Aye First' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('arr-sentences', 'Beende bis zum Beginn deines nächsten Zuges jeden gesprochenen Satz mit einem deutlichen „Arr“. Verrate nicht, warum du das tust.', 'Until the start of your next turn, end every spoken sentence with a clear “Arr”. Do not reveal why you are doing it.', { coins: 3, title: { de: 'Arr zum Schluss', en: 'Arr at the End' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('captain-permission', 'Ernenne {targetPlayer} innerlich zum Kapitän. Bis zum Beginn deines nächsten Zuges musst du vor jeder eigenen Entscheidung oder Aktion höflich um Erlaubnis bitten. Erkläre die Karte nicht.', 'Silently appoint {targetPlayer} as captain. Until the start of your next turn, politely ask the captain for permission before each decision or action of your own. Do not explain the card.', { coins: 4, title: { de: 'Befehl des Kapitäns', en: 'Captain’s Orders' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('self-talk', 'Führe 20 Sekunden lang ein ernstes Gespräch mit dir selbst und beantworte dabei deine eigenen Fragen. Mach danach kommentarlos weiter.', 'Hold a serious 20-second conversation with yourself and answer your own questions. Then continue without comment.', { title: { de: 'Zwiegespräch an Deck', en: 'A Talk with Yourself' }, secret: true }),
+  challenge('bad-joke', 'Erzähle der Crew einen absichtlich richtig schlechten, harmlosen Witz. Erkläre nicht, warum du ihn plötzlich erzählen musstest.', 'Tell the crew an intentionally terrible, harmless joke. Do not explain why you suddenly had to tell it.', { title: { de: 'Flachwitz aus der Bilge', en: 'A Joke from the Bilge' }, secret: true }),
+  challenge('hiccups', 'Simuliere bis zu deinem nächsten Zug gelegentlich einen harmlosen Schluckauf. Übertreib nicht so stark, dass Gespräche oder Küchenarbeit gestört werden.', 'Until your next turn, occasionally pretend to hiccup. Do not overdo it enough to disrupt conversation or kitchen work.', { coins: 3, title: { de: 'Schluckauf auf See', en: 'Hiccups at Sea' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('mime-self-slap', 'Spiele pantomimisch und mit deutlichem Abstand eine dramatische Backpfeife gegen dich selbst. Berühre oder schlage dich dabei nicht wirklich.', 'Mime a dramatic self-slap while keeping a clear distance. Do not actually touch or hit yourself.', { title: { de: 'Dramatische Erkenntnis', en: 'Dramatic Realisation' }, secret: true }),
+  challenge('hand-trumpet', 'Simuliere einen richtig lauten Pfurz, indem du in deine Hand pustest wie in eine Trompete. Bleib danach völlig ernst.', 'Simulate a very loud fart by blowing into your hand like a trumpet. Keep a completely straight face afterwards.', { title: { de: 'Die Nebelhornprobe', en: 'The Foghorn Test' }, secret: true }),
+  challenge('chair-circle', 'Dreh dich sicher einmal mit einem geeigneten Drehstuhl im Kreis. Falls der Stuhl nicht dafür geeignet ist, steh auf und geh einmal um ihn herum.', 'Safely spin once in a suitable swivel chair. If the chair is not suitable, stand and walk around it once instead.', { title: { de: 'Einmal rund um die Insel', en: 'Once Around the Island' }, secret: true }),
+  challenge('ceremonial-greeting', 'Bestehe freundlich darauf, deinen Sitznachbarn feierlich zu begrüßen. Die andere Person wählt zwischen Handschlag, Faustgruß oder Winken.', 'Politely insist on ceremonially greeting the person beside you. They choose between a handshake, fist bump, or wave.', { title: { de: 'Feierlicher Matrosengruß', en: 'Ceremonial Sailor Greeting' }, secret: true }),
+  challenge('folded-note', 'Nimm einen Zettel und schreibe: „Nicht sagen, was hier draufsteht.“ Falte ihn und gib ihn einer beliebigen Person. Erkläre nichts weiter.', 'Take a note and write: “Do not say what is written here.” Fold it and hand it to any player. Explain nothing further.', { title: { de: 'Die streng geheime Nachricht', en: 'The Highly Secret Note' }, secret: true }),
   challenge('five-minute-break', 'Fünf Minuten Pause: Trinkt etwas, setzt euch hin und lasst die Küche sicher ruhen. Laufende Geräte bleiben natürlich beaufsichtigt.', 'Five-minute break: have a drink, sit down, and let the kitchen rest safely. Running appliances must of course remain supervised.', { minutes: 5, coins: 0, title: { de: 'Ruhiges Fahrwasser', en: 'Calm Waters' } })
 ]);
 
@@ -773,7 +920,7 @@ function validateEventCatalog() {
     uniqueGermanStories: storiesDe.size,
     uniqueEnglishStories: storiesEn.size,
     stageCounts,
-    valid: events.length === 504 && ids.size === 504 && titlesDe.size === 504 && titlesEn.size === 504 && storiesDe.size === 504 && storiesEn.size === 504 && EVENT_STAGES.every((stage) => stageCounts[stage] > 0)
+    valid: ids.size === events.length && titlesDe.size === events.length && titlesEn.size === events.length && storiesDe.size === events.length && storiesEn.size === events.length && EVENT_STAGES.every((stage) => stageCounts[stage] > 0)
   };
 }
 
@@ -786,9 +933,13 @@ const task = (titleDe, titleEn, instructionDe, instructionEn, area, people = [1,
   people,
   timerMinutes,
   estimatedMinutes: options.estimatedMinutes ?? timerMinutes ?? 0,
-  kind: options.kind ?? (timerMinutes ? 'timer' : 'decision'),
+  kind: options.kind ?? (options.timingMode === 'background' ? 'background' : 'challenge'),
+  timingMode: options.timingMode ?? 'challenge',
+  backgroundMinutes: options.backgroundMinutes ?? (options.timingMode === 'background' ? timerMinutes : 0),
+  challengeMinutes: options.challengeMinutes ?? null,
   ingredientTags: options.ingredientTags ?? [],
-  safety: options.safety ?? null
+  safety: options.safety ?? null,
+  courseStyles: options.courseStyles ?? null
 });
 
 const DEFAULT_ESTIMATED_MINUTES = Object.freeze({
@@ -802,8 +953,8 @@ const DEFAULT_ESTIMATED_MINUTES = Object.freeze({
 const BLUEPRINTS = Object.freeze({
   tapas: [
     task('Der Plan des Hafenmeisters', 'The Harbourmaster’s Plan', 'Teilt Tapas, Ofenaufgaben und Anrichten sinnvoll unter der Crew auf.', 'Divide tapas, oven work, and plating sensibly across the crew.', 'planning', [2, 3]),
-    task('Datteln am Schmugglersteg', 'Dates at Smuggler’s Pier', 'Umwickelt die Datteln gleichmäßig mit Speck, legt sie mit Abstand auf ein Blech und gart sie knusprig.', 'Wrap the dates evenly in bacon, space them on a tray, and cook until crisp.', 'oven', [2, 3], 20, { ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotOven' }),
-    task('Brot aus dem Leuchtturm', 'Bread from the Lighthouse', 'Bereitet die Baguettes nach Packungsangabe vor und backt sie so, dass sie zum Servieren warm sind.', 'Prepare the baguettes according to the packet and bake them to be warm for serving.', 'oven', [1, 2], 10, { ingredientTags: ['baguettes'], safety: 'hotOven' }),
+    task('Datteln in Speck rollen', 'Wrap the Dates', 'Umwickelt jede Dattel gleichmäßig mit Speck und legt die Rollen mit Abstand auf ein vorbereitetes Blech. Noch nicht backen.', 'Wrap every date evenly in bacon and space the rolls on a prepared tray. Do not bake them yet.', 'cold-prep', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7, ingredientTags: ['tapas-dates', 'bacon'] }),
+    task('Brot in den Ofen schieben', 'Put the Bread in the Oven', 'Heizt den Ofen nach Packungsangabe vor, legt die Baguettes sicher hinein und stellt den separaten Brottimer. Dieser Schritt endet, sobald die Ofentür geschlossen ist.', 'Preheat according to the packet, put the baguettes safely into the oven, and set the separate bread timer. This step ends once the oven door is closed.', 'oven', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['baguettes'], safety: 'hotOven' }),
     task('Vorräte vom Markt', 'Market Provisions', 'Ordnet Oliven, Käse, Schinken und Schafs- oder Ziegenkäse auf gut erreichbaren Platten an.', 'Arrange olives, cheese, ham, and sheep or goat cheese on easy-to-reach platters.', 'cold-prep', [2, 3], 0, { ingredientTags: ['olives', 'cheese', 'serrano', 'goat-cheese'] }),
     task('Die zwei Saucen', 'The Two Sauces', 'Füllt Aioli und Tomaten-Paprika-Dip getrennt ab, stellt passende Löffel bereit und kennzeichnet beide.', 'Decant aioli and tomato-pepper dip separately, add serving spoons, and label both.', 'cold-prep', [1, 2], 0, { ingredientTags: ['aioli', 'tomato-pepper-dip'] }),
     task('Das erste Deckmahl', 'The First Deck Meal', 'Prüft Temperatur, Portionsverteilung und Vollständigkeit, dann serviert alle Tapas gemeinsam.', 'Check temperature, portioning, and completeness, then serve all tapas together.', 'serving', [2, 3]),
@@ -812,21 +963,28 @@ const BLUEPRINTS = Object.freeze({
     task('Brotmesser des Smutjes', 'The Cook’s Bread Knife', 'Schneidet das warme Brot sicher in gut teilbare Stücke.', 'Cut the warm bread safely into easy-to-share pieces.', 'serving', [1, 2], 0, { safety: 'knife' }),
     task('Der faire Vorrat', 'The Fair Provision', 'Schätzt Portionen für die Crew ab und ergänzt knappe Platten, bevor serviert wird.', 'Estimate portions for the crew and top up sparse platters before serving.', 'quality', [1, 2]),
     task('Freie Fläche in der Kombüse', 'Clear Space in the Galley', 'Räumt Verpackungen weg, reinigt Arbeitsflächen und stellt heiße Bleche sicher ab.', 'Remove packaging, clean worktops, and place hot trays safely.', 'cleanup', [1, 2], 0, { safety: 'hotOven' }),
-    task('Gruß aus der Hafenstadt', 'Greeting from the Harbour', 'Erfindet einen kurzen Trinkspruch oder Serviersatz für den Beginn der Reise.', 'Invent a short toast or serving line to begin the voyage.', 'story', [1, 2])
+    task('Gruß aus der Hafenstadt', 'Greeting from the Harbour', 'Erfindet einen kurzen Trinkspruch oder Serviersatz für den Beginn der Reise.', 'Invent a short toast or serving line to begin the voyage.', 'story', [1, 2]),
+    task('Speckdatteln in den Ofen schieben', 'Put the Bacon Dates in the Oven', 'Schiebt das vorbereitete Blech in den heißen Ofen, stellt 15 Minuten ein und bestätigt den Start. Die Garzeit läuft danach ohne Münzdruck im Hintergrund.', 'Put the prepared tray into the hot oven, set 15 minutes, and confirm the start. Cooking then continues in the background without coin pressure.', 'oven', [1, 2], 15, { timingMode: 'background', ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotOven' }),
+    task('Speckdatteln herausholen', 'Remove the Bacon Dates', 'Prüft die Speckdatteln nach Ablauf des Ofentimers auf sichere Bräunung, holt das Blech heraus und stellt es hitzefest ab.', 'When the oven timer ends, check the bacon dates for safe browning, remove the tray, and place it on a heatproof surface.', 'oven', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotOven' }),
+    task('Brot backen lassen', 'Let the Bread Bake', 'Lasst das Brot nach Packungsangabe etwa acht Minuten backen. Der Timer läuft ohne Belohnung oder Strafe im Hintergrund.', 'Let the bread bake according to the packet for about eight minutes. The timer runs in the background without reward or penalty.', 'oven', [1, 1], 8, { timingMode: 'background', ingredientTags: ['baguettes'], safety: 'hotOven' }),
+    task('Brot aus dem Ofen holen', 'Remove the Bread from the Oven', 'Holt die Baguettes nach dem Timer sicher heraus und lasst sie kurz auf einer hitzefesten Fläche ruhen. Geschnitten wird erst im nächsten Questschritt.', 'Remove the baguettes safely after the timer and rest them briefly on a heatproof surface. Slicing is a later quest step.', 'oven', [1, 2], 0, { estimatedMinutes: 2, challengeMinutes: 3, ingredientTags: ['baguettes'], safety: 'hotOven' })
   ],
   soup: [
     task('Der Rat am Nebelkessel', 'Council at the Mist Cauldron', 'Wählt aus dem Menüplan eine stimmige Suppengrundlage und entscheidet gemeinsam über Fleisch oder vegetarische Einlage.', 'Choose a coherent soup base from the menu plan and decide together on meat or a vegetable extra.', 'planning', [2, 3]),
     task('Gemüse aus dem Moor', 'Vegetables from the Moor', 'Wascht und schält nur, was es fachlich benötigt. Trennt Abfälle direkt von nutzbaren Resten.', 'Wash and peel only what needs it. Separate waste from useful trimmings immediately.', 'vegetables', [2, 3], 0, { safety: 'knife' }),
     task('Das Messer der Kräuterfrau', 'The Herb Keeper’s Knife', 'Schneidet die ausgewählten Gemüse in ähnlich große Stücke, damit sie gleichmäßig garen.', 'Cut the selected vegetables into similar-sized pieces so they cook evenly.', 'vegetables', [2, 3], 0, { safety: 'knife' }),
-    task('Röstaromen im Nebel', 'Toasting in the Mist', 'Schwitzt geeignete Zutaten kontrolliert mit etwas Grundvorrat an. Gebt ausreichend Flüssigkeit zu, lasst die Suppe ruhig garen und startet die Zeit-Challenge.', 'Sweat suitable ingredients carefully with a little pantry staple. Add enough liquid, let the soup cook gently, and start the time challenge.', 'hotplate', [1, 2], 25, { safety: 'hotPan' }),
-    task('Wache am Kessel', 'Watch at the Cauldron', 'Prüft Hitze, Flüssigkeitsstand und Gargrad. Rührt nur, wenn es nötig ist, und lasst den Timer im Hintergrund weiterlaufen.', 'Check heat, liquid level, and doneness. Stir only when necessary and let the background timer continue.', 'hotplate', [1, 2], 0, { safety: 'hotPan' }),
-    task('Der ruhige Mixer', 'The Steady Blender', 'Püriert portionsweise, haltet den Deckel sicher und passt die Konsistenz vorsichtig mit Flüssigkeit aus dem Grundvorrat an.', 'Blend in batches, secure the lid, and carefully adjust consistency with liquid from the basic pantry.', 'blender', [2, 2], 0, { safety: 'hotLiquids' }),
+    task('Röstaromen im Nebel', 'Toasting in the Mist', 'Schwitzt geeignete Zutaten kontrolliert mit etwas Grundvorrat an, löscht mit Wasser ab und stellt eine ruhige, sichere Hitze ein. Brühe ist Grundvorrat und keine erspielte Zutat.', 'Sweat suitable ingredients carefully with a little pantry staple, add water, and set a safe gentle heat. Stock is a pantry staple, not a played ingredient.', 'hotplate', [1, 2], 0, { estimatedMinutes: 7, challengeMinutes: 8, safety: 'hotPan' }),
+    task('Erste Kesselwache', 'First Cauldron Watch', 'Lasst die Suppe fünf Minuten ruhig garen. Wenn der Hintergrundtimer endet, prüft Hitze und Flüssigkeitsstand und markiert die Wache erledigt; die nächste Wache geht an eine andere freie Person.', 'Let the soup simmer gently for five minutes. When the background timer ends, check heat and liquid level and mark the watch complete; the next watch goes to another free player.', 'hotplate', [1, 1], 5, { timingMode: 'background', safety: 'hotPan' }),
+    task('Der ruhige Mixer', 'The Steady Blender', 'Nur bei Cremesuppe: Püriert portionsweise, haltet den Deckel sicher und passt die Konsistenz vorsichtig mit Wasser oder Grundvorrat an.', 'Cream soup only: blend in batches, secure the lid, and carefully adjust consistency with water or a pantry staple.', 'blender', [2, 2], 0, { estimatedMinutes: 6, challengeMinutes: 7, safety: 'hotLiquids', courseStyles: ['cream'] }),
     task('Kräuterzeichen', 'Herbal Signs', 'Wählt frische Kräuter und Gewürze nach Geschmack; gebt empfindliche Kräuter erst spät hinzu.', 'Choose fresh herbs and seasoning to taste; add delicate herbs late.', 'seasoning', [1, 2]),
     task('Einlage aus dem Pilzwald', 'Extra from the Mushroom Wood', 'Falls Fleisch zugeordnet wurde, bereitet es getrennt, hygienisch und vollständig durchgegart vor. Andernfalls bereitet eine feste Gemüse-, Nuss- oder Kerneinlage mundgerecht vor.', 'If meat was assigned, prepare it separately, hygienically, and cook it through. Otherwise prepare a firm vegetable, nut, or seed extra in bite-sized pieces.', 'protein', [1, 2]),
     task('Die erste Kesselprobe', 'The First Cauldron Tasting', 'Prüft Salz, Säure, Schärfe und Textur mit einem sauberen Probierlöffel.', 'Check salt, acidity, heat, and texture with a clean tasting spoon.', 'quality', [2, 2]),
     task('Knusperbeute im Nebel', 'Crunch from the Mist', 'Falls Croûtons, Nüsse oder Kerne zugeordnet sind, bereitet sie trocken vor und gebt sie erst beim Servieren auf die Suppe.', 'If croutons, nuts, or seeds were assigned, prepare them dry and add them only when serving.', 'garnish', [1, 1]),
     task('Schalen für die Mannschaft', 'Bowls for the Crew', 'Wärmt geeignete Schalen vor und verteilt die Suppe gleichmäßig.', 'Warm suitable bowls and portion the soup evenly.', 'serving', [2, 3]),
-    task('Kesselwache aufräumen', 'Clear the Cauldron Watch', 'Stellt den Mixer sicher ab, weicht den Topf ein und reinigt Spritzer sofort.', 'Secure the blender, soak the pot, and wipe splashes immediately.', 'cleanup', [1, 2])
+    task('Kesselwache aufräumen', 'Clear the Cauldron Watch', 'Stellt verwendete Geräte sicher ab, weicht den Topf nach dem Servieren ein und reinigt Spritzer sofort.', 'Secure used equipment, soak the pot after serving, and wipe splashes immediately.', 'cleanup', [1, 2]),
+    task('Zweite Kesselwache', 'Second Cauldron Watch', 'Übernehmt den Kessel für weitere fünf Minuten. Prüft nach dem Hintergrundtimer Hitze, Flüssigkeit und Gargrad; rührt nur bei Bedarf.', 'Take over the cauldron for another five minutes. After the background timer, check heat, liquid, and doneness; stir only if needed.', 'hotplate', [1, 1], 5, { timingMode: 'background', safety: 'hotPan' }),
+    task('Dritte Kesselwache', 'Third Cauldron Watch', 'Übernehmt die letzte fünfminütige Kesselwache. Prüft danach, ob alle harten Zutaten weich genug für den gewählten Suppenstil sind.', 'Take the final five-minute cauldron watch. Then check that all firm ingredients are tender enough for the chosen soup style.', 'hotplate', [1, 1], 5, { timingMode: 'background', safety: 'hotPan' }),
+    task('Klare Suppe vollenden', 'Finish the Clear Soup', 'Nur bei klarer Suppe: Lasst die Einlagen sichtbar, schöpft bei Bedarf Schaum ab und balanciert Flüssigkeit, Salz und Säure ohne zu pürieren.', 'Clear soup only: keep the pieces visible, skim if needed, and balance liquid, salt, and acidity without blending.', 'quality', [1, 2], 0, { estimatedMinutes: 5, challengeMinutes: 6, courseStyles: ['clear'] })
   ],
   salad: [
     task('Der Plan des grünen Altars', 'Plan of the Green Altar', 'Bestimmt das Verhältnis aus Blattsalat, Gemüse, Obst, Nüssen und Kernen.', 'Decide the balance of leaves, vegetables, fruit, nuts, and seeds.', 'planning', [2, 3]),
@@ -844,17 +1002,19 @@ const BLUEPRINTS = Object.freeze({
   ],
   main: [
     task('Kriegsrat der Festung', 'Fortress Council', 'Legt fest, welche erspielten Fleischstücke, Gemüse, Früchte, Nüsse oder Kerne gemeinsam in den Bratschlauch kommen.', 'Decide which won cuts of meat, vegetables, fruit, nuts, or seeds will share the roasting bag.', 'planning', [2, 3]),
-    task('Das große Feuerpaket', 'The Great Fire Parcel', 'Heizt den Ofen passend vor. Bereitet Fleisch getrennt vor und portioniert es. Schichtet vorbereitetes Gemüse und Obst im Bratschlauch, verteilt das Fleisch darüber, verschließt ihn nach Herstellerangabe und startet den Ofentimer.', 'Preheat the oven appropriately. Prepare and portion the meat separately. Layer the prepared vegetables and fruit in the roasting bag, arrange the meat above, close it according to its instructions, and start the oven timer.', 'oven', [2, 3], 45, { safety: 'rawMeat' }),
+    task('Das große Feuerpaket', 'The Great Fire Parcel', 'Heizt den Ofen passend vor. Bereitet Fleisch getrennt vor, schichtet Gemüse und höchstens zwei Früchte im Bratschlauch, verteilt das Fleisch darüber und verschließt ihn nach Herstellerangabe. Noch nicht garen.', 'Preheat appropriately. Prepare meat separately, layer vegetables and no more than two fruits in the roasting bag, arrange the meat above, and close it according to its instructions. Do not start cooking yet.', 'oven', [2, 3], 0, { estimatedMinutes: 8, challengeMinutes: 9, safety: 'rawMeat' }),
     task('Beute aus der Schmiede', 'Forge Provisions', 'Kontrolliert, ob alle Fleisch-, Gemüse- und Fruchtportionen im Ofen sind. Reinigt danach sofort Rohfleischflächen und Werkzeuge.', 'Confirm that all meat, vegetable, and fruit portions are in the oven. Then immediately clean raw-meat surfaces and tools.', 'protein', [2, 3], 0, { safety: 'rawMeat' }),
     task('Schichten aus der Mine', 'Layers from the Mine', 'Verteilt feste Gemüse, Nüsse oder Kerne gleichmäßig zwischen den übrigen Zutaten, damit jede Portion etwas davon enthält.', 'Distribute firm vegetables, nuts, or seeds evenly among the other ingredients so every portion receives some.', 'assembly', [2, 2]),
     task('Die Festungsprobe', 'The Fortress Check', 'Prüft den Fortschritt nach Geräte- und Packungshinweisen. Öffnet den Bratschlauch noch nicht und passt nur bei Bedarf Temperatur oder Zeit an.', 'Check progress according to appliance and packaging guidance. Do not open the roasting bag yet; adjust temperature or time only if necessary.', 'quality', [1, 2], 0, { safety: 'hotOven' }),
-    task('Ruhe vor dem Festmahl', 'Rest before the Feast', 'Nehmt das Blech vorsichtig heraus, lasst das Gericht ruhen und öffnet den Schlauch vom Gesicht weg.', 'Remove the tray carefully, rest the dish, and open the bag away from your face.', 'oven', [2, 2], 10, { safety: 'hotSteam' }),
+    task('Ruhe vor dem Festmahl', 'Rest before the Feast', 'Nehmt das Blech vorsichtig heraus und lasst das Gericht fünf Minuten ruhen. Der Ruhe-Timer läuft ohne Münzdruck; öffnet den Schlauch erst danach vom Gesicht weg.', 'Remove the tray carefully and let the dish rest for five minutes. The resting timer has no coin pressure; only then open the bag away from your face.', 'oven', [2, 2], 5, { timingMode: 'background', safety: 'hotSteam' }),
     task('Zeichen der Schmiede', 'The Forge Mark', 'Kontrolliert, ob große Stücke gleichmäßig verteilt sind und empfindliche Zutaten nicht direkt an der heißesten Stelle liegen.', 'Check that large pieces are distributed evenly and delicate ingredients are not sitting at the hottest point.', 'quality', [2, 2], 0, { safety: 'hotOven' }),
     task('Obst am Lavapfad', 'Fruit on the Lava Path', 'Falls Obst zugeordnet ist, schneidet es groß genug, dass es beim Garen Struktur behält; andernfalls bestätigt diesen Schritt ohne Vorbereitung.', 'If fruit was assigned, cut it large enough to retain structure while roasting; otherwise confirm this step without preparation.', 'fruit', [1, 2], 0, { safety: 'knife' }),
     task('Die letzte Festungsprobe', 'The Final Fortress Check', 'Prüft, ob das Fleisch vollständig und gleichmäßig durchgegart ist. Im Zweifel mit einem sauberen Fleischthermometer an allen Stellen mindestens 70 °C für zwei Minuten prüfen. Packungs- und Gerätehinweise haben Vorrang; verlängert die Garzeit im Zweifel.', 'Check that the meat is thoroughly and evenly cooked. If in doubt, use a clean meat thermometer and verify at least 70 °C for two minutes throughout. Packaging and appliance instructions take priority; extend cooking when in doubt.', 'quality', [2, 2], 0, { safety: 'foodTemperature' }),
     task('Sauce aus dem Schatzsaft', 'Sauce from the Treasure Juices', 'Fangt austretenden Saft sicher auf und entscheidet, ob er direkt oder kurz reduziert serviert wird.', 'Collect the cooking juices safely and decide whether to serve directly or reduce briefly.', 'sauce', [1, 2], 0, { safety: 'hotPan' }),
     task('Platten der Feuerwache', 'Platters of the Fire Watch', 'Richtet Fleisch, Gemüse und Früchte übersichtlich an und haltet rohe Kontaktflächen fern.', 'Arrange meat, vegetables, and fruit clearly and keep raw-contact surfaces away.', 'serving', [2, 3]),
-    task('Die gereinigte Schmiede', 'The Clean Forge', 'Reinigt alle Flächen und Werkzeuge mit Rohfleischkontakt gründlich und räumt heiße Geräte sicher weg.', 'Clean every surface and tool that touched raw meat thoroughly and put hot equipment away safely.', 'cleanup', [2, 3], 0, { safety: 'rawMeat' })
+    task('Die gereinigte Schmiede', 'The Clean Forge', 'Reinigt alle Flächen und Werkzeuge mit Rohfleischkontakt gründlich und räumt heiße Geräte sicher weg.', 'Clean every surface and tool that touched raw meat thoroughly and put hot equipment away safely.', 'cleanup', [2, 3], 0, { safety: 'rawMeat' }),
+    task('Bratschlauch im Ofen', 'Roasting Bag in the Oven', 'Schiebt das verschlossene Feuerpaket in den Ofen und lasst es 35 Minuten nach Geräte- und Packungshinweisen garen. Diese Ofenzeit läuft ohne Münzbelohnung oder Strafe im Hintergrund.', 'Put the sealed fire parcel in the oven and cook it for 35 minutes according to appliance and packaging guidance. This oven time runs in the background without coin reward or penalty.', 'oven', [1, 2], 35, { timingMode: 'background', safety: 'hotOven' }),
+    task('Letzte Ofenetappe', 'Final Oven Stage', 'Gart das Gericht nach der Zwischenkontrolle weitere zehn Minuten oder so lange, wie Packung und Gargrad es verlangen. Der Timer ist nur eine Erinnerung, keine Deadline.', 'After the progress check, cook for another ten minutes or as long as packaging and doneness require. The timer is a reminder, not a deadline.', 'oven', [1, 2], 10, { timingMode: 'background', safety: 'hotOven' })
   ],
   dessert: [
     task('Zwei Crews an der Lagune', 'Two Crews at the Lagoon', 'Teilt euch in zwei möglichst gleich große Teams und gebt jeder Gruppe einen eigenen Arbeitsbereich.', 'Split into two similar-sized teams and give each one its own work area.', 'planning', [2, 3]),
@@ -862,7 +1022,7 @@ const BLUEPRINTS = Object.freeze({
     task('Die warme Fruchtbeute', 'Warm Fruit Treasure', 'Entscheidet zwischen karamellisiertem Obst, Obstsalat oder Püree und bereitet eine Variante in kleinen Schritten vor.', 'Choose caramelised fruit, fruit salad, or purée and prepare one option in small steps.', 'fruit', [2, 2], 8, { safety: 'hotSugar' }),
     task('Eis aus der Höhle', 'Ice from the Cave', 'Plant Vanilleeis und – falls zugeordnet – die zweite Eissorte so, dass beide Kreationen ausreichend und unterscheidbar bleiben.', 'Plan the vanilla ice cream and, if assigned, the second flavour so both creations remain sufficient and distinct.', 'cold', [1, 2]),
     task('Die zwei Schatzpläne', 'The Two Treasure Plans', 'Ein Team entwickelt eine fruchtige Richtung; das andere kombiniert die übrigen zugeordneten Zutaten zu einer klar unterscheidbaren Variante.', 'One team develops a fruity direction; the other combines the remaining assigned ingredients into a clearly distinct variation.', 'assembly', [4, 6]),
-    task('Kühle Wache', 'The Cool Watch', 'Stellt vorbereitete Bestandteile kühl und startet einen kurzen Timer, bevor endgültig angerichtet wird.', 'Chill prepared components and start a short timer before final plating.', 'cold', [1, 2], 10),
+    task('Kühle Wache', 'The Cool Watch', 'Stellt vorbereitete Bestandteile zehn Minuten kühl. Die Kühlzeit läuft als Erinnerung im Hintergrund und ist keine Münz-Challenge.', 'Chill prepared components for ten minutes. The chilling time is a background reminder, not a coin challenge.', 'cold', [1, 2], 10, { timingMode: 'background' }),
     task('Süße Wolken', 'Sweet Clouds', 'Bereitet eine luftige oder cremige Komponente aus euren Grundvorräten vor und haltet sie bis zum Servieren kalt.', 'Prepare an airy or creamy component from your basic pantry and keep it cold until serving.', 'cold', [1, 2]),
     task('Garnitur aus der Truhe', 'Garnish from the Chest', 'Bereitet die zugeordneten Streusel, Schokolade, Nüsse oder Kerne getrennt vor, damit beide Teams bewusst dosieren können.', 'Prepare the assigned sprinkles, chocolate, nuts, or seeds separately so both teams can dose them deliberately.', 'garnish', [1, 2]),
     task('Die erste Lagunenprobe', 'The First Lagoon Tasting', 'Prüft Süße, Temperatur und Textur beider Kreationen und ändert nur einen Punkt gleichzeitig.', 'Check sweetness, temperature, and texture of both creations and change only one point at a time.', 'quality', [2, 2]),
@@ -886,13 +1046,47 @@ const BLUEPRINTS = Object.freeze({
   ]
 });
 
-const SECOND_WATCH = {
-  titleSuffix: { de: ' – Zweite Wache', en: ' — Second Watch' },
-  instructionSuffix: {
-    de: ' Prüft anschließend Gleichmäßigkeit, Geschmack und einen sicheren Arbeitsplatz.',
-    en: ' Then check consistency, flavour, and a safe workspace.'
+const QUEST_NAMES = Object.freeze({
+  tapas: {
+    plan: { de: 'Hafenplan', en: 'Harbour Plan' }, dates: { de: 'Speckdatteln', en: 'Bacon Dates' },
+    bread: { de: 'Ofenbrot', en: 'Oven Bread' }, cold: { de: 'Kalte Platten', en: 'Cold Platters' },
+    serve: { de: 'Erstes Deckmahl', en: 'First Deck Meal' }, cleanup: { de: 'Klare Kombüse', en: 'Clear Galley' }, story: { de: 'Hafengeschichte', en: 'Harbour Story' }
+  },
+  soup: {
+    plan: { de: 'Suppenplan', en: 'Soup Plan' }, vegetables: { de: 'Gemüse vorbereiten', en: 'Prepare Vegetables' },
+    cauldron: { de: 'Kesselreise', en: 'Cauldron Voyage' }, finish: { de: 'Suppe vollenden', en: 'Finish the Soup' },
+    extras: { de: 'Einlage & Garnitur', en: 'Extras & Garnish' }, serve: { de: 'Kessel servieren', en: 'Serve the Cauldron' }, cleanup: { de: 'Kessel klar machen', en: 'Clear the Cauldron' }
+  },
+  salad: {
+    plan: { de: 'Salatplan', en: 'Salad Plan' }, prep: { de: 'Frische vorbereiten', en: 'Prepare Fresh Ingredients' },
+    dressing: { de: 'Dressingroute', en: 'Dressing Route' }, assemble: { de: 'Dschungelschale', en: 'Jungle Bowl' },
+    serve: { de: 'Grüner Pfad', en: 'Green Path' }, cleanup: { de: 'Sauberer Pfad', en: 'Clear Path' }
+  },
+  main: {
+    plan: { de: 'Festungsplan', en: 'Fortress Plan' }, prep: { de: 'Feuerpaket vorbereiten', en: 'Prepare the Fire Parcel' },
+    oven: { de: 'Ofenreise', en: 'Oven Voyage' }, finish: { de: 'Festmahl vollenden', en: 'Finish the Feast' },
+    serve: { de: 'Festungstafel', en: 'Fortress Table' }, cleanup: { de: 'Schmiede reinigen', en: 'Clean the Forge' }
+  },
+  dessert: {
+    plan: { de: 'Lagunenplan', en: 'Lagoon Plan' }, fruit: { de: 'Fruchtbeute', en: 'Fruit Treasure' },
+    cold: { de: 'Kühle Kreationen', en: 'Chilled Creations' }, finish: { de: 'Süße Garnitur', en: 'Sweet Garnish' },
+    serve: { de: 'Sonnenpavillon', en: 'Sun Pavilion' }, cleanup: { de: 'Kalte Kombüse', en: 'Cold Galley' }
+  },
+  cocktails: {
+    plan: { de: 'Barplan', en: 'Bar Plan' }, fruit: { de: 'Fruchtbasis', en: 'Fruit Base' },
+    mixes: { de: 'Zwei Mischungen', en: 'Two Mixes' }, finish: { de: 'Balance & Sicherheit', en: 'Balance & Safety' },
+    serve: { de: 'Letzte Gläser', en: 'Final Glasses' }, cleanup: { de: 'Bar klar machen', en: 'Clear the Bar' }
   }
-};
+});
+
+const QUEST_ASSIGNMENTS = Object.freeze({
+  tapas: ['plan', 'dates', 'bread', 'cold', 'cold', 'serve', 'serve', 'dates', 'bread', 'serve', 'cleanup', 'story', 'dates', 'dates', 'bread', 'bread'],
+  soup: ['plan', 'vegetables', 'vegetables', 'cauldron', 'cauldron', 'finish', 'finish', 'extras', 'finish', 'extras', 'serve', 'cleanup', 'cauldron', 'cauldron', 'finish'],
+  salad: ['plan', 'prep', 'prep', 'dressing', 'assemble', 'serve', 'prep', 'prep', 'dressing', 'prep', 'serve', 'cleanup'],
+  main: ['plan', 'prep', 'prep', 'prep', 'oven', 'oven', 'prep', 'prep', 'finish', 'finish', 'serve', 'cleanup', 'oven', 'oven'],
+  dessert: ['plan', 'fruit', 'fruit', 'cold', 'cold', 'cold', 'cold', 'finish', 'finish', 'finish', 'serve', 'cleanup'],
+  cocktails: ['plan', 'fruit', 'fruit', 'mixes', 'mixes', 'serve', 'finish', 'finish', 'finish', 'mixes', 'finish', 'cleanup']
+});
 
 /*
  * Only real kitchen work enters the live assignment deck. The prerequisite
@@ -901,20 +1095,23 @@ const SECOND_WATCH = {
  */
 const WORKFLOW = Object.freeze({
   tapas: {
-    skip: [0, 11],
+    skip: [0, 7, 11],
     requires: {
-      7: [[1, 'started']], 8: [[2, 'done']], 9: [[3, 'done'], [4, 'done']],
-      5: [[1, 'done'], [2, 'done'], [3, 'done'], [4, 'done'], [7, 'done'], [8, 'done'], [9, 'done']],
+      12: [[1, 'done']], 13: [[12, 'done']], 14: [[2, 'done']], 15: [[14, 'done']],
+      8: [[15, 'done']], 9: [[3, 'done'], [4, 'done']],
+      5: [[3, 'done'], [4, 'done'], [6, 'done'], [8, 'done'], [9, 'done'], [13, 'done']],
       10: [[5, 'done']]
     }
   },
   soup: {
     skip: [0],
     requires: {
-      2: [[1, 'done']], 3: [[2, 'done'], [7, 'done']], 4: [[3, 'started']],
-      5: [[3, 'done']], 6: [[5, 'started']], 8: [[5, 'done'], [6, 'done'], [7, 'done']],
+      2: [[1, 'done']], 3: [[2, 'done'], [7, 'done']], 4: [[3, 'done']],
+      12: [[4, 'done']], 13: [[12, 'done']], 5: [[13, 'done']], 14: [[13, 'done']],
+      8: [[6, 'done'], [7, 'done']],
       10: [[8, 'done']], 11: [[10, 'done']]
-    }
+    },
+    requiresAny: { 8: [[5, 'done'], [14, 'done']] }
   },
   salad: {
     skip: [0],
@@ -927,7 +1124,7 @@ const WORKFLOW = Object.freeze({
     skip: [0],
     requires: {
       1: [[2, 'done'], [3, 'done'], [6, 'done'], [7, 'done'], [9, 'done']],
-      4: [[1, 'done']], 5: [[1, 'done']], 8: [[4, 'done'], [5, 'done']],
+      12: [[1, 'done']], 4: [[12, 'done']], 13: [[4, 'done']], 5: [[13, 'done']], 8: [[5, 'done']],
       10: [[8, 'done']], 11: [[10, 'done']]
     }
   },
@@ -951,28 +1148,30 @@ const WORKFLOW = Object.freeze({
 function buildTaskDeck(chapterIndex) {
   const chapter = CHAPTERS[chapterIndex];
   const blueprints = BLUEPRINTS[chapter.id];
-  return blueprints.flatMap((blueprint, blueprintIndex) => [0, 1].map((variant) => {
-    const number = blueprintIndex * 2 + variant + 1;
+  const questSteps = new Map();
+  return blueprints.map((blueprint, blueprintIndex) => {
+    const number = blueprintIndex * 2 + 1;
+    const estimatedMinutes = blueprint.estimatedMinutes || blueprint.backgroundMinutes || DEFAULT_ESTIMATED_MINUTES[blueprint.area] || 4;
+    const questId = QUEST_ASSIGNMENTS[chapter.id][blueprintIndex] ?? 'plan';
+    const questStep = (questSteps.get(questId) ?? 0) + 1;
+    questSteps.set(questId, questStep);
     return {
       ...blueprint,
-      estimatedMinutes: blueprint.estimatedMinutes || blueprint.timerMinutes || DEFAULT_ESTIMATED_MINUTES[blueprint.area] || 4,
+      estimatedMinutes,
+      challengeMinutes: blueprint.timingMode === 'background' ? 0 : (blueprint.challengeMinutes ?? Math.max(2, Math.min(8, estimatedMinutes))),
       id: `A${chapterIndex + 1}-${String(number).padStart(2, '0')}`,
       chapterId: chapter.id,
-      title: variant === 0 ? blueprint.title : {
-        de: `${blueprint.title.de}${SECOND_WATCH.titleSuffix.de}`,
-        en: `${blueprint.title.en}${SECOND_WATCH.titleSuffix.en}`
-      },
-      instruction: variant === 0 ? blueprint.instruction : {
-        de: `${blueprint.instruction.de}${SECOND_WATCH.instructionSuffix.de}`,
-        en: `${blueprint.instruction.en}${SECOND_WATCH.instructionSuffix.en}`
-      },
-      variant,
+      questId,
+      questName: QUEST_NAMES[chapter.id][questId],
+      questStep,
+      variant: 0,
       blueprintIndex,
-      playable: variant === 0 && !WORKFLOW[chapter.id].skip.includes(blueprintIndex),
+      playable: !WORKFLOW[chapter.id].skip.includes(blueprintIndex),
       prerequisites: (WORKFLOW[chapter.id].requires[blueprintIndex] ?? []).map(([requiredBlueprintIndex, state]) => ({ requiredBlueprintIndex, state })),
+      alternativePrerequisites: (WORKFLOW[chapter.id].requiresAny?.[blueprintIndex] ?? []).map(([requiredBlueprintIndex, state]) => ({ requiredBlueprintIndex, state })),
       coreLocationIndex: null
     };
-  }));
+  });
 }
 
 const TASK_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildTaskDeck(index)));
@@ -991,8 +1190,12 @@ function validateTaskCatalog() {
     uniqueIds: ids.size,
     uniqueGermanTitles: titlesDe.size,
     uniqueEnglishTitles: titlesEn.size,
-    valid: tasks.length === 144 && ids.size === 144 && titlesDe.size === 144 && titlesEn.size === 144
+    valid: tasks.length === blueprintsTotal() && ids.size === tasks.length && titlesDe.size === tasks.length && titlesEn.size === tasks.length
   };
+}
+
+function blueprintsTotal() {
+  return Object.values(BLUEPRINTS).reduce((total, entries) => total + entries.length, 0);
 }
 
 
@@ -1036,19 +1239,20 @@ function activeTimerCount(session) {
 
 
 /* js/core/audio.js */
-const PATTERNS = Object.freeze({
-  card: [[330, .045, 0], [494, .08, .04]],
-  dice: [[180, .04, 0], [230, .04, .07], [290, .06, .14]],
-  move: [[392, .07, 0], [523, .11, .08]],
-  treasure: [[392, .07, 0], [523, .07, .08], [659, .16, .16]],
-  timer: [[660, .12, 0], [660, .12, .22], [880, .2, .44]],
-  complete: [[440, .08, 0], [554, .08, .08], [659, .18, .16]]
+const SOUND_DESIGNS = Object.freeze({
+  card: 'parchment-and-wood',
+  dice: 'wooden-dice-cup',
+  move: 'ship-deck-knock',
+  treasure: 'metal-coins',
+  timer: 'ship-bell',
+  complete: 'lute-cadence'
 });
 
 class GameAudio {
   constructor(enabled = true) {
     this.enabled = enabled;
     this.context = null;
+    this.master = null;
   }
 
   setEnabled(enabled) {
@@ -1058,30 +1262,143 @@ class GameAudio {
   async unlock() {
     if (!this.enabled || typeof AudioContext === 'undefined') return false;
     this.context ??= new AudioContext();
+    if (!this.master) {
+      this.master = this.context.createGain();
+      this.master.gain.value = 0.72;
+      this.master.connect(this.context.destination);
+    }
     if (this.context.state === 'suspended') await this.context.resume();
     return this.context.state === 'running';
   }
 
+  tone(frequency, delay, duration, options = {}) {
+    const start = this.context.currentTime + 0.012 + delay;
+    const oscillator = this.context.createOscillator();
+    const gain = this.context.createGain();
+    oscillator.type = options.type ?? 'triangle';
+    oscillator.frequency.setValueAtTime(frequency, start);
+    if (options.endFrequency) oscillator.frequency.exponentialRampToValueAtTime(options.endFrequency, start + duration);
+    if (options.detune) oscillator.detune.setValueAtTime(options.detune, start);
+    gain.gain.setValueAtTime(0.0001, start);
+    gain.gain.exponentialRampToValueAtTime(options.gain ?? 0.035, start + (options.attack ?? 0.006));
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+
+    if (options.filterFrequency) {
+      const filter = this.context.createBiquadFilter();
+      filter.type = options.filterType ?? 'lowpass';
+      filter.frequency.setValueAtTime(options.filterFrequency, start);
+      filter.Q.value = options.filterQ ?? 0.7;
+      oscillator.connect(filter).connect(gain).connect(this.master);
+    } else {
+      oscillator.connect(gain).connect(this.master);
+    }
+    oscillator.start(start);
+    oscillator.stop(start + duration + 0.03);
+  }
+
+  noise(delay, duration, options = {}) {
+    const start = this.context.currentTime + 0.012 + delay;
+    const frameCount = Math.max(1, Math.ceil(this.context.sampleRate * duration));
+    const buffer = this.context.createBuffer(1, frameCount, this.context.sampleRate);
+    const samples = buffer.getChannelData(0);
+    for (let index = 0; index < samples.length; index += 1) {
+      const fade = 1 - index / samples.length;
+      samples[index] = (Math.random() * 2 - 1) * fade;
+    }
+    const source = this.context.createBufferSource();
+    const filter = this.context.createBiquadFilter();
+    const gain = this.context.createGain();
+    source.buffer = buffer;
+    filter.type = options.filterType ?? 'bandpass';
+    filter.frequency.setValueAtTime(options.frequency ?? 1200, start);
+    filter.Q.value = options.q ?? 0.8;
+    gain.gain.setValueAtTime(options.gain ?? 0.025, start);
+    gain.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+    source.connect(filter).connect(gain).connect(this.master);
+    source.start(start);
+    source.stop(start + duration + 0.02);
+  }
+
+  woodHit(delay, pitch = 105, strength = 1) {
+    this.noise(delay, 0.045, { frequency: 720, q: 0.55, gain: 0.035 * strength });
+    this.tone(pitch, delay, 0.075, {
+      type: 'triangle', gain: 0.04 * strength, endFrequency: Math.max(48, pitch * 0.62), filterFrequency: 850
+    });
+  }
+
+  coin(delay, frequency) {
+    this.tone(frequency, delay, 0.28, { type: 'sine', gain: 0.026, attack: 0.003 });
+    this.tone(frequency * 2.71, delay + 0.004, 0.19, { type: 'sine', gain: 0.012, attack: 0.002 });
+    this.tone(frequency * 4.08, delay + 0.008, 0.11, { type: 'sine', gain: 0.006, attack: 0.002 });
+  }
+
+  bell(delay = 0) {
+    const partials = [523.25, 1046.5, 1277, 1568, 2093];
+    const gains = [0.038, 0.023, 0.015, 0.011, 0.006];
+    partials.forEach((frequency, index) => this.tone(frequency, delay, 0.72 - index * 0.08, {
+      type: 'sine', gain: gains[index], attack: 0.003
+    }));
+    this.noise(delay, 0.025, { frequency: 2100, q: 1.2, gain: 0.018 });
+  }
+
+  pluck(frequency, delay, duration = 0.34) {
+    this.tone(frequency, delay, duration, {
+      type: 'triangle', gain: 0.032, attack: 0.004, filterFrequency: 1800
+    });
+    this.tone(frequency * 2, delay + 0.003, duration * 0.62, {
+      type: 'sine', gain: 0.008, attack: 0.003
+    });
+    this.noise(delay, 0.018, { frequency: 2600, q: 0.9, gain: 0.009 });
+  }
+
+  playCard() {
+    this.noise(0, 0.13, { frequency: 1900, q: 0.45, gain: 0.025 });
+    this.noise(0.075, 0.11, { frequency: 2900, q: 0.6, gain: 0.018 });
+    this.woodHit(0.16, 92, 0.55);
+  }
+
+  playDice() {
+    [[0, 132, 0.7], [0.055, 108, 0.82], [0.12, 145, 0.68], [0.19, 96, 0.9], [0.28, 82, 1]]
+      .forEach(([delay, pitch, strength]) => this.woodHit(delay, pitch, strength));
+  }
+
+  playMove() {
+    this.woodHit(0, 98, 0.72);
+    this.woodHit(0.095, 73, 0.95);
+  }
+
+  playTreasure() {
+    [[0, 1046.5], [0.075, 1318.5], [0.145, 1568], [0.21, 1174.7]]
+      .forEach(([delay, frequency]) => this.coin(delay, frequency));
+  }
+
+  playTimer() {
+    this.bell(0);
+    this.bell(0.42);
+  }
+
+  playComplete() {
+    [[0, 293.66], [0.095, 349.23], [0.19, 440], [0.29, 587.33]]
+      .forEach(([delay, frequency], index) => this.pluck(frequency, delay, index === 3 ? 0.62 : 0.36));
+  }
+
   async play(name) {
-    if (!this.enabled || typeof AudioContext === 'undefined') return;
+    if (!this.enabled || typeof AudioContext === 'undefined') return false;
     try {
-      await this.unlock();
-      const pattern = PATTERNS[name] ?? PATTERNS.card;
-      const start = this.context.currentTime;
-      pattern.forEach(([frequency, duration, delay]) => {
-        const oscillator = this.context.createOscillator();
-        const gain = this.context.createGain();
-        oscillator.type = name === 'dice' ? 'triangle' : 'sine';
-        oscillator.frequency.setValueAtTime(frequency, start + delay);
-        gain.gain.setValueAtTime(0.0001, start + delay);
-        gain.gain.exponentialRampToValueAtTime(0.055, start + delay + .012);
-        gain.gain.exponentialRampToValueAtTime(0.0001, start + delay + duration);
-        oscillator.connect(gain).connect(this.context.destination);
-        oscillator.start(start + delay);
-        oscillator.stop(start + delay + duration + .02);
-      });
+      if (!await this.unlock()) return false;
+      switch (name) {
+        case 'dice': this.playDice(); break;
+        case 'move': this.playMove(); break;
+        case 'treasure': this.playTreasure(); break;
+        case 'timer': this.playTimer(); break;
+        case 'complete': this.playComplete(); break;
+        case 'card':
+        default: this.playCard(); break;
+      }
+      return true;
     } catch {
       // Audio is atmospheric only. The visual game remains fully usable.
+      return false;
     }
   }
 }
@@ -1190,6 +1507,21 @@ const clone = (value) => typeof structuredClone === 'function'
   ? structuredClone(value)
   : JSON.parse(JSON.stringify(value));
 
+const TASK_ASSIGNEE_CHOICE_INTERVAL = 3;
+const MAX_INGREDIENTS_PER_TURN = 2;
+const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth']);
+const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
+const CURRENT_INGREDIENT_IDS = new Set(CURRENT_INGREDIENTS_BY_ID.keys());
+
+function supportedIngredientPlan(ingredients) {
+  if (!Array.isArray(ingredients)) return false;
+  const ids = ingredients.map((ingredient) => ingredient?.id);
+  const uniqueIds = new Set(ids);
+  return uniqueIds.size === ids.length &&
+    INGREDIENTS.every((ingredient) => uniqueIds.has(ingredient.id)) &&
+    ids.every((id) => CURRENT_INGREDIENT_IDS.has(id) || RETIRED_INGREDIENT_IDS.has(id));
+}
+
 function chapterState(playerIds, chapterIndex = 0) {
   return {
     round: 1,
@@ -1202,6 +1534,8 @@ function chapterState(playerIds, chapterIndex = 0) {
     splitTargetLocation: null,
     challengeIdsByRound: {},
     queuedChallenges: [],
+    scheduledChallenges: [],
+    courseStyle: chapterIndex === 1 ? null : 'not-required',
     stage: chapterIndex === 0 ? 'tasks' : 'ingredients'
   };
 }
@@ -1224,10 +1558,14 @@ function freshTurn() {
     watchTargetPlayerId: null,
     watchStartedAt: null,
     watchEndsAt: null,
+    pendingTaskAssignment: null,
     assignedTaskId: null,
     resolvedTaskId: null,
+    resolvedIngredientId: null,
+    resolvedPreviousIngredientId: null,
     taskBriefingEndsTurn: true,
-    activeAbilityUsed: false
+    activeAbilityUsed: false,
+    ingredientsAddedThisTurn: 0
   };
 }
 
@@ -1241,6 +1579,24 @@ function stageEventQueues(chapterIndex, initialQueues = null) {
       });
     })
   ]));
+  return result;
+}
+
+function reconcileEventQueues(chapterIndex, chapterQueues, drawnEventIds = []) {
+  const result = Array.isArray(chapterQueues)
+    ? stageEventQueues(chapterIndex, chapterQueues)
+    : Object.fromEntries(EVENT_STAGES.map((stage) => [stage,
+      CHAPTERS[chapterIndex].locations.map((_, locationIndex) =>
+        [...(chapterQueues?.[stage]?.[locationIndex] ?? [])]
+      )
+    ]));
+  const queued = new Set(EVENT_STAGES.flatMap((stage) => result[stage].flat()));
+  const drawn = new Set(drawnEventIds);
+  EVENT_DECKS[chapterIndex].forEach((event) => {
+    if (queued.has(event.id) || drawn.has(event.id)) return;
+    result[event.stage][event.locationIndex].unshift(event.id);
+    queued.add(event.id);
+  });
   return result;
 }
 
@@ -1289,9 +1645,69 @@ class GameEngine {
     if (!state || state.version !== STATE_VERSION) throw new Error('Unsupported or missing game state.');
     this.state = clone(state);
     this.state.turn = { ...freshTurn(), ...this.state.turn };
+    this.state.ingredients = this.state.ingredients.filter((ingredient) => !RETIRED_INGREDIENT_IDS.has(ingredient.id));
+    const refreshedIngredients = buildIngredientPlan(this.state.rngState || 1, this.state.players.length).plan;
+    refreshedIngredients.forEach((ingredient) => {
+      if (!this.state.ingredients.some((entry) => entry.id === ingredient.id)) this.state.ingredients.push(ingredient);
+    });
+    const staleSoupCucumber = this.state.ingredients.find((ingredient) =>
+      ingredient.id === 'cucumber' && ingredient.chapterIndex === 1 && ingredient.status === 'discovered'
+    );
+    if (staleSoupCucumber) {
+      staleSoupCucumber.chapterIndex = null;
+      staleSoupCucumber.status = 'available';
+      staleSoupCucumber.basketCourseIndex = null;
+      staleSoupCucumber.basketTaskId = null;
+    }
+    this.state.ingredients.forEach((ingredient) => {
+      const current = CURRENT_INGREDIENTS_BY_ID.get(ingredient.id);
+      if (current) ingredient.courseTags = [...current.courseTags];
+    });
+    this.state.ingredientQueues = this.state.ingredientQueues.map((queue, chapterIndex) => {
+      const chapterId = CHAPTERS[chapterIndex].id;
+      const retained = queue.filter((ingredientId) => {
+        const ingredient = CURRENT_INGREDIENTS_BY_ID.get(ingredientId);
+        return ingredient?.courseTags.includes(chapterId);
+      });
+      const missing = this.state.ingredients
+        .filter((ingredient) => ingredient.courseTags.includes(chapterId) && !retained.includes(ingredient.id))
+        .map((ingredient) => ingredient.id);
+      return [...retained, ...missing];
+    });
+    this.state.tasks.forEach((task) => {
+      task.basketIngredientIds = (task.basketIngredientIds ?? []).filter((ingredientId) =>
+        !RETIRED_INGREDIENT_IDS.has(ingredientId) && !(staleSoupCucumber && ingredientId === 'cucumber')
+      );
+      const card = taskById(task.taskId);
+      if (card && task.status !== 'done') {
+        task.timingMode = card.timingMode ?? 'challenge';
+        task.challengeMinutes = card.challengeMinutes ?? 0;
+        task.backgroundMinutes = card.backgroundMinutes ?? 0;
+        const timerMinutes = task.timingMode === 'background' ? task.backgroundMinutes : task.challengeMinutes;
+        if (task.startedAt && ['active', 'ready'].includes(task.status)) {
+          task.challengeEndsAt = task.startedAt + timerMinutes * 60_000;
+          task.endAt = task.challengeEndsAt;
+        }
+      }
+    });
+    this.state.menu.forEach((course) => {
+      course.ingredientIds = course.ingredientIds.filter((ingredientId) => !RETIRED_INGREDIENT_IDS.has(ingredientId));
+    });
+    const currentCourseId = CHAPTERS[this.state.chapterIndex].id;
+    this.state.turn.pendingIngredientIds = this.state.turn.pendingIngredientIds.filter((ingredientId) => {
+      const ingredient = CURRENT_INGREDIENTS_BY_ID.get(ingredientId);
+      return ingredient && ingredient.courseTags.includes(currentCourseId);
+    });
+    if (RETIRED_INGREDIENT_IDS.has(this.state.lastIngredientId)) this.state.lastIngredientId = null;
+    if (RETIRED_INGREDIENT_IDS.has(this.state.previousIngredientId)) this.state.previousIngredientId = null;
+    if (this.state.turn.phase === 'ingredientChoice' && this.state.turn.pendingIngredientIds.length === 0) {
+      this.state.turn.phase = 'draw';
+      this.state.turn.pendingContext = null;
+      this.state.turn.ingredientFlow = null;
+    }
     this.state.chapter.stage ??= this.state.chapterIndex === 0 ? 'tasks' : 'ingredients';
     this.state.eventQueues = this.state.eventQueues.map((chapterQueues, chapterIndex) =>
-      Array.isArray(chapterQueues) ? stageEventQueues(chapterIndex, chapterQueues) : chapterQueues
+      reconcileEventQueues(chapterIndex, chapterQueues, this.state.eventsDrawn ?? [])
     );
     this.state.taskQueues = this.state.taskQueues.map((queue, chapterIndex) => {
       const playable = new Set(TASK_DECKS[chapterIndex].filter((card) => card.playable).map((card) => card.id));
@@ -1299,15 +1715,26 @@ class GameEngine {
       const missing = [...playable].filter((taskId) => !retained.includes(taskId));
       return [...retained, ...missing];
     });
-    this.state.tasks.forEach((task) => { task.basketIngredientIds ??= []; });
     this.state.ingredients.forEach((ingredient) => {
       ingredient.basketTaskId ??= null;
       ingredient.basketCourseIndex ??= ingredient.status === 'discovered' ? ingredient.chapterIndex : null;
     });
     this.state.coins ??= this.state.chapter?.treasure ?? 0;
+    this.state.coinGoal = COIN_GOAL;
     this.state.chapter.coinsEarned ??= this.state.chapter.treasure ?? 0;
     this.state.chapter.challengeIdsByRound ??= {};
     this.state.chapter.queuedChallenges ??= [];
+    this.state.chapter.scheduledChallenges ??= [];
+    this.state.chapter.courseStyle ??= this.state.chapterIndex === 1 ? null : 'not-required';
+    this.state.activeChallenges ??= [];
+    this.state.turnsElapsed ??= this.state.players.reduce((total, player) => total + (player.turns ?? 0), 0);
+    this.state.players.forEach((player) => { player.ingredientBonuses ??= freshBonuses(); });
+    if (this.state.bonuses && Object.values(this.state.bonuses).some((value) => Number(value) > 0)) {
+      Object.entries(this.state.bonuses).forEach(([key, value]) => {
+        if (key in this.activePlayer.ingredientBonuses) this.activePlayer.ingredientBonuses[key] += Number(value) || 0;
+      });
+      this.state.bonuses = freshBonuses();
+    }
     this.state.turn.activeAbilityUsed ??= false;
   }
 
@@ -1327,7 +1754,8 @@ class GameEngine {
         turns: 0,
         taskMarkers: 0,
         activeUsesRemaining: role.uses,
-        passiveUsedByChapter: {}
+        passiveUsedByChapter: {},
+        ingredientBonuses: freshBonuses()
       };
     });
 
@@ -1340,12 +1768,18 @@ class GameEngine {
       for (const stage of EVENT_STAGES) {
         stageQueues[stage] = [];
         for (let locationIndex = 0; locationIndex < CHAPTERS[chapterIndex].locations.length; locationIndex += 1) {
-          const ids = EVENT_DECKS[chapterIndex]
-            .filter((event) => event.locationIndex === locationIndex && event.stage === stage)
+          const locationEvents = EVENT_DECKS[chapterIndex]
+            .filter((event) => event.locationIndex === locationIndex && event.stage === stage);
+          const ids = locationEvents
+            .filter((event) => event.archetype !== 'pantry-mischief')
             .map((event) => event.id);
           const shuffled = shuffle(ids, rngState);
           rngState = shuffled.state;
-          stageQueues[stage].push(shuffled.value);
+          const queue = [...shuffled.value];
+          locationEvents
+            .filter((event) => event.archetype === 'pantry-mischief')
+            .forEach((event) => queue.splice(Math.min(2, queue.length), 0, event.id));
+          stageQueues[stage].push(queue);
         }
       }
       eventQueues.push(stageQueues);
@@ -1356,9 +1790,9 @@ class GameEngine {
       const ids = TASK_DECKS[chapterIndex]
         .filter((taskCard) => taskCard.playable)
         .map((taskCard) => taskCard.id);
-      const randomizedTasks = shuffle(ids, rngState);
-      rngState = randomizedTasks.state;
-      taskQueues.push(randomizedTasks.value);
+      // Task cards form prepared quest lines. Their catalog order is deliberate;
+      // prerequisites expose only the next physically sensible steps.
+      taskQueues.push(ids);
     }
 
     const ingredientQueues = [];
@@ -1412,7 +1846,9 @@ class GameEngine {
       lastIngredientId: null,
       previousIngredientId: null,
       bonuses: freshBonuses(),
-      menu: CHAPTERS.map((chapter) => ({ chapterId: chapter.id, servedAt: null, ingredientIds: [] })),
+      activeChallenges: [],
+      turnsElapsed: 0,
+      menu: CHAPTERS.map((chapter) => ({ chapterId: chapter.id, servedAt: null, ingredientIds: [], courseStyle: null })),
       history: []
     };
 
@@ -1430,6 +1866,11 @@ class GameEngine {
     return this.state.players[this.state.activePlayerIndex];
   }
 
+  get activeBonuses() {
+    this.activePlayer.ingredientBonuses ??= freshBonuses();
+    return this.activePlayer.ingredientBonuses;
+  }
+
   get currentChapter() {
     return CHAPTERS[this.state.chapterIndex];
   }
@@ -1444,11 +1885,92 @@ class GameEngine {
       ? WATCH_CHALLENGES.find((entry) => entry.id === this.state.turn.watchChallengeId)
       : this.state.turn.watchChallengeIndex == null ? null : WATCH_CHALLENGES[this.state.turn.watchChallengeIndex];
     if (!challenge) return null;
-    const target = this.state.players.find((player) => player.id === this.state.turn.watchTargetPlayerId) ?? this.activePlayer;
+    return this.personalizeWatchChallenge(challenge, this.state.turn.watchTargetPlayerId);
+  }
+
+  personalizeWatchChallenge(challenge, targetPlayerId = null) {
+    if (!challenge) return null;
+    const target = this.state.players.find((player) => player.id === targetPlayerId) ?? this.activePlayer;
     const replaceNames = (value) => value
       .replaceAll('{activePlayer}', this.activePlayer.name)
       .replaceAll('{targetPlayer}', target.name);
-    return { ...challenge, de: replaceNames(challenge.de), en: replaceNames(challenge.en) };
+    return {
+      ...challenge,
+      de: replaceNames(challenge.de),
+      en: replaceNames(challenge.en),
+      title: {
+        de: replaceNames(challenge.title.de),
+        en: replaceNames(challenge.title.en)
+      }
+    };
+  }
+
+  completeActiveChallenge(instance, reason, now = Date.now()) {
+    const challenge = WATCH_CHALLENGES.find((entry) => entry.id === instance?.challengeId);
+    if (!challenge) return false;
+    const index = this.state.activeChallenges.findIndex((entry) => entry.instanceId === instance.instanceId);
+    if (index < 0) return false;
+    this.state.activeChallenges.splice(index, 1);
+    if (challenge.coins) this.addCoins(challenge.coins, 'challenge', now);
+    this.log('watchChallengeCompleted', {
+      challengeId: challenge.id,
+      coins: challenge.coins,
+      delayed: true,
+      reason,
+      ownerPlayerId: instance.ownerPlayerId
+    }, now);
+    return true;
+  }
+
+  resolveActiveChallengesAfterTurn(endedPlayerId, nextPlayerId, now = Date.now()) {
+    const completed = this.state.activeChallenges.filter((instance) =>
+      (instance.endTrigger === 'targetTurnEnd' && instance.targetPlayerId === endedPlayerId) ||
+      (instance.endTrigger === 'ownerNextTurn' && instance.ownerPlayerId === nextPlayerId)
+    );
+    completed.forEach((instance) => this.completeActiveChallenge(instance, instance.endTrigger, now));
+    return completed.length;
+  }
+
+  expireActiveChallenges(reason, now = Date.now()) {
+    const expired = [...this.state.activeChallenges];
+    this.state.activeChallenges = [];
+    expired.forEach((instance) => this.log('watchChallengeExpired', {
+      challengeId: instance.challengeId,
+      ownerPlayerId: instance.ownerPlayerId,
+      reason
+    }, now));
+    return expired.length;
+  }
+
+  scheduleFollowUp(challenge, targetPlayerId, now = Date.now()) {
+    if (!challenge?.followUpId || !targetPlayerId) return false;
+    const delay = randomInt(this.state.rngState, 3, 5);
+    this.state.rngState = delay.state;
+    const scheduled = {
+      id: challenge.followUpId,
+      targetPlayerId,
+      dueTurn: this.state.turnsElapsed + delay.value,
+      delayTurns: delay.value,
+      scheduledAt: now
+    };
+    this.state.chapter.scheduledChallenges.push(scheduled);
+    this.log('watchFollowUpScheduled', scheduled, now);
+    return true;
+  }
+
+  releaseDueFollowUps(force = false, now = Date.now()) {
+    const scheduled = this.state.chapter.scheduledChallenges ?? [];
+    const due = scheduled.filter((entry) => force || entry.dueTurn <= this.state.turnsElapsed);
+    if (!due.length) return 0;
+    this.state.chapter.scheduledChallenges = scheduled.filter((entry) => !due.includes(entry));
+    due.forEach((entry) => this.state.chapter.queuedChallenges.push({ id: entry.id, targetPlayerId: entry.targetPlayerId }));
+    this.log('watchFollowUpsReleased', { challengeIds: due.map((entry) => entry.id), forced: force }, now);
+    return due.length;
+  }
+
+  unresolvedFollowUpCount() {
+    const active = this.state.activeChallenges.filter((instance) => instance.endTrigger === 'followUp').length;
+    return active + (this.state.chapter.scheduledChallenges?.length ?? 0) + (this.state.chapter.queuedChallenges?.length ?? 0);
   }
 
   get activeGroup() {
@@ -1497,6 +2019,14 @@ class GameEngine {
 
   ingredientAllowedInCurrentCourse(ingredient) {
     if (!ingredient?.courseTags.includes(this.currentChapter.id)) return false;
+    const plannedEssential = this.requiredCourseIngredients().filter((entry) =>
+      ['discovered', 'locked', 'used'].includes(entry.status)
+    ).length;
+    if (ingredient.essential && plannedEssential >= this.courseRule().target) return false;
+    const plannedOptional = this.courseIngredients().filter((entry) =>
+      !entry.essential && ['discovered', 'locked', 'used'].includes(entry.status)
+    ).length;
+    if (!ingredient.essential && plannedOptional >= (this.courseRule().optionalLimit ?? 0)) return false;
     const limit = this.courseRule()?.categoryLimits?.[ingredient.category];
     if (limit == null) return true;
     const alreadyChosen = this.courseIngredients().filter((entry) =>
@@ -1539,7 +2069,7 @@ class GameEngine {
       const limit = rule.categoryLimits?.[category];
       return total + (limit == null ? count : Math.min(count, limit));
     }, 0);
-    if (capacity < rule.minimum) return false;
+    if (capacity < rule.target) return false;
     return Object.entries(rule.categoryMinimums ?? {}).every(([category, minimum]) =>
       (categories.get(category) ?? 0) >= minimum
     );
@@ -1547,10 +2077,57 @@ class GameEngine {
 
   preservesFutureCourseCapacity(ingredient) {
     if (!ingredient?.essential) return true;
+    const plannedEssential = this.requiredCourseIngredients().filter((entry) =>
+      ['discovered', 'locked', 'used'].includes(entry.status)
+    ).length;
+    // Ingredients that expire in a later course may still occupy one of the
+    // remaining slots in the current course. Count those slots as part of the
+    // cumulative capacity after hypothetically choosing this ingredient.
+    let cumulativeTargets = this.courseRule().target - plannedEssential - 1;
     for (let chapterIndex = this.state.chapterIndex + 1; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
       if (!this.futureCourseHasCapacity(chapterIndex, ingredient.id)) return false;
+      cumulativeTargets += this.courseRule(chapterIndex).target;
+      const essentialIngredientsExpiringByThen = this.state.ingredients.filter((entry) =>
+        entry.essential && entry.status === 'available' && entry.id !== ingredient.id &&
+        this.ingredientLastCourseIndex(entry) > this.state.chapterIndex &&
+        this.ingredientLastCourseIndex(entry) <= chapterIndex
+      ).length;
+      if (essentialIngredientsExpiringByThen > cumulativeTargets) return false;
     }
     return true;
+  }
+
+  canAddIngredientThisTurn() {
+    return (this.state.turn.ingredientsAddedThisTurn ?? 0) < MAX_INGREDIENTS_PER_TURN;
+  }
+
+  selectionKeepsCurrentCourseFeasible(ingredient) {
+    if (!ingredient?.essential) return true;
+    const rule = this.courseRule();
+    const planned = this.requiredCourseIngredients().filter((entry) =>
+      ['discovered', 'locked', 'used'].includes(entry.status)
+    );
+    const slotsAfter = rule.target - planned.length - 1;
+    if (slotsAfter < 0) return false;
+
+    const mandatory = this.expiringIngredientCandidates().filter((entry) => entry.id !== ingredient.id);
+    if (mandatory.length > slotsAfter) return false;
+    const counts = new Map();
+    [...planned, ingredient, ...mandatory].forEach((entry) =>
+      counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1)
+    );
+    let extraSlotsNeeded = 0;
+    for (const [category, minimum] of Object.entries(rule.categoryMinimums ?? {})) {
+      const deficit = Math.max(0, minimum - (counts.get(category) ?? 0));
+      const availableInCategory = this.state.ingredients.filter((entry) =>
+        entry.essential && entry.status === 'available' && entry.id !== ingredient.id &&
+        !mandatory.some((mandatoryEntry) => mandatoryEntry.id === entry.id) &&
+        entry.category === category && entry.courseTags.includes(this.currentChapter.id)
+      ).length;
+      if (availableInCategory < deficit) return false;
+      extraSlotsNeeded += deficit;
+    }
+    return mandatory.length + extraSlotsNeeded <= slotsAfter;
   }
 
   courseIngredientCandidates(category = null) {
@@ -1558,13 +2135,8 @@ class GameEngine {
     let candidates = queue
       .map((ingredientId) => this.state.ingredients.find((ingredient) => ingredient.id === ingredientId))
       .filter((ingredient) => ingredient?.status === 'available' && this.ingredientAllowedInCurrentCourse(ingredient) &&
+        this.selectionKeepsCurrentCourseFeasible(ingredient) &&
         this.preservesFutureCourseCapacity(ingredient) && (!category || ingredient.category === category));
-    const plannedEssential = this.requiredCourseIngredients().filter((ingredient) => ['discovered', 'locked'].includes(ingredient.status)).length;
-    if (plannedEssential >= this.courseRule().minimum) {
-      const expiringIds = new Set(this.expiringIngredientCandidates().map((ingredient) => ingredient.id));
-      const unmetCategories = new Set(this.unmetCourseCategoryMinimums());
-      candidates = candidates.filter((ingredient) => expiringIds.has(ingredient.id) || unmetCategories.has(ingredient.category));
-    }
     return candidates;
   }
 
@@ -1578,7 +2150,9 @@ class GameEngine {
     const basketEmpty = chosen.every((ingredient) => ingredient.status !== 'discovered');
     const noRequiredIngredientExpires = this.expiringIngredientCandidates().length === 0;
     const categoryMinimumsMet = this.unmetCourseCategoryMinimums(['locked', 'used']).length === 0;
-    return lockedEssential >= this.courseRule().minimum && basketEmpty && noRequiredIngredientExpires && categoryMinimumsMet;
+    // `>=` keeps already-running legacy sessions with a formerly larger basket
+    // playable. New choices are capped at the exact target above.
+    return lockedEssential >= this.courseRule().target && basketEmpty && noRequiredIngredientExpires && categoryMinimumsMet;
   }
 
   updateChapterStage(now = Date.now()) {
@@ -1597,7 +2171,7 @@ class GameEngine {
   }
 
   taskPrerequisitesMet(card) {
-    return (card?.prerequisites ?? []).every((requirement) => {
+    const requirementMet = (requirement) => {
       const prerequisite = this.state.tasks.find((instance) => {
         if (instance.chapterIndex !== this.state.chapterIndex) return false;
         const prerequisiteCard = this.getTaskCard(instance);
@@ -1607,25 +2181,83 @@ class GameEngine {
       return requirement.state === 'started'
         ? ['active', 'ready', 'done'].includes(prerequisite.status)
         : prerequisite.status === 'done';
-    });
+    };
+    return (card?.prerequisites ?? []).every(requirementMet) &&
+      (!(card?.alternativePrerequisites?.length) || card.alternativePrerequisites.some(requirementMet));
   }
 
-  assignableTaskCards(peopleMode = null) {
+  taskAppliesToCourse(card) {
+    return !card?.courseStyles?.length || card.courseStyles.includes(this.state.chapter.courseStyle);
+  }
+
+  openTasksForPlayer(playerId, excludingInstanceId = null) {
+    return this.state.tasks.filter((instance) =>
+      instance.instanceId !== excludingInstanceId &&
+      instance.assignedPlayerIds.includes(playerId) &&
+      ['queued', 'active', 'ready'].includes(instance.status)
+    );
+  }
+
+  hasOpenTasks() {
+    return this.state.tasks.some((instance) => ['queued', 'active', 'ready'].includes(instance.status));
+  }
+
+  isPlayerFreeForTask(playerId, excludingInstanceId = null) {
+    return this.openTasksForPlayer(playerId, excludingInstanceId).length === 0;
+  }
+
+  freePlayersForTask(group = this.activeGroup) {
+    return group.playerIds
+      .map((playerId) => this.state.players.find((player) => player.id === playerId))
+      .filter((player) => player && this.isPlayerFreeForTask(player.id));
+  }
+
+  requiredPeopleForTask(card, peopleMode = null) {
+    if (!card) return Infinity;
+    return peopleMode === 'team'
+      ? Math.min(card.people[1], card.people[0] + 1)
+      : card.people[0];
+  }
+
+  shouldOfferTaskAssigneeChoice(card, group = this.activeGroup, peopleMode = null) {
+    const requiredPeople = this.requiredPeopleForTask(card, peopleMode);
+    const chapterTaskCount = this.state.tasks.filter((instance) => instance.chapterIndex === this.state.chapterIndex).length;
+    return requiredPeople > 1 && chapterTaskCount > 0 && chapterTaskCount % TASK_ASSIGNEE_CHOICE_INTERVAL === 1 &&
+      this.freePlayersForTask(group).length > requiredPeople;
+  }
+
+  taskHandoffAllowed(card, group = this.activeGroup) {
+    if (card?.chapterId !== 'soup' || card.questId !== 'cauldron' || card.timingMode !== 'background') return true;
+    const previous = this.state.tasks
+      .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
+      .map((instance) => ({ instance, card: this.getTaskCard(instance) }))
+      .filter((entry) => entry.card?.questId === card.questId && entry.card.questStep < card.questStep)
+      .sort((a, b) => b.card.questStep - a.card.questStep)[0];
+    if (!previous || !group.playerIds.includes(this.activePlayer.id)) return true;
+    return !previous.instance.assignedPlayerIds.includes(this.activePlayer.id);
+  }
+
+  assignableTaskCards(peopleMode = null, group = this.activeGroup) {
     const queue = this.state.taskQueues[this.state.chapterIndex] ?? [];
+    const freeCount = this.freePlayersForTask(group).length;
     const usedBlueprints = new Set(this.state.tasks
       .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
       .map((instance) => this.getTaskCard(instance)?.blueprintIndex)
       .filter(Number.isInteger));
     return queue
       .map((taskId) => taskById(taskId))
-      .filter((card) => card?.playable && this.taskPrerequisitesMet(card))
+      .filter((card) => card?.playable && this.taskAppliesToCourse(card) && this.taskPrerequisitesMet(card))
+      .filter((card) => this.taskHandoffAllowed(card, group))
       .filter((card) => !usedBlueprints.has(card.blueprintIndex))
       .filter((card) => peopleMode !== 'team' || card.people[1] > card.people[0])
-      .filter((card) => peopleMode !== 'single' || card.people[0] === 1);
+      .filter((card) => peopleMode !== 'single' || card.people[0] === 1)
+      .filter((card) => this.requiredPeopleForTask(card, peopleMode) <= freeCount);
   }
 
   hasUnassignedCourseTasks() {
-    return (this.state.taskQueues[this.state.chapterIndex] ?? []).length > 0;
+    return (this.state.taskQueues[this.state.chapterIndex] ?? [])
+      .map((taskId) => taskById(taskId))
+      .some((card) => card?.playable && this.taskAppliesToCourse(card));
   }
 
   currentEventStage() {
@@ -1641,8 +2273,10 @@ class GameEngine {
   actionAvailable(actionCode) {
     switch (actionCode) {
       case 'discoverIngredient':
-      case 'treasureAndIngredient': return this.currentEventStage() === 'ingredients' && this.courseIngredientCandidates().length > 0;
+      case 'treasureAndIngredient': return this.currentEventStage() === 'ingredients' &&
+        this.canAddIngredientThisTurn() && this.courseIngredientCandidates().length > 0;
       case 'lockIngredient': return this.currentEventStage() === 'ingredients' && this.unlockedCourseIngredients().length > 0;
+      case 'returnIngredient': return this.currentEventStage() === 'ingredients' && this.unlockedCourseIngredients().length > 0;
       case 'swapIngredient': {
         const ingredient = this.state.ingredients.find((entry) => entry.id === this.state.lastIngredientId && entry.status === 'discovered')
           ?? this.unlockedCourseIngredients().at(-1);
@@ -1655,8 +2289,8 @@ class GameEngine {
       case 'watchChallenge':
       case 'watchChallengeAlt':
       case 'treasureAndWatch':
-      case 'storyMoment':
-      case 'fiveMinuteBreak': return this.currentEventStage() === 'cooking';
+      case 'storyMoment': return ['ingredients', 'tasks', 'cooking'].includes(this.currentEventStage());
+      case 'fiveMinuteBreak': return ['ingredients', 'cooking'].includes(this.currentEventStage()) && !this.hasOpenTasks();
       case 'splitCrew': return this.currentEventStage() === 'cooking' && !this.hasUnassignedCourseTasks() && this.state.groups.length === 1;
       case 'treasure':
       case 'coinLoss':
@@ -1668,9 +2302,9 @@ class GameEngine {
 
   fallbackActions(stage = this.currentEventStage()) {
     const candidates = stage === 'ingredients'
-      ? ['discoverIngredient', 'lockIngredient', 'swapIngredient', 'treasureAndIngredient']
+      ? ['discoverIngredient', 'lockIngredient', 'returnIngredient', 'swapIngredient', 'treasureAndIngredient']
       : stage === 'tasks'
-        ? ['drawTask', 'teamTask', 'singleTask', 'treasureAndTask']
+        ? ['drawTask', 'teamTask', 'singleTask', 'watchChallenge', 'storyMoment', 'coinLoss']
         : ['watchChallenge', 'watchChallengeAlt', 'treasure', 'treasureAndWatch'];
     return candidates.filter((action) => this.actionAvailable(action));
   }
@@ -1681,22 +2315,45 @@ class GameEngine {
       const options = [...new Set((event.options ?? []).filter((action) => this.actionAvailable(action)))];
       return { ...event, options: options.length ? options : fallbacks.slice(0, 2) };
     }
-    const outcomes = (event.outcomes ?? []).map((action, index) =>
-      this.actionAvailable(action) ? action : fallbacks[index % Math.max(1, fallbacks.length)]
-    ).filter(Boolean);
-    while (outcomes.length < 3 && fallbacks.length) outcomes.push(fallbacks[outcomes.length % fallbacks.length]);
+    const pool = [...new Set([...(event.outcomes ?? []), ...fallbacks, 'storyMoment', 'coinLoss', 'treasure'])]
+      .filter((action) => this.actionAvailable(action));
+    const outcomes = [];
+    (event.outcomes ?? []).forEach((action) => {
+      const selected = this.actionAvailable(action) && !outcomes.includes(action)
+        ? action
+        : pool.find((candidate) => !outcomes.includes(candidate));
+      if (selected) outcomes.push(selected);
+    });
+    while (outcomes.length < 3) {
+      const selected = pool.find((candidate) => !outcomes.includes(candidate));
+      if (!selected) break;
+      outcomes.push(selected);
+    }
     return { ...event, outcomes };
   }
 
   taskForAction(actionCode) {
     const mode = actionCode === 'teamTask' ? 'team' : actionCode === 'singleTask' ? 'single' : null;
-    return this.assignableTaskCards(mode)[0] ?? this.assignableTaskCards()[0] ?? null;
+    return this.assignableTaskCards(mode, this.activeGroup)[0] ?? null;
   }
 
   watchChallengeForAction(actionCode, event = this.currentEvent) {
+    const candidates = this.watchChallengeCandidates(actionCode);
+    if (!candidates.length) return null;
     const offset = actionCode === 'watchChallengeAlt' ? 1 : 0;
-    const base = (this.state.chapter.watchChallenges + (event?.locationIndex ?? 0) * 2) % WATCH_CHALLENGES.length;
-    return WATCH_CHALLENGES[(base + offset) % WATCH_CHALLENGES.length];
+    const base = (this.state.chapter.watchChallenges + (event?.locationIndex ?? 0) * 2 + offset) % candidates.length;
+    const challenge = candidates[base];
+    const targetPlayerId = this.state.players[(this.state.activePlayerIndex + 1) % this.state.players.length].id;
+    return this.personalizeWatchChallenge(challenge, targetPlayerId);
+  }
+
+  watchChallengeCandidates(actionCode = 'watchChallenge') {
+    const roundKey = String(this.state.chapter.round);
+    const used = new Set(this.state.chapter.challengeIdsByRound[roundKey] ?? []);
+    const active = new Set(this.state.activeChallenges.map((instance) => instance.challengeId));
+    const available = WATCH_CHALLENGES.filter((entry) => !entry.followUpOnly && entry.id !== 'five-minute-break' && !active.has(entry.id));
+    const pool = available.filter((entry) => !used.has(entry.id));
+    return pool.length ? pool : available;
   }
 
   log(type, data = {}, timestamp = Date.now()) {
@@ -1758,7 +2415,7 @@ class GameEngine {
 
   nextEventPreview() {
     const scout = this.activePlayer.roleId === 'scout' && this.isPassiveEnabled(this.activePlayer);
-    if ((!scout && this.state.bonuses.revealNextEvent <= 0) || this.state.turn.phase !== 'draw') return null;
+    if ((!scout && this.activeBonuses.revealNextEvent <= 0) || this.state.turn.phase !== 'draw') return null;
     const queue = this.eventQueue();
     const event = eventById(queue[0]);
     return event ? this.contextualizeEvent(event) : null;
@@ -1766,9 +2423,25 @@ class GameEngine {
 
   beginEvent(now = Date.now()) {
     if (this.state.status !== 'active' || this.state.turn.phase !== 'draw') return null;
+    if (this.state.chapterIndex === 1 && !this.state.chapter.courseStyle) {
+      this.state.turn.phase = 'courseDecision';
+      this.log('soupStyleChoiceStarted', {}, now);
+      return { courseDecision: 'soupStyle' };
+    }
     const group = this.activeGroup;
     this.evaluateChapter(now);
     if (this.state.turn.phase === 'chapterReady') return null;
+    this.releaseDueFollowUps(false, now);
+    const chapterWorkDone = !this.hasUnassignedCourseTasks() &&
+      this.state.tasks.filter((task) => task.chapterIndex === this.state.chapterIndex).every((task) => task.status === 'done') &&
+      this.state.groups.every((candidate) => candidate.finished);
+    if (chapterWorkDone && !this.state.chapter.queuedChallenges.length && this.state.chapter.scheduledChallenges.length) {
+      this.releaseDueFollowUps(true, now);
+    }
+    if (this.state.chapter.queuedChallenges.length) {
+      this.startWatchChallenge('watchChallenge', now, { mandatoryFollowUp: true });
+      return this.currentWatchChallenge;
+    }
     const stage = this.currentEventStage();
     const stageQueues = this.state.eventQueues[this.state.chapterIndex][stage];
     const preferredQueue = this.eventQueue(stage, group);
@@ -1811,10 +2484,10 @@ class GameEngine {
     this.state.eventsDrawn.push(eventId);
     this.log('eventDrawn', { eventId, stage, playerId: this.activePlayer.id, groupId: group.id }, now);
 
-    if (this.state.bonuses.revealNextEvent > 0) this.state.bonuses.revealNextEvent -= 1;
+    if (this.activeBonuses.revealNextEvent > 0) this.activeBonuses.revealNextEvent -= 1;
 
-    if (this.state.bonuses.replaceNextEvent > 0) {
-      this.state.bonuses.replaceNextEvent -= 1;
+    if (this.activeBonuses.replaceNextEvent > 0) {
+      this.activeBonuses.replaceNextEvent -= 1;
       if (this.state.eventsDrawn.at(-1) === eventId) this.state.eventsDrawn.pop();
       queue.push(eventId);
       this.log('eventReplacedByIngredient', { eventId }, now);
@@ -1823,8 +2496,8 @@ class GameEngine {
       return this.beginEvent(now);
     }
 
-    if (this.state.bonuses.ignoreNextEvent > 0) {
-      this.state.bonuses.ignoreNextEvent -= 1;
+    if (this.activeBonuses.ignoreNextEvent > 0) {
+      this.activeBonuses.ignoreNextEvent -= 1;
       this.state.turn.outcomeCode = 'ignored';
       this.state.turn.phase = 'resolved';
       this.log('eventIgnoredByBonus', { eventId }, now);
@@ -1836,15 +2509,54 @@ class GameEngine {
   completeWatchChallenge(now = Date.now()) {
     if (this.state.turn.phase !== 'watch' || !this.currentWatchChallenge) return false;
     const challenge = this.currentWatchChallenge;
+    if (challenge.flow === 'ongoing' || (challenge.secret && this.state.turn.watchStartedAt == null)) return false;
     this.state.chapter.watchChallenges += 1;
-    if (challenge.coins) this.addCoins(challenge.coins, 'challenge', now);
-    if (challenge.followUpId) {
-      this.state.chapter.queuedChallenges.push({ id: challenge.followUpId, targetPlayerId: this.activePlayer.id });
+    if (challenge.followUpOnly) {
+      const curse = this.state.activeChallenges.find((instance) => {
+        const source = WATCH_CHALLENGES.find((entry) => entry.id === instance.challengeId);
+        return source?.followUpId === challenge.id && instance.ownerPlayerId === this.state.turn.watchTargetPlayerId;
+      });
+      if (curse) this.completeActiveChallenge(curse, 'followUp', now);
     }
+    if (challenge.coins) this.addCoins(challenge.coins, 'challenge', now);
+    if (challenge.followUpId) this.scheduleFollowUp(challenge, this.activePlayer.id, now);
     this.state.turn.outcomeCode = 'watchComplete';
     this.state.turn.phase = 'resolved';
     this.log('watchChallengeCompleted', { challengeId: challenge.id, coins: challenge.coins }, now);
     if (this.currentEvent) this.markEventResolved(this.currentEvent, now);
+    return true;
+  }
+
+  activateOngoingWatchChallenge(now = Date.now()) {
+    if (this.state.turn.phase !== 'watch' || !this.currentWatchChallenge || this.currentWatchChallenge.flow !== 'ongoing') return false;
+    const challenge = this.currentWatchChallenge;
+    this.state.turn.watchStartedAt = now;
+    const ownerPlayerId = this.activePlayer.id;
+    const instance = {
+      instanceId: `watch-${this.state.chapterIndex}-${this.state.chapter.watchChallenges + 1}-${challenge.id}`,
+      challengeId: challenge.id,
+      chapterIndex: this.state.chapterIndex,
+      ownerPlayerId,
+      targetPlayerId: this.state.turn.watchTargetPlayerId,
+      endTrigger: challenge.endTrigger,
+      startedAt: now
+    };
+    this.state.chapter.watchChallenges += 1;
+    this.state.activeChallenges.push(instance);
+    if (challenge.followUpId) this.scheduleFollowUp(challenge, ownerPlayerId, now);
+    this.state.turn.outcomeCode = 'watchActive';
+    this.state.turn.phase = 'resolved';
+    this.log('watchChallengeActivated', { challengeId: challenge.id, instanceId: instance.instanceId, ownerPlayerId, targetPlayerId: instance.targetPlayerId }, now);
+    if (this.currentEvent) this.markEventResolved(this.currentEvent, now);
+    return true;
+  }
+
+  startWatchChallengeAction(now = Date.now()) {
+    const challenge = this.currentWatchChallenge;
+    if (this.state.turn.phase !== 'watch' || !challenge?.secret || challenge.flow !== 'immediate' || this.state.turn.watchStartedAt != null) return false;
+    this.state.turn.watchStartedAt = now;
+    this.state.turn.watchEndsAt = now + challenge.minutes * 60_000;
+    this.log('watchChallengeActionStarted', { challengeId: challenge.id, playerId: this.activePlayer.id }, now);
     return true;
   }
 
@@ -1895,8 +2607,8 @@ class GameEngine {
   }
 
   rerollDieWithIngredient(now = Date.now()) {
-    if (this.state.turn.phase !== 'rolled' || this.state.bonuses.rerollNext <= 0) return null;
-    this.state.bonuses.rerollNext -= 1;
+    if (this.state.turn.phase !== 'rolled' || this.activeBonuses.rerollNext <= 0) return null;
+    this.activeBonuses.rerollNext -= 1;
     const roll = randomInt(this.state.rngState, 1, 6);
     this.state.rngState = roll.state;
     this.state.turn.dieResult = roll.value;
@@ -1905,8 +2617,8 @@ class GameEngine {
   }
 
   adjustDieWithIngredient(amount, now = Date.now()) {
-    if (this.state.turn.phase !== 'rolled' || this.state.bonuses.adjustNext <= 0 || ![-1, 1].includes(Number(amount))) return false;
-    this.state.bonuses.adjustNext -= 1;
+    if (this.state.turn.phase !== 'rolled' || this.activeBonuses.adjustNext <= 0 || ![-1, 1].includes(Number(amount))) return false;
+    this.activeBonuses.adjustNext -= 1;
     this.state.turn.dieResult = Math.max(1, Math.min(6, this.state.turn.dieResult + Number(amount)));
     this.log('dieAdjustedByIngredient', { amount: Number(amount), value: this.state.turn.dieResult }, now);
     return true;
@@ -1916,9 +2628,9 @@ class GameEngine {
     const event = this.currentEvent;
     if (!event || event.type !== 'dice' || this.state.turn.phase !== 'rolled') return false;
     let value = this.state.turn.dieResult;
-    if (this.state.bonuses.doubleNextDie > 0) {
-      value = Math.min(6, value * (2 ** this.state.bonuses.doubleNextDie));
-      this.state.bonuses.doubleNextDie = 0;
+    if (this.activeBonuses.doubleNextDie > 0) {
+      value = Math.min(6, value * (2 ** this.activeBonuses.doubleNextDie));
+      this.activeBonuses.doubleNextDie = 0;
       this.state.turn.dieResult = value;
     }
     const outcomeIndex = value <= 2 ? 0 : value <= 4 ? 1 : 2;
@@ -1949,28 +2661,27 @@ class GameEngine {
   }
 
   applyAction(actionCode, now = Date.now(), context = 'event') {
-    let taskInstance = null;
     switch (actionCode) {
-      case 'drawTask': taskInstance = this.assignTask({ group: this.activeGroup, now }); break;
-      case 'singleTask': taskInstance = this.assignTask({ group: this.activeGroup, peopleMode: 'single', now }); break;
-      case 'teamTask': taskInstance = this.assignTask({ group: this.activeGroup, peopleMode: 'team', now }); break;
+      case 'drawTask': return this.prepareTaskAssignment({ group: this.activeGroup, now });
+      case 'singleTask': return this.prepareTaskAssignment({ group: this.activeGroup, peopleMode: 'single', now });
+      case 'teamTask': return this.prepareTaskAssignment({ group: this.activeGroup, peopleMode: 'team', now });
       case 'discoverIngredient': return this.prepareIngredientChoice(null, context, {}, now);
       case 'treasureAndIngredient':
         this.addCoins(COIN_VALUES.event, 'event', now);
         return this.prepareIngredientChoice(null, context, {}, now);
       case 'lockIngredient': this.lockLastIngredient(now); break;
+      case 'returnIngredient': this.returnLastIngredient(now); break;
       case 'treasure': this.addCoins(COIN_VALUES.event, 'event', now); break;
-      case 'coinLoss': this.addCoins(-3, 'event', now); break;
+      case 'coinLoss': this.addCoins(-15, 'event', now); break;
       case 'storyMoment': break;
-      case 'fiveMinuteBreak': this.startWatchChallenge('fiveMinuteBreak', now); return true;
+      case 'fiveMinuteBreak': return this.startWatchChallenge('fiveMinuteBreak', now);
       case 'treasureAndChain':
         this.addCoins(COIN_VALUES.event, 'event', now);
         if (this.state.turn.chainDepth < 1) this.state.turn.chainPending = true;
         break;
       case 'treasureAndTask':
         this.addCoins(COIN_VALUES.event, 'event', now);
-        taskInstance = this.assignTask({ group: this.activeGroup, now });
-        break;
+        return this.prepareTaskAssignment({ group: this.activeGroup, now });
       case 'watchChallenge':
       case 'watchChallengeAlt': this.startWatchChallenge(actionCode, now); return true;
       case 'treasureAndWatch':
@@ -1985,14 +2696,11 @@ class GameEngine {
       case 'swapIngredient': this.swapLastIngredient(now); break;
       default: throw new Error(`Unknown action: ${actionCode}`);
     }
-    if (taskInstance) {
-      this.briefTask(taskInstance, true, now);
-      return true;
-    }
     return false;
   }
 
   startWatchChallenge(actionCode = 'watchChallenge', now = Date.now(), logData = {}) {
+    if (actionCode === 'fiveMinuteBreak' && this.hasOpenTasks()) return false;
     const event = this.currentEvent;
     let challenge;
     let targetPlayerId = this.state.players[(this.state.activePlayerIndex + 1) % this.state.players.length].id;
@@ -2005,18 +2713,18 @@ class GameEngine {
     } else {
       const roundKey = String(this.state.chapter.round);
       const used = new Set(this.state.chapter.challengeIdsByRound[roundKey] ?? []);
-      const pool = WATCH_CHALLENGES.filter((entry) => entry.id !== 'stop-chicken' && entry.id !== 'five-minute-break' && !used.has(entry.id));
-      const candidates = pool.length ? pool : WATCH_CHALLENGES.filter((entry) => entry.id !== 'stop-chicken' && entry.id !== 'five-minute-break');
+      const candidates = this.watchChallengeCandidates(actionCode);
       const offset = actionCode === 'watchChallengeAlt' ? 1 : 0;
       const index = (this.state.chapter.watchChallenges + (event?.locationIndex ?? 0) * 2 + offset) % candidates.length;
       challenge = candidates[index];
       this.state.chapter.challengeIdsByRound[roundKey] = [...used, challenge.id];
     }
+    if (!challenge) return false;
     this.state.turn.watchChallengeId = challenge.id;
     this.state.turn.watchChallengeIndex = WATCH_CHALLENGES.findIndex((entry) => entry.id === challenge.id);
     this.state.turn.watchTargetPlayerId = targetPlayerId;
-    this.state.turn.watchStartedAt = now;
-    this.state.turn.watchEndsAt = now + challenge.minutes * 60_000;
+    this.state.turn.watchStartedAt = challenge.secret && !challenge.mandatory ? null : now;
+    this.state.turn.watchEndsAt = challenge.secret && !challenge.mandatory ? null : now + challenge.minutes * 60_000;
     this.state.turn.phase = 'watch';
     this.log('watchChallengeStarted', { challengeId: challenge.id, playerId: this.activePlayer.id, eventId: event?.id ?? null, ...logData }, now);
     return true;
@@ -2024,7 +2732,7 @@ class GameEngine {
 
   addCoins(amount = 1, source = 'event', now = Date.now()) {
     const before = this.state.coins;
-    this.state.coins = Math.min(this.state.coinGoal, before + amount);
+    this.state.coins = Math.max(0, Math.min(this.state.coinGoal, before + amount));
     const applied = this.state.coins - before;
     this.state.chapter.coinsEarned += applied;
     this.log('coinsChanged', { amount: applied, requestedAmount: amount, source, total: this.state.coins }, now);
@@ -2038,6 +2746,7 @@ class GameEngine {
   prepareIngredientChoice(category = null, context = 'event', options = {}, now = Date.now()) {
     // Abilities draw from the same composition-aware pool as events. This keeps
     // a role from bypassing course limits or consuming ingredients needed later.
+    if (!this.canAddIngredientThisTurn()) return false;
     const available = this.courseIngredientCandidates(category);
     const randomized = shuffle(available, this.state.rngState);
     this.state.rngState = randomized.state;
@@ -2059,8 +2768,8 @@ class GameEngine {
     let count = options.all ? candidates.length : Math.max(2, Number(options.count) || 2);
     const player = this.activePlayer;
     if (player.roleId === 'merchant' && this.isPassiveEnabled(player)) count = Math.max(count, 2);
-    if (this.state.bonuses.replaceNextIngredient > 0) {
-      this.state.bonuses.replaceNextIngredient -= 1;
+    if (this.activeBonuses.replaceNextIngredient > 0) {
+      this.activeBonuses.replaceNextIngredient -= 1;
       count += 1;
       this.log('ingredientReplacementOffered', { category }, now);
     }
@@ -2073,6 +2782,10 @@ class GameEngine {
 
   queueIngredientDraw(category = null, options = {}) {
     if (!this.state.turn.ingredientFlow) return false;
+    const scheduled = this.state.turn.ingredientFlow.drawQueue.length;
+    if ((this.state.turn.ingredientsAddedThisTurn ?? 0) + scheduled >= MAX_INGREDIENTS_PER_TURN) {
+      return false;
+    }
     this.state.turn.ingredientFlow.drawQueue.push({ category, all: Boolean(options.all), count: options.count ?? 1 });
     return true;
   }
@@ -2100,6 +2813,7 @@ class GameEngine {
     ingredient.discoveredBy = this.activePlayer.id;
     this.state.previousIngredientId = previousIngredientId;
     this.state.lastIngredientId = ingredient.id;
+    this.state.turn.ingredientsAddedThisTurn = (this.state.turn.ingredientsAddedThisTurn ?? 0) + 1;
     this.state.turn.pendingIngredientIds = [];
     this.log('ingredientDiscovered', { ingredientId, chapterIndex: this.state.chapterIndex }, now);
 
@@ -2107,13 +2821,13 @@ class GameEngine {
       const key = `cook-ignore-${this.state.chapterIndex}`;
       this.activePlayer.passiveUsedByChapter[key] = true;
       this.log('ingredientEffectIgnoredByCook', { ingredientId }, now);
-    } else if (ingredient.effect && this.state.bonuses.ignoreNextIngredientEffect > 0) {
-      this.state.bonuses.ignoreNextIngredientEffect -= 1;
+    } else if (ingredient.effect && this.activeBonuses.ignoreNextIngredientEffect > 0) {
+      this.activeBonuses.ignoreNextIngredientEffect -= 1;
       this.log('ingredientEffectIgnoredByBonus', { ingredientId }, now);
     } else if (ingredient.effect) {
       let times = 1;
-      if (this.state.bonuses.repeatNextIngredientEffect > 0 && ingredient.effect !== 'repeatNextIngredient') {
-        this.state.bonuses.repeatNextIngredientEffect -= 1;
+      if (this.activeBonuses.repeatNextIngredientEffect > 0 && ingredient.effect !== 'repeatNextIngredient') {
+        this.activeBonuses.repeatNextIngredientEffect -= 1;
         times = 2;
       }
       this.applyIngredientEffect(ingredient, now, { times, previousIngredientId });
@@ -2127,17 +2841,17 @@ class GameEngine {
     if (!ingredient?.effect) return false;
     this.log('ingredientEffectApplied', { ingredientId: ingredient.id, effect: ingredient.effect, times }, now);
     switch (ingredient.effect) {
-      case 'doubleDie': this.state.bonuses.doubleNextDie += times; break;
-      case 'rerollDie': this.state.bonuses.rerollNext += times; break;
-      case 'adjustDie': this.state.bonuses.adjustNext += times; break;
-      case 'ignoreEvent': this.state.bonuses.ignoreNextEvent += times; break;
-      case 'ignoreIngredient': this.state.bonuses.ignoreNextIngredientEffect += times; break;
-      case 'repeatNextIngredient': this.state.bonuses.repeatNextIngredientEffect += times; break;
-      case 'replaceIngredient': this.state.bonuses.replaceNextIngredient += times; break;
-      case 'revealEvent': this.state.bonuses.revealNextEvent += times; break;
+      case 'doubleDie': this.activeBonuses.doubleNextDie += times; break;
+      case 'rerollDie': this.activeBonuses.rerollNext += times; break;
+      case 'adjustDie': this.activeBonuses.adjustNext += times; break;
+      case 'ignoreEvent': this.activeBonuses.ignoreNextEvent += times; break;
+      case 'ignoreIngredient': this.activeBonuses.ignoreNextIngredientEffect += times; break;
+      case 'repeatNextIngredient': this.activeBonuses.repeatNextIngredientEffect += times; break;
+      case 'replaceIngredient': this.activeBonuses.replaceNextIngredient += times; break;
+      case 'revealEvent': this.activeBonuses.revealNextEvent += times; break;
       case 'chain': this.state.turn.chainPending = true; break;
       case 'extraTurn': this.state.turn.chainPending = true; break;
-      case 'nextPlayer': this.state.bonuses.revealNextEvent += times; break;
+      case 'nextPlayer': this.activeBonuses.revealNextEvent += times; break;
       case 'drawIngredient':
         for (let index = 0; index < times; index += 1) this.queueIngredientDraw();
         break;
@@ -2164,7 +2878,7 @@ class GameEngine {
         break;
       case 'replaceEvent':
         if (this.state.turn.ingredientFlow?.context === 'event' && this.currentEvent) this.state.turn.ingredientFlow.replaceCurrentEvent = true;
-        else this.state.bonuses.replaceNextEvent += times;
+        else this.activeBonuses.replaceNextEvent += times;
         break;
       case 'shuffleEvents': {
         const queue = this.eventQueue(this.currentEvent?.stage ?? this.currentEventStage());
@@ -2213,8 +2927,10 @@ class GameEngine {
       if (this.state.eventsDrawn.at(-1) === eventId) this.state.eventsDrawn.pop();
       queue.push(eventId);
       const chainDepth = this.state.turn.chainDepth;
+      const activeAbilityUsed = this.state.turn.activeAbilityUsed;
+      const ingredientsAddedThisTurn = this.state.turn.ingredientsAddedThisTurn;
       this.log('eventReplacedByIngredient', { eventId }, now);
-      this.state.turn = { ...freshTurn(), chainDepth };
+      this.state.turn = { ...freshTurn(), chainDepth, activeAbilityUsed, ingredientsAddedThisTurn };
       this.beginEvent(now);
       return true;
     }
@@ -2260,6 +2976,8 @@ class GameEngine {
     selected.discoveredAt = now;
     selected.discoveredBy = this.activePlayer.id;
     this.state.lastIngredientId = selected.id;
+    this.state.turn.resolvedPreviousIngredientId = previous.id;
+    this.state.turn.resolvedIngredientId = selected.id;
     this.log('ingredientSwapped', { from: previous.id, to: selected.id }, now);
     return true;
   }
@@ -2273,8 +2991,36 @@ class GameEngine {
     ingredient.lockedAt = now;
     ingredient.lockedBy = this.activePlayer.id;
     this.state.lastIngredientId = ingredient.id;
+    this.state.turn.resolvedIngredientId = ingredient.id;
     this.log('ingredientLocked', { ingredientId: ingredient.id, playerId: this.activePlayer.id }, now);
+    this.finalizeIngredientBasketIfReady(now);
+    this.state.turn.resolvedIngredientId = ingredient.id;
     this.updateChapterStage(now);
+    return true;
+  }
+
+  finalizeIngredientBasketIfReady(now = Date.now()) {
+    const lockedEssential = this.courseIngredients().filter((entry) =>
+      entry.essential && ['locked', 'used'].includes(entry.status)
+    ).length;
+    if (lockedEssential < this.courseRule().target || this.unmetCourseCategoryMinimums(['locked', 'used']).length) return false;
+    const returned = this.unlockedCourseIngredients().map((entry) => entry.id);
+    returned.forEach((ingredientId) => this.removeIngredientFromBasket(ingredientId, now));
+    if (returned.length) this.log('ingredientBasketAutoCleared', { ingredientIds: returned }, now);
+    return true;
+  }
+
+  chooseSoupStyle(style, now = Date.now()) {
+    if (this.state.chapterIndex !== 1 || this.state.turn.phase !== 'courseDecision' || !['clear', 'cream'].includes(style)) return false;
+    this.state.chapter.courseStyle = style;
+    const queue = this.state.taskQueues[this.state.chapterIndex];
+    const removed = queue.filter((taskId) => {
+      const card = taskById(taskId);
+      return card?.courseStyles?.length && !card.courseStyles.includes(style);
+    });
+    this.state.taskQueues[this.state.chapterIndex] = queue.filter((taskId) => !removed.includes(taskId));
+    this.state.turn = freshTurn();
+    this.log('soupStyleChosen', { style, removedTaskIds: removed }, now);
     return true;
   }
 
@@ -2288,10 +3034,20 @@ class GameEngine {
     ingredient.basketCourseIndex = null;
     delete ingredient.discoveredAt;
     delete ingredient.discoveredBy;
+    this.state.turn.resolvedIngredientId = ingredient.id;
     if (this.state.lastIngredientId === ingredient.id) this.state.lastIngredientId = null;
     this.log('ingredientReturned', { ingredientId }, now);
     this.updateChapterStage(now);
     return true;
+  }
+
+  returnLastIngredient(now = Date.now()) {
+    const ingredient = this.state.ingredients.find((entry) =>
+      entry.id === this.state.lastIngredientId && entry.status === 'discovered'
+    ) ?? [...this.unlockedCourseIngredients()].sort((a, b) =>
+      (b.discoveredAt ?? 0) - (a.discoveredAt ?? 0)
+    )[0];
+    return ingredient ? this.removeIngredientFromBasket(ingredient.id, now) : false;
   }
 
   lockIngredientFromBasket(ingredientId, now = Date.now()) {
@@ -2328,26 +3084,95 @@ class GameEngine {
     return candidates.map((ingredient) => ingredient.id);
   }
 
-  assignTask({ card = null, group = this.activeGroup, coreKey = null, peopleMode = null, now = Date.now() } = {}) {
+  prepareTaskAssignment({ group = this.activeGroup, coreKey = null, peopleMode = null, now = Date.now() } = {}) {
+    const card = this.assignableTaskCards(peopleMode, group)[0] ?? null;
+    if (!card) return false;
+    if (this.shouldOfferTaskAssigneeChoice(card, group, peopleMode)) {
+      this.state.turn.pendingTaskAssignment = {
+        taskId: card.id,
+        groupId: group.id,
+        coreKey,
+        peopleMode,
+        requiredPeople: this.requiredPeopleForTask(card, peopleMode),
+        selectedPlayerIds: [this.activePlayer.id]
+      };
+      this.state.turn.phase = 'taskAssigneeChoice';
+      this.log('taskAssigneeChoiceStarted', { taskId: card.id, groupId: group.id, requiredPeople: this.state.turn.pendingTaskAssignment.requiredPeople }, now);
+      return true;
+    }
+    const instance = this.assignTask({ card, group, coreKey, peopleMode, now });
+    return Boolean(instance && this.briefTask(instance, true, now));
+  }
+
+  toggleTaskAssignee(playerId) {
+    const pending = this.state.turn.pendingTaskAssignment;
+    if (this.state.turn.phase !== 'taskAssigneeChoice' || !pending) return false;
+    const group = this.state.groups.find((candidate) => candidate.id === pending.groupId);
+    if (!group || !this.freePlayersForTask(group).some((player) => player.id === playerId)) return false;
+    const selected = pending.selectedPlayerIds ?? [];
+    const index = selected.indexOf(playerId);
+    if (index >= 0) {
+      if (playerId === this.activePlayer.id) return false;
+      selected.splice(index, 1);
+      return true;
+    }
+    if (selected.length >= pending.requiredPeople) return false;
+    selected.push(playerId);
+    return true;
+  }
+
+  confirmTaskAssignees(now = Date.now()) {
+    const pending = this.state.turn.pendingTaskAssignment;
+    if (this.state.turn.phase !== 'taskAssigneeChoice' || !pending) return false;
+    const selectedPlayerIds = [...new Set(pending.selectedPlayerIds ?? [])];
+    if (selectedPlayerIds.length !== pending.requiredPeople) return false;
+    const group = this.state.groups.find((candidate) => candidate.id === pending.groupId);
+    const card = taskById(pending.taskId);
+    if (!group || !card) return false;
+    const instance = this.assignTask({
+      card,
+      group,
+      coreKey: pending.coreKey,
+      peopleMode: pending.peopleMode,
+      playerIds: selectedPlayerIds,
+      now
+    });
+    if (!instance) return false;
+    this.state.turn.pendingTaskAssignment = null;
+    this.log('taskAssigneesChosen', { instanceId: instance.instanceId, assignedPlayerIds: selectedPlayerIds }, now);
+    return this.briefTask(instance, true, now);
+  }
+
+  assignTask({ card = null, group = this.activeGroup, coreKey = null, peopleMode = null, playerIds = null, now = Date.now() } = {}) {
     let selected = card;
-    if (!selected) {
-      const queue = this.state.taskQueues[this.state.chapterIndex];
-      selected = this.assignableTaskCards(peopleMode)[0] ?? this.assignableTaskCards()[0] ?? null;
-      if (selected) queue.splice(queue.indexOf(selected.id), 1);
+    let selectedFromQueue = false;
+    if (selected) {
+      selected = this.assignableTaskCards(peopleMode, group).find((candidate) => candidate.id === selected.id) ?? null;
+      selectedFromQueue = Boolean(selected);
+    } else {
+      selected = this.assignableTaskCards(peopleMode, group)[0] ?? null;
+      selectedFromQueue = Boolean(selected);
     }
     if (!selected) return null;
 
-    const minimumPeople = peopleMode === 'team'
-      ? Math.min(selected.people[1], selected.people[0] + 1)
-      : selected.people[0];
-    const candidates = group.playerIds
-      .map((playerId) => this.state.players.find((player) => player.id === playerId))
-      .sort((a, b) => {
-        const activeA = this.state.tasks.filter((entry) => entry.assignedPlayerIds.includes(a.id) && ['queued', 'active', 'ready'].includes(entry.status)).length;
-        const activeB = this.state.tasks.filter((entry) => entry.assignedPlayerIds.includes(b.id) && ['queued', 'active', 'ready'].includes(entry.status)).length;
-        return activeA - activeB || a.taskMarkers - b.taskMarkers || a.id.localeCompare(b.id);
-      });
-    const assignedPlayerIds = candidates.slice(0, Math.min(minimumPeople, candidates.length)).map((player) => player.id);
+    const minimumPeople = this.requiredPeopleForTask(selected, peopleMode);
+    const candidates = this.freePlayersForTask(group)
+      .sort((a, b) => a.taskMarkers - b.taskMarkers || a.id.localeCompare(b.id));
+    if (candidates.length < minimumPeople) return null;
+    const activeMustParticipate = group.playerIds.includes(this.activePlayer.id) && candidates.some((candidate) => candidate.id === this.activePlayer.id);
+    const selectedPlayerIds = playerIds == null ? null : [...new Set(playerIds)];
+    if (selectedPlayerIds && (selectedPlayerIds.length !== minimumPeople ||
+      selectedPlayerIds.some((playerId) => !candidates.some((candidate) => candidate.id === playerId)) ||
+      (activeMustParticipate && !selectedPlayerIds.includes(this.activePlayer.id)))) return null;
+    if (selectedFromQueue) {
+      const queue = this.state.taskQueues[this.state.chapterIndex];
+      queue.splice(queue.indexOf(selected.id), 1);
+    }
+    const assignedPlayerIds = selectedPlayerIds ?? [
+      ...(activeMustParticipate ? [this.activePlayer.id] : []),
+      ...candidates.filter((player) => !activeMustParticipate || player.id !== this.activePlayer.id)
+        .slice(0, minimumPeople - (activeMustParticipate ? 1 : 0)).map((player) => player.id)
+    ];
     const instance = {
       instanceId: createId('task'),
       taskId: selected.id,
@@ -2362,7 +3187,9 @@ class GameEngine {
       endAt: null,
       readyAt: null,
       completedAt: null,
-      challengeMinutes: selected.timerMinutes || selected.estimatedMinutes,
+      timingMode: selected.timingMode ?? 'challenge',
+      challengeMinutes: selected.challengeMinutes ?? 0,
+      backgroundMinutes: selected.backgroundMinutes ?? 0,
       challengeEndsAt: null,
       coinDelta: null,
       challengeResult: null,
@@ -2397,7 +3224,11 @@ class GameEngine {
       this.state.turn.phase = 'resolved';
       if (event) this.markEventResolved(event, now);
     } else {
+      const previousIndex = this.state.activePlayerIndex;
+      const nextIndex = this.nextFreePlayerIndex(previousIndex);
       this.state.turn = freshTurn();
+      if (nextIndex == null) this.state.turn.phase = 'crewBusy';
+      else this.state.activePlayerIndex = nextIndex;
     }
     return true;
   }
@@ -2408,10 +3239,13 @@ class GameEngine {
     const card = taskById(instance.taskId);
     instance.status = 'active';
     instance.startedAt = now;
-    instance.challengeMinutes = card.timerMinutes || card.estimatedMinutes;
-    instance.challengeEndsAt = now + instance.challengeMinutes * 60_000;
+    instance.timingMode = card.timingMode ?? 'challenge';
+    instance.challengeMinutes = card.challengeMinutes ?? 0;
+    instance.backgroundMinutes = card.backgroundMinutes ?? 0;
+    const timerMinutes = instance.timingMode === 'background' ? instance.backgroundMinutes : instance.challengeMinutes;
+    instance.challengeEndsAt = timerMinutes > 0 ? now + timerMinutes * 60_000 : null;
     instance.endAt = instance.challengeEndsAt;
-    this.log('taskStarted', { instanceId, taskId: card.id, challengeMinutes: instance.challengeMinutes }, now);
+    this.log('taskStarted', { instanceId, taskId: card.id, timingMode: instance.timingMode, timerMinutes }, now);
     return true;
   }
 
@@ -2424,15 +3258,21 @@ class GameEngine {
     const card = taskById(instance.taskId);
     if (instance.status === 'queued') {
       instance.startedAt = instance.assignedAt;
-      instance.challengeMinutes = card.timerMinutes || card.estimatedMinutes;
-      instance.challengeEndsAt = instance.startedAt + instance.challengeMinutes * 60_000;
+      instance.timingMode = card.timingMode ?? 'challenge';
+      instance.challengeMinutes = card.challengeMinutes ?? 0;
+      instance.backgroundMinutes = card.backgroundMinutes ?? 0;
+      const timerMinutes = instance.timingMode === 'background' ? instance.backgroundMinutes : instance.challengeMinutes;
+      instance.challengeEndsAt = timerMinutes > 0 ? instance.startedAt + timerMinutes * 60_000 : null;
       instance.endAt = instance.challengeEndsAt;
     }
-    const targetMs = Math.max(60_000, (instance.challengeMinutes || card.estimatedMinutes || 1) * 60_000);
+    const targetMs = Math.max(60_000, (instance.challengeMinutes || 1) * 60_000);
     const elapsedMs = Math.max(0, now - (instance.startedAt ?? instance.assignedAt));
     let coinDelta;
     let challengeResult;
-    if (elapsedMs <= targetMs / 2) {
+    if (instance.timingMode === 'background' || !instance.challengeMinutes) {
+      coinDelta = 0;
+      challengeResult = 'background';
+    } else if (elapsedMs <= targetMs / 2) {
       coinDelta = COIN_VALUES.veryFastTask;
       challengeResult = 'veryFast';
     } else if (elapsedMs <= targetMs) {
@@ -2466,12 +3306,13 @@ class GameEngine {
       }
     }
     this.evaluateChapter(now);
+    this.resumeTurnIfCrewWasBusy(now, instance.assignedPlayerIds);
     return true;
   }
 
   undoTaskCompletion(instanceId, now = Date.now()) {
     const instance = this.state.tasks.find((taskInstance) => taskInstance.instanceId === instanceId);
-    if (!instance || instance.status !== 'done' || instance.chapterIndex !== this.state.chapterIndex || this.state.chapter.served) return false;
+    if (!this.canUndoTaskCompletion(instanceId)) return false;
     if (instance.coinDelta) this.addCoins(-instance.coinDelta, 'taskUndo', now);
     instance.assignedPlayerIds.forEach((playerId) => {
       const player = this.state.players.find((candidate) => candidate.id === playerId);
@@ -2484,6 +3325,33 @@ class GameEngine {
     instance.challengeResult = null;
     this.log('taskCompletionUndone', { instanceId, taskId: instance.taskId }, now);
     this.evaluateChapter(now);
+    return true;
+  }
+
+  canUndoTaskCompletion(instanceId) {
+    const instance = this.state.tasks.find((taskInstance) => taskInstance.instanceId === instanceId);
+    return Boolean(instance && instance.status === 'done' && instance.chapterIndex === this.state.chapterIndex && !this.state.chapter.served &&
+      instance.assignedPlayerIds.every((playerId) => this.isPlayerFreeForTask(playerId, instanceId)));
+  }
+
+  nextFreePlayerIndex(fromIndex = this.state.activePlayerIndex) {
+    for (let offset = 1; offset <= this.state.players.length; offset += 1) {
+      const index = (fromIndex + offset) % this.state.players.length;
+      if (this.isPlayerFreeForTask(this.state.players[index].id)) return index;
+    }
+    return null;
+  }
+
+  resumeTurnIfCrewWasBusy(now = Date.now(), preferredPlayerIds = []) {
+    if (this.state.turn.phase !== 'crewBusy') return false;
+    const preferred = preferredPlayerIds
+      .map((playerId) => this.state.players.findIndex((player) => player.id === playerId))
+      .find((index) => index >= 0 && this.isPlayerFreeForTask(this.state.players[index].id));
+    const nextIndex = preferred ?? this.nextFreePlayerIndex(this.state.activePlayerIndex);
+    if (nextIndex == null) return false;
+    this.state.activePlayerIndex = nextIndex;
+    this.state.turn = freshTurn();
+    this.log('crewTurnResumed', { playerId: this.activePlayer.id }, now);
     return true;
   }
 
@@ -2549,7 +3417,8 @@ class GameEngine {
       this.state.turn = {
         ...freshTurn(),
         chainDepth: this.state.turn.chainDepth + 1,
-        activeAbilityUsed: this.state.turn.activeAbilityUsed
+        activeAbilityUsed: this.state.turn.activeAbilityUsed,
+        ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
       };
       this.log('eventChainContinued', { playerId: this.activePlayer.id }, now);
       return 'chain';
@@ -2559,14 +3428,30 @@ class GameEngine {
     const group = this.activeGroup;
     group.locationProgress += 1;
     player.turns += 1;
+    this.state.turnsElapsed += 1;
     this.state.chapter.turnsByPlayer[player.id] += 1;
     this.maybeAdvanceGroup(group, now);
 
     const previousIndex = this.state.activePlayerIndex;
-    this.state.activePlayerIndex = (this.state.activePlayerIndex + 1) % this.state.players.length;
-    if (this.state.activePlayerIndex <= previousIndex) this.state.chapter.round += 1;
-    this.state.turn = freshTurn();
-    this.log('turnEnded', { playerId: player.id, nextPlayerId: this.activePlayer.id }, now);
+    const nextIndex = this.nextFreePlayerIndex(previousIndex);
+    const skippedPlayerIds = [];
+    if (nextIndex != null) {
+      for (let offset = 1; offset < this.state.players.length; offset += 1) {
+        const index = (previousIndex + offset) % this.state.players.length;
+        if (index === nextIndex) break;
+        if (!this.isPlayerFreeForTask(this.state.players[index].id)) skippedPlayerIds.push(this.state.players[index].id);
+      }
+      this.state.activePlayerIndex = nextIndex;
+      if (nextIndex <= previousIndex) this.state.chapter.round += 1;
+      this.state.turn = freshTurn();
+      this.resolveActiveChallengesAfterTurn(player.id, this.activePlayer.id, now);
+      skippedPlayerIds.forEach((playerId) => this.log('turnSkippedForTask', { playerId }, now));
+      this.log('turnEnded', { playerId: player.id, nextPlayerId: this.activePlayer.id, skippedPlayerIds }, now);
+    } else {
+      this.state.turn = { ...freshTurn(), phase: 'crewBusy' };
+      this.resolveActiveChallengesAfterTurn(player.id, null, now);
+      this.log('allPlayersBusy', { afterPlayerId: player.id }, now);
+    }
     this.evaluateChapter(now);
     return true;
   }
@@ -2576,13 +3461,14 @@ class GameEngine {
     const allWorkComplete = !this.hasUnassignedCourseTasks() && chapterTasks.length > 0 && chapterTasks.every((taskInstance) => taskInstance.status === 'done');
     const allGroupsFinished = this.state.groups.every((group) => group.finished);
     const ingredientsReady = this.ingredientsLockedForCourse() || this.state.chapterIndex === 0;
-    const ready = ingredientsReady && allWorkComplete && allGroupsFinished;
+    const followUpsResolved = this.unresolvedFollowUpCount() === 0;
+    const ready = ingredientsReady && allWorkComplete && allGroupsFinished && followUpsResolved;
     const wasReady = this.state.chapter.readyToServe;
     this.state.chapter.readyToServe = ready;
     if (ready && this.state.turn.phase === 'draw') this.state.turn.phase = 'chapterReady';
     if (ready && !wasReady) this.log('chapterReady', { chapterIndex: this.state.chapterIndex }, now);
     if (!ready && this.state.turn.phase === 'chapterReady') this.state.turn.phase = 'draw';
-    return { ingredientsReady, allWorkComplete, allGroupsFinished, ready };
+    return { ingredientsReady, allWorkComplete, allGroupsFinished, followUpsResolved, ready };
   }
 
   serveCourse(now = Date.now()) {
@@ -2607,12 +3493,14 @@ class GameEngine {
     this.state.menu[this.state.chapterIndex] = {
       chapterId: this.currentChapter.id,
       servedAt: now,
-      ingredientIds
+      ingredientIds,
+      courseStyle: this.state.chapter.courseStyle
     };
     this.state.chapter.served = true;
     this.log('courseServed', { chapterIndex: this.state.chapterIndex, ingredientIds }, now);
 
     if (this.state.chapterIndex === CHAPTERS.length - 1) {
+      this.expireActiveChallenges('voyageCompleted', now);
       this.state.status = 'completed';
       this.state.completedAt = now;
       this.state.turn.phase = 'complete';
@@ -2628,13 +3516,14 @@ class GameEngine {
     const treasurer = this.state.players.find((player) => player.roleId === 'treasurer');
     const key = `treasurer-secure-${this.state.chapterIndex}`;
     if (!treasurer || !this.passiveUnused(treasurer, key)) return false;
-    const ingredient = this.ingredientCandidates()[0];
+    const ingredient = this.courseIngredientCandidates()[0];
     if (!ingredient) return false;
     ingredient.status = 'discovered';
     ingredient.chapterIndex = this.state.chapterIndex;
     ingredient.basketCourseIndex = this.state.chapterIndex;
     ingredient.discoveredAt = now;
     ingredient.discoveredBy = treasurer.id;
+    this.state.turn.ingredientsAddedThisTurn = (this.state.turn.ingredientsAddedThisTurn ?? 0) + 1;
     treasurer.passiveUsedByChapter[key] = true;
     this.state.previousIngredientId = this.state.lastIngredientId;
     this.state.lastIngredientId = ingredient.id;
@@ -2657,8 +3546,9 @@ class GameEngine {
     this.state.turn = freshTurn();
     this.state.lastIngredientId = null;
     this.state.previousIngredientId = null;
-    this.state.bonuses = freshBonuses();
+    this.state.bonuses = freshBonuses(); // legacy field; live ingredient effects stay with each player
     this.log('chapterStarted', { chapterIndex: this.state.chapterIndex, stage: this.state.chapter.stage }, now);
+    if (this.state.chapterIndex === 3) this.secureTreasurerIngredient(now);
     return true;
   }
 
@@ -2696,9 +3586,9 @@ class GameEngine {
       case 'adjustDie': return phase === 'rolled' && (option == null || [-1, 1].includes(Number(option)));
       case 'chooseVegetable':
       case 'chooseMeat':
-      case 'chooseFruit': return stableIngredientPhase && this.courseIngredientCandidates(category).length > 0;
+      case 'chooseFruit': return stableIngredientPhase && this.canAddIngredientThisTurn() && this.courseIngredientCandidates(category).length > 0;
       case 'chooseIngredient':
-      case 'reserveIngredient': return stableIngredientPhase && this.courseIngredientCandidates().length > 0;
+      case 'reserveIngredient': return stableIngredientPhase && this.canAddIngredientThisTurn() && this.courseIngredientCandidates().length > 0;
       case 'swapIngredient': return stableIngredientPhase && this.swapIngredientAlternatives(lastIngredient).length > 0;
       case 'repeatIngredient': return stableIngredientPhase && Boolean(lastIngredient?.effect);
       default: return false;
@@ -2715,7 +3605,11 @@ class GameEngine {
       case 'replaceEvent':
         if (!this.currentEvent || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
         this.state.discardedEvents.push(this.currentEvent.id);
-        this.state.turn = freshTurn();
+        this.state.turn = {
+          ...freshTurn(),
+          chainDepth: this.state.turn.chainDepth,
+          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+        };
         this.beginEvent(now);
         break;
       case 'shuffleEvents': {
@@ -2725,7 +3619,11 @@ class GameEngine {
         const shuffled = shuffle(queue, this.state.rngState);
         this.state.rngState = shuffled.state;
         queue.splice(0, queue.length, ...shuffled.value);
-        this.state.turn = freshTurn();
+        this.state.turn = {
+          ...freshTurn(),
+          chainDepth: this.state.turn.chainDepth,
+          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+        };
         this.beginEvent(now);
         break;
       }
@@ -2828,7 +3726,7 @@ function validateSessionState(state) {
   if (state.version !== STATE_VERSION) errors.push('state version');
   if (!Array.isArray(state.players) || state.players.length < 6 || state.players.length > 10) errors.push('player count');
   if (!Number.isInteger(state.chapterIndex) || state.chapterIndex < 0 || state.chapterIndex >= CHAPTERS.length) errors.push('chapter index');
-  if (!Array.isArray(state.ingredients) || state.ingredients.length !== INGREDIENTS.length) errors.push('ingredient plan');
+  if (!supportedIngredientPlan(state.ingredients)) errors.push('ingredient plan');
   if (!Array.isArray(state.ingredientQueues) || state.ingredientQueues.length !== CHAPTERS.length) errors.push('ingredient queues');
   if (!Array.isArray(state.eventQueues) || state.eventQueues.length !== CHAPTERS.length) errors.push('event queues');
   if (!Array.isArray(state.taskQueues) || state.taskQueues.length !== CHAPTERS.length) errors.push('task queues');
@@ -3035,10 +3933,11 @@ function locationScene(chapterId, locationIndex) {
 }
 
 const CHALLENGE_RESULT_TEXT = Object.freeze({
-  veryFast: { de: 'Blitzschnell · +3', en: 'Lightning fast · +3' },
+  veryFast: { de: 'Blitzschnell · +2', en: 'Lightning fast · +2' },
   onTime: { de: 'Rechtzeitig · +1', en: 'On time · +1' },
-  late: { de: 'Etwas zu spät · −1', en: 'A little late · −1' },
-  veryLate: { de: 'Deutlich zu spät · −3', en: 'Very late · −3' }
+  late: { de: 'Etwas zu spät · −2', en: 'A little late · −2' },
+  veryLate: { de: 'Deutlich zu spät · −5', en: 'Very late · −5' },
+  background: { de: 'Hintergrundzeit · keine Münzwertung', en: 'Background time · no coin score' }
 });
 
 const DIE_PIP_CELLS = Object.freeze({
@@ -3092,22 +3991,40 @@ function eventActionText(engine, actionCode, language) {
     const help = language === 'de'
       ? `mit ${people} ${people === 1 ? 'Person' : 'Personen'}`
       : `with ${people} ${people === 1 ? 'person' : 'people'}`;
-    const treasure = actionCode === 'treasureAndTask' ? (language === 'de' ? '+5 Münzen + ' : '+5 coins + ') : '';
+    const treasure = actionCode === 'treasureAndTask' ? (language === 'de' ? '+2 Münzen + ' : '+2 coins + ') : '';
     return `${treasure}${t(card.title, language)} · ${help}`;
   }
   if (['watchChallenge', 'watchChallengeAlt', 'treasureAndWatch'].includes(actionCode)) {
     const challengeCode = actionCode === 'watchChallengeAlt' ? 'watchChallengeAlt' : 'watchChallenge';
-    const challenge = engine.watchChallengeForAction(challengeCode);
-    return `${actionCode === 'treasureAndWatch' ? (language === 'de' ? '+5 Münzen + ' : '+5 coins + ') : ''}${t(challenge, language)}`;
+    const challenge = engine.state.turn.watchChallengeId ? engine.currentWatchChallenge : engine.watchChallengeForAction(challengeCode);
+    const treasure = actionCode === 'treasureAndWatch' ? (language === 'de' ? '+2 Münzen + ' : '+2 coins + ') : '';
+    if (challenge.secret) {
+      return `${treasure}${language === 'de'
+        ? `Geheime Challenge nur für ${escapeHtml(engine.activePlayer.name)} ziehen · nicht vorlesen`
+        : `Draw a secret challenge for ${escapeHtml(engine.activePlayer.name)} only · do not read aloud`}`;
+    }
+    return `${treasure}${t(challenge, language)}`;
   }
   if (actionCode === 'lockIngredient') {
-    const ingredient = engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+    const ingredient = engine.state.turn.phase === 'resolved'
+      ? engine.getIngredient(engine.state.turn.resolvedIngredientId)
+      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} verbindlich festlegen` : `Lock in ${t(ingredient.name, language)}`)
       : t(EFFECT_TEXT[actionCode], language);
   }
+  if (actionCode === 'returnIngredient') {
+    const ingredient = engine.state.turn.phase === 'resolved'
+      ? engine.getIngredient(engine.state.turn.resolvedIngredientId)
+      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+    return ingredient
+      ? (language === 'de' ? `${t(ingredient.name, language)} aus dem Gangkorb zurücklegen` : `Return ${t(ingredient.name, language)} from the course basket`)
+      : t(EFFECT_TEXT[actionCode], language);
+  }
   if (actionCode === 'swapIngredient') {
-    const ingredient = engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+    const ingredient = engine.state.turn.phase === 'resolved'
+      ? engine.getIngredient(engine.state.turn.resolvedPreviousIngredientId)
+      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} gegen eine Alternative tauschen` : `Swap ${t(ingredient.name, language)} for an alternative`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -3119,12 +4036,12 @@ function renderCourseBoard(engine, language) {
   const chapterIndex = engine.state.chapterIndex;
   const group = engine.activeGroup;
   const locations = engine.currentChapter.locations;
-  const nodes = CHAPTERS.map((chapter, index) => {
+  const islands = CHAPTERS.map((chapter, index) => {
     const state = index < chapterIndex ? 'done' : index === chapterIndex ? 'active' : 'future';
-    return `
-      <div class="course-node" data-state="${state}" style="--course-color:${chapter.color}">
-        <span class="node-number">${index < chapterIndex ? '✓' : chapter.number}</span>
-        <span><small>${t(chapter.name, language)}</small><strong>${t(chapter.course, language)}</strong></span>
+    const routeState = index <= chapterIndex ? 'sailed' : 'future';
+    return `${index ? `<span class="sea-route" data-state="${routeState}" aria-hidden="true"></span>` : ''}
+      <div class="island-stop" data-state="${state}" style="--course-color:${chapter.color}">
+        <span class="island-icon">${chapter.icon}</span><small>${t(chapter.name, language)}</small>
       </div>`;
   }).join('');
   const locationDots = locations.map((location, index) => {
@@ -3137,13 +4054,16 @@ function renderCourseBoard(engine, language) {
 
   return `
     <section class="course-board" aria-label="${t(engine.currentChapter.name, language)}">
+      <div class="voyage-map" aria-label="${language === 'de' ? 'Karte der Inselroute' : 'Map of the island route'}">
+        <div class="voyage-map-title"><strong>${language === 'de' ? 'Inselkarte' : 'Island map'}</strong><span>${language === 'de' ? 'Die goldene Route zeigt die bisherige Reise.' : 'The golden route shows the voyage so far.'}</span></div>
+        <div class="island-route">${islands}</div>
+      </div>
       <div class="station-scene" data-atlas="${scene.atlas}" data-chapter="${escapeHtml(engine.currentChapter.id)}" data-location="${group.locationIndex}" role="img" aria-label="${escapeHtml(`${t(activeLocation, language)} · ${t(engine.currentChapter.name, language)}`)}" style="${sceneStyle}">
         <div class="station-caption">
           <small>${t(engine.currentChapter.name, language)}</small>
           <strong>${t(activeLocation, language)}</strong>
         </div>
       </div>
-      <details class="voyage-route"><summary>${language === 'de' ? 'Reiseroute anzeigen' : 'Show voyage route'}</summary><div class="board-overlay">${nodes}</div></details>
       <div class="location-track" aria-label="${tx('currentLocation', language)}">${locationDots}</div>
     </section>`;
 }
@@ -3152,7 +4072,8 @@ function renderCourseBasket(engine, language) {
   if (engine.state.chapter.stage !== 'ingredients') return '';
   const basket = engine.unlockedCourseIngredients();
   const locked = engine.courseIngredients().filter((ingredient) => ingredient.status === 'locked');
-  const minimum = engine.courseRule().minimum;
+  const target = engine.courseRule().target;
+  const optionalLimit = engine.courseRule().optionalLimit ?? 0;
   const essentialLocked = locked.filter((ingredient) => ingredient.essential).length;
   const categoryLabels = {
     vegetable: { de: 'Gemüse', en: 'vegetables' }, pantry: { de: 'Grundlage/Extras', en: 'base/extras' },
@@ -3164,10 +4085,12 @@ function renderCourseBasket(engine, language) {
     return statusTag(`${current}/${required} ${t(categoryLabels[category] ?? { de: category, en: category }, language)}`, current >= required ? 'green' : 'gold');
   }).join('');
   return `<section class="course-basket panel">
-    <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Vorläufige Auswahl' : 'Draft selection'}</p><h3>${language === 'de' ? 'Gangkorb' : 'Course basket'}</h3></div>${statusTag(`${essentialLocked}/${minimum}`, essentialLocked >= minimum ? 'green' : 'gold')}</div>
+    <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Vorläufige Auswahl' : 'Draft selection'}</p><h3>${language === 'de' ? 'Gangkorb' : 'Course basket'}</h3></div>${statusTag(`${essentialLocked}/${target} ${language === 'de' ? 'Pflichtzutaten' : 'required'}`, essentialLocked >= target ? 'green' : 'gold')}</div>
+    <p class="muted">${language === 'de' ? `Dieser Gang braucht genau ${target} Pflichtzutaten${optionalLimit ? ` und erlaubt höchstens ${optionalLimit} optionales Extra` : ''}. Vor dem Wechsel zu den Aufgaben muss der offene Korb leer sein.` : `This course needs exactly ${target} required ingredients${optionalLimit ? ` and allows at most ${optionalLimit} optional extra` : ''}. The open basket must be empty before tasks begin.`}</p>
     ${profile ? `<div class="stat-strip">${profile}</div>` : ''}
     ${basket.length ? `<div class="course-basket-list">${basket.map((ingredient) => `<article>
-      <strong>${t(ingredient.name, language)}</strong><small>${t(ingredient.suggestedQuantity, language)}</small>
+      <strong>${t(ingredient.name, language)}</strong>
+      ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : `<small>${language === 'de' ? 'Kein zusätzlicher Karteneffekt.' : 'No additional card effect.'}</small>`}
       <div class="button-row"><button class="secondary-button" type="button" data-action="lock-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Fest zuordnen' : 'Lock into course'}</button><button class="quiet-button" type="button" data-action="remove-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Zurücklegen' : 'Return'}</button></div>
     </article>`).join('')}</div>` : `<p class="muted">${language === 'de' ? 'Gefundene Zutaten landen zuerst hier. Ordnet sie fest zu oder legt sie zurück.' : 'Discovered ingredients land here first. Lock them in or return them.'}</p>`}
   </section>`;
@@ -3181,6 +4104,7 @@ function renderStatusPanel(engine, language) {
   const currentIngredients = engine.courseIngredients();
   const fixedIngredients = currentIngredients.filter((ingredient) => ['locked', 'used'].includes(ingredient.status)).length;
   const chapterTasks = engine.state.tasks.filter((task) => task.chapterIndex === engine.state.chapterIndex);
+  const freeCrew = engine.freePlayersForTask(group).length;
   const stage = stageCopy(engine, language);
   return `
     <section class="panel" style="box-shadow:none">
@@ -3197,6 +4121,7 @@ function renderStatusPanel(engine, language) {
         ${statusTag(`● ${engine.state.coins}/${engine.state.coinGoal} ${tx('treasure', language)}`, 'gold')}
         ${statusTag(`${tx('events', language)} ${engine.state.chapter.eventsResolved}`)}
         ${statusTag(stage.label, 'blue')}
+        ${statusTag(language === 'de' ? `${freeCrew}/${group.playerIds.length} frei für Aufgaben` : `${freeCrew}/${group.playerIds.length} free for tasks`, freeCrew ? 'green' : 'coral')}
         ${engine.state.groups.length > 1 ? statusTag(language === 'de' ? 'Crew geteilt' : 'Crew split', 'coral') : ''}
       </div>
       <div class="progress-track" aria-label="${language === 'de' ? 'Ortsfortschritt' : 'Location progress'}"><span style="--progress:${percent(group.locationProgress, goal)}%"></span></div>
@@ -3228,24 +4153,72 @@ function renderAbility(engine, language) {
   const canUseAlchemistPassive = role.id === 'alchemist' && ingredientStage && ['draw', 'event'].includes(phase) &&
     !engine.state.turn.ingredientFlow && hasSwapAlternative && engine.passiveUnused(player, alchemistKey);
   const canUse = engine.activeAbilityAvailable();
-
-  if (!canIgnore && !canUse && !canUseAlchemistPassive && !canUseCategoryPassive) {
-    return engine.state.turn.activeAbilityUsed ? `<div class="role-ability"><strong>${language === 'de' ? 'Spezialfähigkeit in diesem Zug bereits verwendet' : 'Special ability already used this turn'}</strong></div>` : '';
-  }
+  const bonusNames = {
+    doubleNextDie: { de: 'Wurf verdoppeln', en: 'double a roll' }, rerollNext: { de: 'neu würfeln', en: 'reroll' },
+    adjustNext: { de: 'Wurf ±1', en: 'roll ±1' }, ignoreNextEvent: { de: 'Event ignorieren', en: 'ignore event' },
+    ignoreNextIngredientEffect: { de: 'Zutateneffekt ignorieren', en: 'ignore ingredient effect' },
+    repeatNextIngredientEffect: { de: 'Zutateneffekt doppelt', en: 'double ingredient effect' },
+    replaceNextIngredient: { de: 'zusätzliche Zutatenwahl', en: 'extra ingredient choice' },
+    revealNextEvent: { de: 'Eventvorschau', en: 'event preview' }, replaceNextEvent: { de: 'Event ersetzen', en: 'replace event' }
+  };
+  const storedBonuses = Object.entries(engine.activeBonuses)
+    .filter(([key, value]) => value > 0 && bonusNames[key])
+    .map(([key, value]) => statusTag(`${t(bonusNames[key], language)}${value > 1 ? ` ×${value}` : ''}`, 'blue')).join('');
+  const passiveKey = {
+    cook: `cook-ignore-${engine.state.chapterIndex}`,
+    smith: `smith-reroll-${engine.state.chapterIndex}`,
+    herbalist: categoryPassiveKey,
+    hunter: categoryPassiveKey,
+    gatherer: categoryPassiveKey,
+    treasurer: 'treasurer-secure-3',
+    alchemist: alchemistKey,
+    tactician: key
+  }[role.id] ?? null;
+  const passiveEnabled = engine.isPassiveEnabled(player);
+  const passiveUsed = passiveKey ? !engine.passiveUnused(player, passiveKey) : false;
+  const passiveAutomatic = ['scout', 'merchant', 'treasurer'].includes(role.id);
+  const passiveState = !passiveEnabled
+    ? statusTag(language === 'de' ? 'im nächsten Zug deaktiviert' : 'disabled next turn', 'coral')
+    : passiveUsed
+      ? statusTag(language === 'de' ? 'für diesen Gang genutzt' : 'used this course')
+      : passiveAutomatic
+        ? statusTag(language === 'de' ? 'automatisch' : 'automatic', 'blue')
+        : statusTag(language === 'de' ? 'bereit, sobald die Bedingung passt' : 'ready when its condition matches', 'green');
+  const activeState = player.activeUsesRemaining <= 0
+    ? statusTag(language === 'de' ? 'keine Einsätze übrig' : 'no uses left', 'coral')
+    : engine.state.turn.activeAbilityUsed
+      ? statusTag(language === 'de' ? 'in diesem Zug bereits genutzt' : 'already used this turn')
+      : canUse
+        ? statusTag(language === 'de' ? 'jetzt einsetzbar' : 'available now', 'green')
+        : statusTag(language === 'de' ? 'Bedingung gerade nicht erfüllt' : 'condition not currently met');
   const activeButtons = role.activeCode === 'adjustDie' && canUse
-    ? `<button class="secondary-button" type="button" data-action="use-ability" data-option="-1">−1</button><button class="secondary-button" type="button" data-action="use-ability" data-option="1">+1</button>`
-    : canUse ? `<button class="secondary-button" type="button" data-action="use-ability">${tx('useAbility', language)} · ${player.activeUsesRemaining}</button>` : '';
+    ? `<button class="secondary-button" type="button" data-action="use-ability" data-option="-1">${language === 'de' ? 'Wurf um −1 ändern (aktiv)' : 'Adjust roll by −1 (active)'}</button><button class="secondary-button" type="button" data-action="use-ability" data-option="1">${language === 'de' ? 'Wurf um +1 ändern (aktiv)' : 'Adjust roll by +1 (active)'}</button>`
+    : canUse ? `<button class="secondary-button" type="button" data-action="use-ability">${t(role.activeButton, language)}</button>` : '';
+  const passiveButtons = `${canIgnore ? `<button class="secondary-button" type="button" data-action="ignore-event">${t(role.passiveButton, language)}</button>` : ''}
+    ${canUseAlchemistPassive ? `<button class="secondary-button" type="button" data-action="use-alchemist-passive">${t(role.passiveButton, language)}</button>` : ''}
+    ${canUseCategoryPassive ? `<button class="secondary-button" type="button" data-action="use-category-passive">${t(role.passiveButton, language)}</button>` : ''}`;
   return `
-    <div class="role-ability">
-      <strong>${role.icon} ${t(role.name, language)}</strong>
-      <p style="margin:.3rem 0 .7rem">${t(role.active, language)}</p>
-      <div class="button-row">
-        ${activeButtons}
-        ${canIgnore ? `<button class="secondary-button" type="button" data-action="ignore-event">${language === 'de' ? 'Ereignis ignorieren' : 'Ignore event'}</button>` : ''}
-        ${canUseAlchemistPassive ? `<button class="secondary-button" type="button" data-action="use-alchemist-passive">${language === 'de' ? 'Passiv tauschen' : 'Use passive swap'}</button>` : ''}
-        ${canUseCategoryPassive ? `<button class="secondary-button" type="button" data-action="use-category-passive">${language === 'de' ? 'Passive Kategorienkarte ziehen' : 'Use category draw passive'}</button>` : ''}
+    <section class="role-guide" aria-label="${language === 'de' ? 'Fähigkeiten der aktuellen Person' : 'Current player abilities'}">
+      <div class="role-guide-header">
+        <div><p class="eyebrow">${language === 'de' ? 'Deine Charakterfähigkeiten' : 'Your character abilities'}</p><h3>${role.icon} ${t(role.name, language)}</h3></div>
+        ${statusTag(player.name, 'gold')}
       </div>
-    </div>`;
+      <div class="role-guide-grid">
+        <div class="role-ability" data-ability-kind="passive">
+          <div class="ability-heading"><strong>${language === 'de' ? 'Passive Fähigkeit' : 'Passive ability'}</strong>${passiveState}</div>
+          <p><b>${t(role.passive, language)}</b></p>
+          <p class="ability-usage"><span>${language === 'de' ? 'So funktioniert sie:' : 'How it works:'}</span> ${t(role.passiveUsage, language)}</p>
+          ${passiveButtons.trim() ? `<div class="button-row">${passiveButtons}</div>` : ''}
+        </div>
+        <div class="role-ability" data-ability-kind="active">
+          <div class="ability-heading"><strong>${language === 'de' ? 'Aktive Fähigkeit' : 'Active ability'} · ${player.activeUsesRemaining} ${language === 'de' ? 'Einsätze übrig' : 'uses left'}</strong>${activeState}</div>
+          <p><b>${t(role.active, language)}</b></p>
+          <p class="ability-usage"><span>${language === 'de' ? 'Wann und wie:' : 'When and how:'}</span> ${t(role.activeUsage, language)}</p>
+          ${activeButtons ? `<div class="button-row">${activeButtons}</div>` : ''}
+        </div>
+      </div>
+      ${storedBonuses ? `<div class="stored-bonuses"><strong>${language === 'de' ? `Für ${escapeHtml(player.name)} gespeicherte Zutateneffekte` : `Ingredient effects stored for ${escapeHtml(player.name)}`}</strong><div class="stat-strip">${storedBonuses}</div></div>` : ''}
+    </section>`;
 }
 
 function renderDrawCard(engine, language) {
@@ -3262,12 +4235,12 @@ function renderDrawCard(engine, language) {
       ${preview ? `<div class="card-effect"><strong>${scoutPreview ? (language === 'de' ? 'Kundschafter-Vorschau' : 'Scout preview') : (language === 'de' ? 'Apfel-Vorschau' : 'Apple preview')}:</strong><br>${t(preview.title, language)}</div>` : ''}
       <div class="next-action"><strong>${language === 'de' ? `${engine.activePlayer.name}, du bist dran.` : `${engine.activePlayer.name}, it is your turn.`}</strong><span>${language === 'de' ? 'Ziehe genau eine Karte aus dem jetzt passenden Deck.' : 'Draw exactly one card from the deck that matches the current state.'}</span></div>
       <button class="primary-button" type="button" data-action="draw-event">${copy.button}</button>
-      ${renderAbility(engine, language)}
     </article>`;
 }
 
 function renderEventCard(engine, language) {
   const event = engine.currentEvent;
+  const pauseBlocked = event.archetype === 'respite' && !event.options?.includes('fiveMinuteBreak');
   const choices = event.options?.map((code) => `
     <button type="button" class="choice-button" data-action="resolve-choice" data-choice="${code}">${eventActionText(engine, code, language)}</button>`).join('') ?? '';
   const copy = STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
@@ -3280,11 +4253,11 @@ function renderEventCard(engine, language) {
       </div>
       <h2>${t(event.title, language)}</h2>
       <p class="card-story">${t(event.story, language)}</p>
+      ${pauseBlocked ? `<div class="card-effect"><strong>${language === 'de' ? 'Noch keine Pause:' : 'No break yet:'}</strong> ${language === 'de' ? 'Die Pausenoption erscheint erst, wenn alle offenen Küchenaufgaben erledigt markiert sind.' : 'The break option appears only after every open kitchen task has been marked complete.'}</div>` : ''}
       ${event.type === 'choice'
         ? `<div class="card-effect"><strong>${language === 'de' ? 'Die Crew darf beraten. Die endgültige Wahl trifft die aktive Person.' : 'The crew may discuss. The active player makes the final choice.'}</strong></div><div class="choice-list">${choices}</div>`
         : `<div class="card-effect">${language === 'de' ? 'Würfelt und folgt dem passenden Ergebnis: 1–2, 3–4 oder 5–6.' : 'Roll and follow the matching result: 1–2, 3–4, or 5–6.'}</div>
            <button class="primary-button" type="button" data-action="roll-die">${tx('roll', language)}</button>`}
-      ${renderAbility(engine, language)}
     </article>`;
 }
 
@@ -3295,14 +4268,14 @@ function renderRolledCard(engine, language) {
   const outcomeCode = event.outcomes[outcomeIndex];
   const smithKey = `smith-reroll-${engine.state.chapterIndex}`;
   const canReroll = engine.activePlayer.roleId === 'smith' && engine.passiveUnused(engine.activePlayer, smithKey);
-  const hasPumpkinReroll = engine.state.bonuses.rerollNext > 0;
-  const hasGingerAdjust = engine.state.bonuses.adjustNext > 0;
-  const hasBeefDouble = engine.state.bonuses.doubleNextDie > 0;
+  const hasPumpkinReroll = engine.activeBonuses.rerollNext > 0;
+  const hasGingerAdjust = engine.activeBonuses.adjustNext > 0;
+  const hasBeefDouble = engine.activeBonuses.doubleNextDie > 0;
   return `
     <article class="game-card">
       <p class="eyebrow">${escapeHtml(event.id)} · ${tx('outcome', language)}</p>
       <h2>${t(event.title, language)}</h2>
-      <div class="dice-stage" data-rolling="true">
+      <div class="dice-stage" data-rolling="false">
         <div class="die-scene" aria-label="${language === 'de' ? 'Würfel rollt' : 'Die rolling'}">
           <div class="die-cube" data-result="${value}">
             ${renderDieFace('die-front', 1)}${renderDieFace('die-back', 6)}
@@ -3319,7 +4292,6 @@ function renderRolledCard(engine, language) {
         ${hasGingerAdjust ? `<button class="secondary-button" type="button" data-action="adjust-ingredient-die" data-option="-1">${language === 'de' ? 'Ingwer −1' : 'Ginger −1'}</button><button class="secondary-button" type="button" data-action="adjust-ingredient-die" data-option="1">${language === 'de' ? 'Ingwer +1' : 'Ginger +1'}</button>` : ''}
       </div>
       ${hasBeefDouble ? `<div class="card-effect">${language === 'de' ? 'Rind-Bonus: Beim Ausführen zählt dieser Wurf doppelt (höchstens 6).' : 'Beef bonus: this roll counts double when resolved (maximum 6).'}</div>` : ''}
-      ${renderAbility(engine, language)}
     </article>`;
 }
 
@@ -3332,10 +4304,10 @@ function renderIngredientChoice(engine, language) {
     return `
       <div class="ingredient-choice-card">
         <button type="button" class="choice-button" data-action="choose-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">
-          <strong>${t(ingredient.name, language)}</strong><br>
-          <small>${t(ingredient.suggestedQuantity, language)} · ${ingredient.essential ? tx('required', language) : tx('optional', language)}</small>
+          <strong>${t(ingredient.name, language)}</strong>
         </button>
         <p>${t(effect, language)}</p>
+        ${ingredient.effect ? `<small>${language === 'de' ? `Der Effekt wird für ${escapeHtml(engine.activePlayer.name)} gespeichert und bleibt bis zur Verwendung erhalten.` : `The effect is stored for ${escapeHtml(engine.activePlayer.name)} and remains until used.`}</small>` : ''}
         ${canIgnore ? `<button type="button" class="quiet-button" data-action="choose-ingredient-ignore" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Nehmen, Effekt als Koch ignorieren' : 'Take it and ignore the effect as Cook'}</button>` : ''}
       </div>`;
   }).join('');
@@ -3347,6 +4319,21 @@ function renderIngredientChoice(engine, language) {
       <p class="card-story">${language === 'de' ? 'Besprecht die angebotenen Zutaten. Die aktive Person wählt eine Karte; sie bleibt veränderbar, bis ein späteres Ereignis sie festlegt.' : 'Discuss the offered ingredients. The active player chooses one card; it remains changeable until a later event locks it.'}</p>
       <div class="choice-list">${choices}</div>
     </article>`;
+}
+
+function renderSoupStyleChoice(engine, language) {
+  return `<article class="game-card">
+    ${renderCourseFlow(engine, language)}
+    <p class="eyebrow">${language === 'de' ? 'Suppen-Quest · Grundentscheidung' : 'Soup quest · core decision'}</p>
+    <h2>${language === 'de' ? 'Wird es eine klare Suppe oder eine Cremesuppe?' : 'Will it be a clear soup or a cream soup?'}</h2>
+    <p class="card-story">${language === 'de'
+      ? 'Brühe, Wasser, Öl, Sahne und andere Grundvorräte werden nicht erspielt. Diese Wahl bestimmt nur die Zubereitungs-Quest: sichtbare Einlagen oder späteres Pürieren.'
+      : 'Stock, water, oil, cream, and other pantry staples are not played ingredients. This choice only determines the preparation quest: visible pieces or later blending.'}</p>
+    <div class="choice-list">
+      <button class="choice-button" type="button" data-action="choose-soup-style" data-style="clear"><strong>${language === 'de' ? 'Klare Suppe' : 'Clear soup'}</strong><small>${language === 'de' ? 'Einlagen bleiben sichtbar; nicht pürieren.' : 'Pieces remain visible; do not blend.'}</small></button>
+      <button class="choice-button" type="button" data-action="choose-soup-style" data-style="cream"><strong>${language === 'de' ? 'Cremesuppe' : 'Cream soup'}</strong><small>${language === 'de' ? 'Weich garen und anschließend sicher pürieren.' : 'Cook until tender and blend safely afterwards.'}</small></button>
+    </div>
+  </article>`;
 }
 
 function renderIngredientEffectChoice(engine, language) {
@@ -3374,6 +4361,36 @@ function renderIngredientEffectChoice(engine, language) {
     </article>`;
 }
 
+function renderTaskAssigneeChoice(engine, language) {
+  const pending = engine.state.turn.pendingTaskAssignment;
+  const card = pending ? engine.getTaskCard({ taskId: pending.taskId }) : null;
+  const group = pending ? engine.state.groups.find((candidate) => candidate.id === pending.groupId) : null;
+  if (!pending || !card || !group) return renderDrawCard(engine, language);
+  const selected = new Set(pending.selectedPlayerIds ?? []);
+  const freePlayers = engine.freePlayersForTask(group);
+  const choices = freePlayers.map((player) => {
+    const role = getRole(player.roleId);
+    const isSelected = selected.has(player.id);
+    return `<button type="button" class="choice-button task-assignee-option" data-action="toggle-task-assignee" data-player-id="${escapeHtml(player.id)}" data-selected="${isSelected}" aria-pressed="${isSelected}">
+      <strong>${escapeHtml(player.name)}</strong><small>${role.icon} ${t(role.name, language)}</small>
+    </button>`;
+  }).join('');
+  const complete = selected.size === pending.requiredPeople;
+  return `
+    <article class="game-card">
+      ${renderCourseFlow(engine, language)}
+      <p class="eyebrow">${language === 'de' ? 'Auftragsereignis · Crew wählen' : 'Work-order event · choose crew'}</p>
+      <h2>${language === 'de' ? `Wer übernimmt „${t(card.title, language)}“?` : `Who takes “${t(card.title, language)}”?`}</h2>
+      <p class="card-story">${t(card.instruction, language)}</p>
+      <div class="card-effect"><strong>${language === 'de'
+        ? `${engine.activePlayer.name} wählt genau ${pending.requiredPeople} ${pending.requiredPeople === 1 ? 'freie Person' : 'freie Personen'}. Die Crew darf beraten.`
+        : `${engine.activePlayer.name} chooses exactly ${pending.requiredPeople} free ${pending.requiredPeople === 1 ? 'person' : 'people'}. The crew may discuss.`}</strong></div>
+      <div class="choice-list task-assignee-choices">${choices}</div>
+      <div class="next-action"><strong>${language === 'de' ? `${selected.size}/${pending.requiredPeople} ausgewählt` : `${selected.size}/${pending.requiredPeople} selected`}</strong><span>${language === 'de' ? 'Belegte Personen werden nicht angeboten.' : 'Busy players are not offered.'}</span></div>
+      <button class="primary-button" type="button" data-action="confirm-task-assignees" ${complete ? '' : 'disabled'}>${language === 'de' ? 'Besetzung bestätigen' : 'Confirm crew'}</button>
+    </article>`;
+}
+
 function renderTaskBriefing(engine, language) {
   const instance = engine.state.tasks.find((task) => task.instanceId === engine.state.turn.assignedTaskId);
   const card = instance ? engine.getTaskCard(instance) : null;
@@ -3382,13 +4399,15 @@ function renderTaskBriefing(engine, language) {
     .map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name)
     .filter(Boolean);
   const event = engine.currentEvent;
+  const background = card.timingMode === 'background';
+  const timerMinutes = background ? card.backgroundMinutes : card.challengeMinutes;
   const after = engine.state.turn.taskBriefingEndsTurn
     ? (language === 'de' ? 'Danach wird das Tablet weitergegeben; die Aufgabe läuft unabhängig von den nächsten Zügen weiter.' : 'Then pass the tablet; the task continues independently of later turns.')
     : (language === 'de' ? 'Danach zieht dieselbe aktive Person die erste Auftrags-Ereigniskarte.' : 'Then the same active player draws the first work-order event.');
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
-      <p class="eyebrow">${event ? (language === 'de' ? 'Auftragsereignis' : 'Work-order event') : (language === 'de' ? 'Automatischer Startauftrag' : 'Automatic opening job')}</p>
+      <p class="eyebrow">${t(card.questName, language)} · ${language === 'de' ? 'Questschritt' : 'quest step'} ${card.questStep}</p>
       <h2>${t(card.title, language)}</h2>
       ${event ? `<p class="card-story">${t(event.story, language)}</p>` : `<p class="card-story">${language === 'de' ? 'Die Tapas-Zutaten stehen bereits fest. Deshalb beginnt die Reise direkt mit einem echten Küchenauftrag.' : 'The tapas ingredients are already fixed, so the voyage begins with a real kitchen job.'}</p>`}
       <div class="task-briefing">
@@ -3396,11 +4415,15 @@ function renderTaskBriefing(engine, language) {
         <p>${t(card.instruction, language)}</p>
         <div class="stat-strip">
           ${statusTag(`${language === 'de' ? 'Verantwortlich' : 'Responsible'}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
-          ${statusTag(`${card.estimatedMinutes} min`, 'gold')}
-          ${statusTag(language === 'de' ? 'Münz-Challenge startet automatisch' : 'Coin challenge starts automatically', 'coral')}
+          ${statusTag(`${timerMinutes} min`, background ? 'blue' : 'gold')}
+          ${statusTag(background
+            ? (language === 'de' ? 'Hintergrundtimer · keine Belohnung oder Strafe' : 'Background timer · no reward or penalty')
+            : (language === 'de' ? 'Kurze Arbeits-Challenge mit Münzwertung' : 'Short scored work challenge'), background ? 'blue' : 'coral')}
         </div>
       </div>
-      <button class="primary-button" type="button" data-action="accept-task">${language === 'de' ? 'Aufgabe übernehmen & Challenge starten' : 'Take task & start challenge'}</button>
+      <button class="primary-button" type="button" data-action="accept-task">${background
+        ? (language === 'de' ? 'Questschritt übernehmen & Hintergrundtimer starten' : 'Take quest step & start background timer')
+        : (language === 'de' ? 'Aufgabe übernehmen & Arbeits-Challenge starten' : 'Take task & start work challenge')}</button>
       ${renderIngredientBasket(engine, instance, language)}
       <div class="next-action"><strong>${language === 'de' ? `${assigned.map(escapeHtml).join(' & ')} übernehmen diese Aufgabe jetzt.` : `${assigned.map(escapeHtml).join(' & ')} take this task now.`}</strong><span>${after}</span></div>
     </article>`;
@@ -3429,17 +4452,50 @@ function renderResolvedCard(engine, language) {
 function renderWatchCard(engine, language) {
   const event = engine.currentEvent;
   const challenge = engine.currentWatchChallenge;
+  const ongoing = challenge.flow === 'ongoing';
+  const mandatory = challenge.mandatory;
+  const awaitingSecretStart = challenge.secret && !ongoing && !mandatory && engine.state.turn.watchStartedAt == null;
   const seconds = Math.max(0, Math.ceil(((engine.state.turn.watchEndsAt ?? Date.now()) - Date.now()) / 1000));
+  const durationText = challenge.endTrigger === 'ownerNextTurn'
+    ? (language === 'de' ? 'Läuft bis zu deinem nächsten Zug' : 'Runs until your next turn')
+    : challenge.endTrigger === 'targetTurnEnd'
+      ? (language === 'de' ? 'Läuft während des nächsten Ziel-Zugs' : 'Runs during the target’s next turn')
+      : (language === 'de' ? 'Läuft bis zur passenden Gegenkarte' : 'Runs until the matching counter-card');
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
-      <p class="eyebrow">${challenge.secret ? (language === 'de' ? 'Geheime Karte · nicht laut vorlesen' : 'Secret card · do not read aloud') : (language === 'de' ? 'Zeitfüller · sofort ausführen' : 'Interlude · do it now')}</p>
+      <p class="eyebrow">${mandatory
+        ? (language === 'de' ? `Verbindliche geheime Anweisung · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Mandatory secret instruction · only ${escapeHtml(engine.activePlayer.name)} reads`)
+        : challenge.secret
+        ? (language === 'de' ? `Geheime Karte · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Secret card · only ${escapeHtml(engine.activePlayer.name)} reads`)
+        : (language === 'de' ? 'Zeitfüller · sofort ausführen' : 'Interlude · do it now')}</p>
       <h2>${t(challenge.title, language)}</h2>
       ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
+      ${challenge.secret ? `<div class="card-effect"><strong>${language === 'de'
+        ? mandatory ? 'Nicht vorlesen: Diese Anweisung ist verbindlich und muss jetzt ausgeführt werden.' : 'Nicht vorlesen, nicht zeigen und der Gruppe nicht erklären.'
+        : mandatory ? 'Do not read aloud: this instruction is mandatory and must be carried out now.' : 'Do not read it aloud, show it, or explain it to the group.'}</strong><p>${language === 'de'
+        ? `Diese Karte gilt nur für ${escapeHtml(engine.activePlayer.name)}.`
+        : `This card applies only to ${escapeHtml(engine.activePlayer.name)}.`}</p></div>` : ''}
       <p class="card-story">${t(challenge, language)}</p>
-      <div class="challenge-clock"><span class="timer" data-watch-timer>${formatDuration(seconds)}</span><strong>${challenge.coins > 0 ? `+${challenge.coins} ${language === 'de' ? 'Münzen' : 'coins'}` : (language === 'de' ? 'echte Pause' : 'real break')}</strong></div>
-      <div class="card-effect">${challenge.secret ? (language === 'de' ? 'Merke dir den Auftrag, lege die Karte verdeckt und verhalte dich unauffällig.' : 'Remember the mission, hide the card, and act naturally.') : (language === 'de' ? 'Laufende Küchen-Challenges bleiben in der Aufgabenliste sichtbar.' : 'Running kitchen challenges remain visible in the task list.')}</div>
-      <button class="primary-button" type="button" data-action="complete-watch">${language === 'de' ? 'Challenge abgeschlossen' : 'Challenge complete'}</button>
+      <div class="challenge-clock">${mandatory ? `<span>${language === 'de' ? 'Jetzt verbindlich ausführen' : 'Carry out now'}</span>` : ongoing ? `<span>${durationText}</span>` : awaitingSecretStart
+        ? `<span>${language === 'de' ? 'Noch nicht gestartet' : 'Not started yet'}</span>`
+        : `<span class="timer" data-watch-timer>${formatDuration(seconds)}</span>`}<strong>${challenge.coins > 0 ? `+${challenge.coins} ${language === 'de' ? 'Münzen nach Abschluss' : 'coins after completion'}` : (language === 'de' ? 'echte Pause' : 'real break')}</strong></div>
+      <div class="card-effect">${mandatory
+        ? (language === 'de' ? 'Keine Auswahl und kein Startknopf: Führe die Anweisung jetzt aus und bestätige sie anschließend.' : 'There is no choice and no start button: carry out the instruction now, then confirm it.')
+        : ongoing
+        ? (language === 'de' ? 'Die Aktion beginnt erst mit dem Button. Danach wird das Tablet sofort weitergegeben; die Challenge endet später automatisch.' : 'The action starts only when you press the button. The tablet is then passed immediately and the challenge ends automatically later.')
+        : awaitingSecretStart
+          ? (language === 'de' ? 'Die Aktion läuft noch nicht. Lies und merke dir den Auftrag; drücke erst dann auf „Geheime Challenge starten“. Danach führst du ihn aus, ohne die Karte zu erklären.' : 'The action is not running yet. Read and remember it, then press “Start secret challenge”. Carry it out without explaining the card.')
+          : challenge.secret
+            ? (language === 'de' ? 'Die geheime Challenge läuft jetzt. Führe sie aus, ohne der Gruppe die Karte zu erklären.' : 'The secret challenge is now running. Carry it out without explaining the card to the group.')
+            : (language === 'de' ? 'Erledigt die kurze Aktion jetzt; laufende Küchen-Challenges bleiben davon unberührt.' : 'Complete the short action now; running kitchen challenges continue independently.')}</div>
+      <button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${mandatory
+        ? (language === 'de' ? 'Anweisung ausgeführt' : 'Instruction completed')
+        : ongoing
+        ? (language === 'de' ? 'Geheime Challenge starten & Tablet weitergeben' : 'Start secret challenge & pass the tablet')
+        : awaitingSecretStart
+          ? (language === 'de' ? 'Geheime Challenge starten' : 'Start secret challenge')
+          : (language === 'de' ? 'Challenge abgeschlossen' : 'Challenge complete')}</button>
     </article>`;
 }
 
@@ -3480,10 +4536,13 @@ function renderCurrentCard(engine, language) {
     case 'rolled': return renderRolledCard(engine, language);
     case 'ingredientChoice': return renderIngredientChoice(engine, language);
     case 'effectChoice': return renderIngredientEffectChoice(engine, language);
+    case 'courseDecision': return renderSoupStyleChoice(engine, language);
+    case 'taskAssigneeChoice': return renderTaskAssigneeChoice(engine, language);
     case 'taskBriefing': return renderTaskBriefing(engine, language);
     case 'resolved': return renderResolvedCard(engine, language);
     case 'watch': return renderWatchCard(engine, language);
     case 'chapterReady': return renderChapterReady(engine, language);
+    case 'crewBusy': return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Alle Hände in der Kombüse' : 'All hands in the galley'}</p><h2>${language === 'de' ? 'Alle Personen haben gerade eine laufende Aufgabe' : 'Every player currently has a running task'}</h2><p class="card-story">${language === 'de' ? 'Es wird kein Zug vergeben. Öffnet die Aufgabenliste und markiert einen fertigen Schritt als erledigt; dann wird die Reise automatisch mit einer freien Person fortgesetzt.' : 'No turn is assigned. Open the task list and mark a finished step complete; the voyage then resumes automatically with a free player.'}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
     default: return renderDrawCard(engine, language);
   }
 }
@@ -3506,7 +4565,7 @@ function renderAssignedTasks(engine, language) {
             <div class="card-row"><strong>${t(card.title, language)}</strong>${instance.endAt ? `<span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span>` : ''}</div>
             <p class="muted">${t(card.instruction, language)}</p>
             ${renderIngredientBasket(engine, instance, language)}
-            ${instance.status === 'queued' && instance.instanceId !== engine.state.turn.assignedTaskId ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Challenge starten' : 'Start challenge'}</button>` : ''}
+            ${instance.status === 'queued' && instance.instanceId !== engine.state.turn.assignedTaskId ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${card.timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
             ${['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${tx('completeTask', language)}</button>` : ''}
           </li>`;
         }).join('')}
@@ -3535,6 +4594,7 @@ function renderGame(engine, language) {
             <h2>${escapeHtml(player.name)}</h2>
           </div>
         </section>
+        ${renderAbility(engine, language)}
         ${renderCurrentCard(engine, language)}
         ${renderCourseBasket(engine, language)}
         ${renderAssignedTasks(engine, language)}
@@ -3626,13 +4686,14 @@ function renderTasks(engine, language) {
         const card = engine.getTaskCard(instance);
         const assigned = instance.assignedPlayerIds.map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name).filter(Boolean);
         const remaining = getRemainingSeconds(instance);
-        const challengeMinutes = instance.challengeMinutes || card.timerMinutes || card.estimatedMinutes;
-        const timerProgress = challengeMinutes && instance.startedAt
-          ? percent(Math.max(0, Date.now() - instance.startedAt), challengeMinutes * 60_000)
+        const timingMode = instance.timingMode ?? card.timingMode ?? 'challenge';
+        const timerMinutes = timingMode === 'background' ? (instance.backgroundMinutes || card.backgroundMinutes) : (instance.challengeMinutes || card.challengeMinutes);
+        const timerProgress = timerMinutes && instance.startedAt
+          ? percent(Math.max(0, Date.now() - instance.startedAt), timerMinutes * 60_000)
           : 0;
         return `<li class="task-item" data-status="${instance.status}">
           <div class="card-row">
-            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${escapeHtml(card.id)}</p><h3>${t(card.title, language)}</h3></div>
+            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${card.questStep}</p><h3>${t(card.title, language)}</h3></div>
             ${statusTag(taskStatusLabel(instance.status, language), STATUS_TONE[instance.status])}
           </div>
           <p>${t(card.instruction, language)}</p>
@@ -3640,14 +4701,16 @@ function renderTasks(engine, language) {
           <div class="stat-strip">
             ${statusTag(`${tx('assignedTo', language)}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
             ${statusTag(card.people[0] === card.people[1] ? `${card.people[0]} ♙` : `${card.people[0]}–${card.people[1]} ♙`)}
-            ${statusTag(`${challengeMinutes} min ${language === 'de' ? 'Challenge' : 'challenge'}`, 'gold')}
-            ${instance.challengeResult ? statusTag(t({ de: { veryFast: 'Blitzschnell · +3', onTime: 'Rechtzeitig · +1', late: 'Verspätet · −1', veryLate: 'Stark verspätet · −3' }[instance.challengeResult], en: { veryFast: 'Lightning fast · +3', onTime: 'On time · +1', late: 'Late · −1', veryLate: 'Very late · −3' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
+            ${timingMode === 'background'
+              ? statusTag(`${timerMinutes} min ${language === 'de' ? 'Hintergrundzeit · ohne Münzdruck' : 'background time · no coin pressure'}`, 'blue')
+              : statusTag(`${timerMinutes} min ${language === 'de' ? 'Arbeits-Challenge' : 'work challenge'}`, 'gold')}
+            ${instance.challengeResult && instance.challengeResult !== 'background' ? statusTag(t({ de: { veryFast: 'Blitzschnell · +2', onTime: 'Rechtzeitig · +1', late: 'Verspätet · −2', veryLate: 'Stark verspätet · −5' }[instance.challengeResult], en: { veryFast: 'Lightning fast · +2', onTime: 'On time · +1', late: 'Late · −2', veryLate: 'Very late · −5' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
           </div>
-          ${instance.endAt ? `<div class="card-row"><span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span><span class="muted">${tx('remaining', language)}</span></div><div class="progress-track"><span style="--progress:${timerProgress}%"></span></div>` : ''}
+          ${instance.endAt ? `<div class="card-row"><span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span><span class="muted">${timingMode === 'background' ? (language === 'de' ? 'Erinnerung bis zum nächsten Questschritt' : 'reminder until the next quest step') : tx('remaining', language)}</span></div><div class="progress-track"><span data-task-progress="${escapeHtml(instance.instanceId)}" style="--progress:${timerProgress}%"></span></div>` : ''}
           <div class="button-row" style="margin-top:.8rem">
-            ${instance.status === 'queued' ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Challenge starten' : 'Start challenge'}</button>` : ''}
+            ${instance.status === 'queued' ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
             ${['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${tx('completeTask', language)}</button>` : ''}
-            ${instance.status === 'done' && instance.chapterIndex === engine.state.chapterIndex && !engine.state.chapter.served ? `<button class="quiet-button" type="button" data-action="undo-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Haken zurücknehmen' : 'Undo completion'}</button>` : ''}
+            ${engine.canUndoTaskCompletion(instance.instanceId) ? `<button class="quiet-button" type="button" data-action="undo-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Haken zurücknehmen' : 'Undo completion'}</button>` : ''}
           </div>
         </li>`;
       }).join('')}</ul>` : `<div class="empty-state"><h2>${tx('noTasks', language)}</h2></div>`}
@@ -3689,17 +4752,18 @@ function renderPantry(engine, language) {
         <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
       </div>
       <div class="content-grid">
-        <section class="panel ingredient-global">
-          <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Noch keinem Gang zugeordnet' : 'Not assigned to a course yet'}</p><h2>${language === 'de' ? 'Global verfügbar' : 'Globally available'}</h2></div>${statusTag(String(available.length))}</div>
-          <ul class="ingredient-list">${available.map(ingredientRow).join('')}</ul>
-        </section>
         ${CHAPTERS.map((chapter, chapterIndex) => {
           const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === chapterIndex);
           return `<section class="panel">
             <div class="panel-header"><div><p class="eyebrow">${chapter.number}. ${t(chapter.name, language)}</p><h2>${t(chapter.course, language)}</h2></div>${chapterIndex === engine.state.chapterIndex ? statusTag(language === 'de' ? 'aktuell' : 'current', 'gold') : ''}</div>
             <ul class="ingredient-list">${ingredients.map(ingredientRow).join('')}</ul>
-          </section>`;
+            </section>`;
         }).join('')}
+        <section class="panel ingredient-global">
+          <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Nach den einzelnen Gängen' : 'After the individual courses'}</p><h2>${language === 'de' ? 'Global verfügbar' : 'Globally available'}</h2></div>${statusTag(String(available.length))}</div>
+          <p class="muted">${language === 'de' ? 'Diese Zutaten sind noch keinem Gang zugeordnet und bleiben im gemeinsamen Vorrat.' : 'These ingredients are not assigned to a course yet and remain in the shared pantry.'}</p>
+          <ul class="ingredient-list">${available.map(ingredientRow).join('')}</ul>
+        </section>
       </div>
     </section>`;
 }
@@ -3756,12 +4820,16 @@ function renderCrew(engine, language) {
           const role = getRole(player.roleId);
           const isActive = index === engine.state.activePlayerIndex;
           const passiveDisabled = !engine.isPassiveEnabled(player);
+          const openTasks = engine.openTasksForPlayer(player.id);
+          const taskAvailability = openTasks.length
+            ? statusTag(language === 'de' ? 'Aufgabe läuft' : 'task in progress', 'coral')
+            : statusTag(language === 'de' ? 'frei für neue Aufgabe' : 'free for a new task', 'green');
           return `<article class="role-card" data-active="${isActive}">
-            <div class="card-row">${avatar(player)}${isActive ? statusTag(tx('activePlayer', language), 'gold') : statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)}</div>
+            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability}</span></div>
             <p class="eyebrow" style="margin-top:1rem">${role.icon} ${t(role.name, language)}</p>
             <h2>${escapeHtml(player.name)}</h2>
-            <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p>${t(role.passive, language)}</p></div>
-            <div class="role-ability"><strong>${tx('roleActive', language)} · ${player.activeUsesRemaining} ${tx('usesLeft', language)}${isActive && engine.state.turn.activeAbilityUsed ? ` · ${language === 'de' ? 'in diesem Zug genutzt' : 'used this turn'}` : ''}</strong><p>${t(role.active, language)} ${language === 'de' ? 'Nur einmal pro eigenem Zug.' : 'Once per own turn only.'}</p></div>
+            <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p><b>${t(role.passive, language)}</b></p><p class="muted">${t(role.passiveUsage, language)}</p></div>
+            <div class="role-ability"><strong>${tx('roleActive', language)} · ${player.activeUsesRemaining} ${tx('usesLeft', language)}${isActive && engine.state.turn.activeAbilityUsed ? ` · ${language === 'de' ? 'in diesem Zug genutzt' : 'used this turn'}` : ''}</strong><p><b>${t(role.active, language)}</b></p><p class="muted">${t(role.activeUsage, language)}</p></div>
             <div class="field" style="margin-top:.8rem">
               <label for="language-${escapeHtml(player.id)}">${language === 'de' ? 'Spielersprache' : 'Player language'}</label>
               <select id="language-${escapeHtml(player.id)}" data-action="player-language" data-player-id="${escapeHtml(player.id)}">
@@ -3787,26 +4855,32 @@ function historyLabel(entry, language) {
     eventIgnoredByBonus: 'Ereignisbonus eingesetzt', eventIgnoredByTactician: 'Ereignis taktisch ignoriert',
     eventChainContinued: 'Ereigniskette fortgesetzt', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
     treasureFound: 'Münzen gefunden', coinsChanged: 'Münzstand verändert', ingredientDiscovered: 'Zutat in den Gangkorb gelegt', ingredientLocked: 'Zutat festgelegt', ingredientReturned: 'Zutat zurückgelegt', bonusIngredientDiscovered: 'Bonuszutat entdeckt',
-    ingredientSwapped: 'Zutat getauscht', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
+    ingredientSwapped: 'Zutat getauscht', taskAssigneeChoiceStarted: 'Aufgabenbesetzung geöffnet', taskAssigneesChosen: 'Aufgabenbesetzung gewählt', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
     taskCompleted: 'Aufgabe erledigt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt', crewSplit: 'Crew aufgeteilt',
     crewReunited: 'Crew wieder vereint', locationCompleted: 'Ort abgeschlossen', turnEnded: 'Zug beendet',
     chapterReady: 'Gang bereit', courseServed: 'Gang serviert', chapterStarted: 'Neuer Gang gestartet',
     voyageCompleted: 'Reise abgeschlossen', activeAbilityUsed: 'Rollenfähigkeit eingesetzt',
     playerLanguageChanged: 'Spielersprache geändert', optionalIngredientChanged: 'Optionale Zutat geändert',
-    watchChallengeStarted: 'Deckwache gestartet', watchChallengeCompleted: 'Deckwache erledigt',
+    watchChallengeStarted: 'Deckwache geöffnet', watchChallengeActionStarted: 'Geheime Challenge gestartet', watchChallengeActivated: 'Mehrzug-Challenge aktiviert', watchChallengeCompleted: 'Deckwache erledigt', watchChallengeExpired: 'Challenge mit der Reise beendet',
+    watchFollowUpScheduled: 'Verknüpfte Challenge vorgemerkt', watchFollowUpsReleased: 'Verknüpfte Challenge freigegeben',
+    turnSkippedForTask: 'Beschäftigte Person übersprungen', allPlayersBusy: 'Ganze Crew beschäftigt', crewTurnResumed: 'Crewzug fortgesetzt',
+    soupStyleChosen: 'Suppenstil festgelegt', ingredientBasketAutoCleared: 'Gangkorb automatisch geleert',
     chapterStageChanged: 'Kartendeck gewechselt', taskBriefingShown: 'Auftrag geöffnet'
   } : {
     voyageStarted: 'Voyage started', eventDrawn: 'Event card drawn', eventResolved: 'Event resolved',
     eventIgnoredByBonus: 'Event bonus used', eventIgnoredByTactician: 'Event ignored tactically',
     eventChainContinued: 'Event chain continued', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
     treasureFound: 'Coins found', coinsChanged: 'Coin balance changed', ingredientDiscovered: 'Ingredient put in course basket', ingredientLocked: 'Ingredient locked', ingredientReturned: 'Ingredient returned', bonusIngredientDiscovered: 'Bonus ingredient discovered',
-    ingredientSwapped: 'Ingredient swapped', taskAssigned: 'Task assigned', taskStarted: 'Task started',
+    ingredientSwapped: 'Ingredient swapped', taskAssigneeChoiceStarted: 'Task crew selection opened', taskAssigneesChosen: 'Task crew selected', taskAssigned: 'Task assigned', taskStarted: 'Task started',
     taskCompleted: 'Task completed', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins', crewSplit: 'Crew split',
     crewReunited: 'Crew reunited', locationCompleted: 'Location completed', turnEnded: 'Turn ended',
     chapterReady: 'Course ready', courseServed: 'Course served', chapterStarted: 'New course started',
     voyageCompleted: 'Voyage completed', activeAbilityUsed: 'Role ability used',
     playerLanguageChanged: 'Player language changed', optionalIngredientChanged: 'Optional ingredient changed',
-    watchChallengeStarted: 'Deck watch started', watchChallengeCompleted: 'Deck watch completed',
+    watchChallengeStarted: 'Deck watch opened', watchChallengeActionStarted: 'Secret challenge started', watchChallengeActivated: 'Multi-turn challenge activated', watchChallengeCompleted: 'Deck watch completed', watchChallengeExpired: 'Challenge ended with the voyage',
+    watchFollowUpScheduled: 'Linked challenge scheduled', watchFollowUpsReleased: 'Linked challenge released',
+    turnSkippedForTask: 'Busy player skipped', allPlayersBusy: 'Whole crew busy', crewTurnResumed: 'Crew turn resumed',
+    soupStyleChosen: 'Soup style chosen', ingredientBasketAutoCleared: 'Course basket cleared automatically',
     chapterStageChanged: 'Event deck changed', taskBriefingShown: 'Work order opened'
   };
   const label = labels[entry.type] ?? entry.type;
@@ -3849,25 +4923,25 @@ function renderSessions(sessions, currentSessionId, language) {
 
 function renderRules(language) {
   const sections = language === 'de' ? [
-    ['1. Reihum spielen', 'Die hervorgehobene Person führt den Zug aus. Nach Abschluss zeigt das Spiel, an wen das Tablet weitergegeben wird. Entscheidungen dürfen gemeinsam besprochen werden.'],
-    ['2. Jeder Gang hat drei Kartendecks', 'Zuerst erscheinen Vorratsereignisse, danach Auftragsereignisse. Während Küchenarbeit läuft, sorgen freie Eventkarten mit Pausen, Geschichten, Münzen und harmlosen geheimen Challenges für Abwechslung.'],
-    ['3. Aktive Person entscheidet', 'Binäre Entscheidungen dürfen von der ganzen Crew diskutiert werden. Die hervorgehobene Person trifft die endgültige Wahl, würfelt oder übernimmt den Auftrag. Unmögliche Optionen werden nicht angezeigt.'],
-    ['4. Aufgaben als Münz-Challenges', 'Jede offene Küchenaufgabe kann jederzeit in der Aufgabenliste erledigt markiert werden. Sehr schnelles Erledigen bringt drei Münzen, rechtzeitiges eine; verspätete Aufgaben kosten eine oder drei Münzen. Ein versehentlicher Haken kann zurückgenommen werden.'],
-    ['5. Parallel kochen', 'Nach der Übernahme läuft eine Aufgabe unabhängig von den nächsten Zügen weiter. Die angezeigte Zeit ist eine Challenge und keine Sperre. Andere Personen ziehen derweil weitere Events.'],
+    ['1. Reihum spielen – Beschäftigte werden übersprungen', 'Die hervorgehobene freie Person führt den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde.'],
+    ['2. Drei Decks plus Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Harmlose Spaßkarten können schon in Zutaten- und Auftragsrunden erscheinen. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
+    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Weitere freie Personen dürfen bei manchen Karten ausdrücklich gewählt werden.'],
+    ['4. Vorgefertigte Questlinien', 'Aufträge sind nach fachlichen Questlinien und Schritten sortiert. Speckdatteln werden erst gerollt, später gebacken und herausgeholt; Brot wird eingeschoben, gebacken, herausgeholt, geschnitten und serviert. Abhängige Schritte erscheinen erst, wenn ihre Voraussetzung erledigt ist.'],
+    ['5. Arbeits-Challenge oder Hintergrundzeit', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Backen, Garen, Ruhen und Kühlen laufen als unbewertete Hintergrundtimer. Jede offene Aufgabe kann jederzeit in der Aufgabenliste abgehakt werden.'],
     ['6. Orte automatisch bereisen', 'Jede abgeschlossene Ortsaktion bewegt die Gruppe sichtbar voran. Nach genug Aktionen zieht sie automatisch zum nächsten Ort; aufgeteilte Gruppen werden am gemeinsamen Ziel wieder vereint.'],
-    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit möglichen Gang-Tags. Gefundene Zutaten landen zuerst im Gangkorb und werden von dort fest zugeordnet oder zurückgelegt. Jede Pflichtzutat wird genau einmal verwendet; nur optionale Zutaten dürfen übrig bleiben.'],
+    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Die Suppe wird zuerst als klar oder cremig festgelegt; Brühe und Sahne sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
     ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
-    ['9. Münzen und Fähigkeiten', '100 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 50 Münzen wird die Hälfte verteilt. Der Stand darf negativ werden. Eine aktive Spezialfähigkeit darf höchstens einmal zwischen Übernahme und Weitergabe des Tablets benutzt werden.']
+    ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
   ] : [
-    ['1. Play in round robin order', 'The highlighted person leads the turn. When it ends, the game shows who receives the tablet next. Decisions may be discussed together.'],
-    ['2. Every course has three event decks', 'Provision events come first, followed by work-order events. While kitchen work runs, open event cards add breaks, stories, coins, and harmless secret challenges.'],
-    ['3. The active player decides', 'The whole crew may discuss binary decisions. The highlighted player makes the final choice, rolls, or takes the job. Impossible options are never shown.'],
-    ['4. Tasks as coin challenges', 'Every open kitchen task can be marked complete from the task list at any time. Very fast completion earns three coins and on-time completion one; late tasks cost one or three coins. An accidental check can be undone.'],
-    ['5. Cook in parallel', 'Once accepted, a task continues independently of later turns. The displayed time is a challenge, not a lock. Other players keep drawing events.'],
+    ['1. Round robin – busy players are skipped', 'The highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off.'],
+    ['2. Three decks plus fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. Harmless fun cards can appear during ingredient and task rounds. A real break appears only when no kitchen task is open.'],
+    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Some cards let them choose additional free players.'],
+    ['4. Prepared quest lines', 'Jobs are ordered into practical quest lines and steps. Bacon dates are wrapped, baked, and removed later; bread is inserted, baked, removed, sliced, and served. Dependent steps appear only when their prerequisites are complete.'],
+    ['5. Work challenge or background time', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Baking, cooking, resting, and chilling use unscored background timers. Every open job can be checked off from the task list at any time.'],
     ['6. Travel automatically', 'Every resolved location action advances the group. After enough actions it moves automatically; split groups reunite at their shared target.'],
-    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with possible course tags. Finds enter the course basket and are either locked in or returned. Every essential ingredient is used exactly once; only optional ingredients may remain.'],
+    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. Soup is first chosen as clear or cream; stock and cream are pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
     ['8. Work safely', 'Follow packaging and appliance instructions. Separate raw meat from ready-to-eat food, then clean hands, equipment, and surfaces. Cook meat thoroughly and evenly; if in doubt, verify at least 70 °C for two minutes throughout. Safety overrides every card.'],
-    ['9. Coins and abilities', '100 coins equal the complete sweet reward; 50 coins mean half is shared. The balance may become negative. One active special ability may be used between receiving and passing on the tablet.']
+    ['9. Coins, effects, and secret follow-ups', '500 coins equal the complete sweet reward; 250 coins mean half is shared. Losses can reduce the balance to zero. Ingredient effects are stored for the player who drew them. Active abilities are once per turn. Counter-cards to secret curses appear randomly three to five turns later and must resolve before the course ends.']
   ];
   return `
     <section class="screen-padding">
@@ -3885,6 +4959,7 @@ const nav = document.querySelector('#app-nav');
 const taskBadge = document.querySelector('#task-badge');
 const languageButton = document.querySelector('#language-button');
 const audioButton = document.querySelector('#audio-button');
+const notificationButton = document.querySelector('#notification-button');
 const menuButton = document.querySelector('#menu-button');
 const saveIndicator = document.querySelector('#save-indicator');
 const toastRegion = document.querySelector('#toast-region');
@@ -3912,6 +4987,12 @@ if (currentSnapshot && validateSessionState(currentSnapshot).valid) {
 
 const audio = new GameAudio(engine?.state.settings.audio ?? preferences.audio);
 
+function cueForAction(actionCode) {
+  if (['treasure', 'treasureAndTask', 'treasureAndIngredient', 'treasureAndWatch', 'treasureAndChain'].includes(actionCode)) return 'treasure';
+  if (['drawTask', 'singleTask', 'teamTask', 'discoverIngredient', 'lockIngredient', 'swapIngredient'].includes(actionCode)) return 'card';
+  return 'move';
+}
+
 function language() {
   if (engine && view !== 'setup' && view !== 'welcome') return engine.activePlayer?.language ?? preferences.language;
   return preferences.language;
@@ -3923,6 +5004,17 @@ function updateHeader(currentLanguage) {
   languageButton.setAttribute('aria-label', currentLanguage === 'de' ? 'Auf Englisch wechseln' : 'Switch to German');
   audioButton.querySelector('span').textContent = audio.enabled ? '♪' : '×';
   audioButton.setAttribute('aria-label', ui(audio.enabled ? 'audioOn' : 'audioOff', currentLanguage));
+  const notificationsSupported = 'Notification' in window;
+  const notificationsEnabled = notificationsSupported && preferences.notifications && Notification.permission === 'granted';
+  notificationButton.hidden = !notificationsSupported;
+  notificationButton.dataset.enabled = String(notificationsEnabled);
+  notificationButton.querySelector('span').textContent = notificationsEnabled ? '🔔' : '🔕';
+  notificationButton.setAttribute('aria-label', currentLanguage === 'de'
+    ? notificationsEnabled ? 'Timer-Endmeldungen ausschalten' : 'Timer-Endmeldungen einschalten'
+    : notificationsEnabled ? 'Disable timer-finished notifications' : 'Enable timer-finished notifications');
+  notificationButton.title = currentLanguage === 'de'
+    ? 'Benachrichtigt nur, wenn ein Timer abgelaufen ist'
+    : 'Only notifies when a timer has finished';
   const activeTasks = engine?.state.tasks.filter((task) => ['queued', 'active', 'ready'].includes(task.status)).length ?? 0;
   taskBadge.hidden = activeTasks === 0;
   taskBadge.textContent = String(activeTasks);
@@ -4011,7 +5103,11 @@ async function requestWakeLock() {
 }
 
 async function requestNotifications() {
-  if (!('Notification' in window) || Notification.permission === 'denied') return false;
+  if (!('Notification' in window)) return false;
+  if (Notification.permission === 'denied') {
+    preferences = repository.savePreferences({ notifications: false });
+    return false;
+  }
   try {
     const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
     preferences = repository.savePreferences({ notifications: permission === 'granted' });
@@ -4097,6 +5193,16 @@ function updateVisibleTimers() {
     const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskTimer);
     if (task) element.textContent = formatDuration(getRemainingSeconds(task));
   });
+  document.querySelectorAll('[data-task-progress]').forEach((element) => {
+    const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskProgress);
+    if (!task?.startedAt) return;
+    const card = engine.getTaskCard(task);
+    const minutes = task.timingMode === 'background'
+      ? (task.backgroundMinutes || card.backgroundMinutes)
+      : (task.challengeMinutes || card.challengeMinutes);
+    const elapsed = Math.max(0, Date.now() - task.startedAt);
+    element.style.setProperty('--progress', `${Math.min(100, Math.round((elapsed / Math.max(1, minutes * 60_000)) * 100))}%`);
+  });
   document.querySelectorAll('[data-watch-timer]').forEach((element) => {
     const remaining = Math.max(0, Math.ceil(((engine.state.turn.watchEndsAt ?? Date.now()) - Date.now()) / 1000));
     element.textContent = formatDuration(remaining);
@@ -4118,11 +5224,11 @@ function processTimers() {
   const result = updateTaskTimers(engine.state);
   updateVisibleTimers();
   if (!result.changed) return;
-  result.notices.forEach(({ taskId, threshold }) => {
+  result.notices.forEach(({ taskId }) => {
     const instance = engine.state.tasks.find((task) => task.instanceId === taskId);
     const card = instance ? engine.getTaskCard(instance) : null;
     const currentLanguage = language();
-    const prefix = threshold === 300 ? ui('timerNotice5', currentLanguage) : threshold === 60 ? ui('timerNotice1', currentLanguage) : ui('timerDone', currentLanguage);
+    const prefix = ui('timerDone', currentLanguage);
     const title = card ? localize(card.title, currentLanguage) : ui('timerDone', currentLanguage);
     showToast(`${prefix}: ${title}`);
     systemNotice(prefix, title);
@@ -4146,7 +5252,11 @@ async function handleAction(target) {
     case 'resume-session': resumeSession(target.dataset.sessionId); break;
     case 'navigate': navigate(target.dataset.view); break;
     case 'draw-event': engine.beginEvent(); audio.play('card'); persist(); render(); break;
-    case 'resolve-choice': engine.resolveChoice(target.dataset.choice); persist(); render(); break;
+    case 'resolve-choice': {
+      const choice = target.dataset.choice;
+      if (engine.resolveChoice(choice)) audio.play(cueForAction(choice));
+      persist(); render(); break;
+    }
     case 'roll-die': {
       engine.rollDie();
       audio.play('dice');
@@ -4158,20 +5268,41 @@ async function handleAction(target) {
     case 'reroll-die': engine.rerollDie(); audio.play('dice'); persist(); render(); animateVisibleDie(); break;
     case 'reroll-ingredient-die': engine.rerollDieWithIngredient(); audio.play('dice'); persist(); render(); animateVisibleDie(); break;
     case 'adjust-ingredient-die': engine.adjustDieWithIngredient(Number(target.dataset.option)); audio.play('move'); persist(); render(); break;
-    case 'confirm-roll': engine.confirmRoll(); persist(); render(); break;
+    case 'confirm-roll':
+      if (engine.confirmRoll()) audio.play(cueForAction(engine.state.turn.outcomeCode));
+      persist(); render(); break;
     case 'accept-task': {
-      const taskId = engine.state.turn.assignedTaskId;
       if (engine.acceptTaskBriefing()) {
-        const task = engine.state.tasks.find((candidate) => candidate.instanceId === taskId);
-        if (task?.endAt && 'Notification' in window && Notification.permission === 'default') requestNotifications();
         audio.play('move'); persist(); render();
       }
       break;
     }
     case 'complete-watch': engine.completeWatchChallenge(); audio.play('complete'); persist(); render(); break;
-    case 'choose-ingredient': engine.chooseIngredient(target.dataset.ingredientId); audio.play('treasure'); persist(); render(); break;
+    case 'start-watch':
+      if (engine.startWatchChallengeAction()) { audio.play('move'); persist(); render(); }
+      break;
+    case 'activate-watch': {
+      if (engine.activateOngoingWatchChallenge()) {
+        const result = engine.endTurn();
+        audio.play('move');
+        persist();
+        render();
+        if (result !== 'chain') showHandover();
+      }
+      break;
+    }
+    case 'choose-ingredient': engine.chooseIngredient(target.dataset.ingredientId); audio.play('card'); persist(); render(); break;
+    case 'choose-soup-style':
+      if (engine.chooseSoupStyle(target.dataset.style)) { audio.play('move'); persist(); render(); }
+      break;
     case 'choose-ingredient-ignore': engine.chooseIngredient(target.dataset.ingredientId, Date.now(), true); audio.play('move'); persist(); render(); break;
     case 'resolve-ingredient-effect': engine.resolveIngredientEffectChoice(target.dataset.option); audio.play('move'); persist(); render(); break;
+    case 'toggle-task-assignee':
+      if (engine.toggleTaskAssignee(target.dataset.playerId)) { audio.play('move'); persist(); render(); }
+      break;
+    case 'confirm-task-assignees':
+      if (engine.confirmTaskAssignees()) { audio.play('card'); persist(); render(); }
+      break;
     case 'use-ability': {
       const used = engine.useActiveAbility(target.dataset.option == null ? null : Number(target.dataset.option));
       if (used) { audio.play('move'); persist(); render(); }
@@ -4193,8 +5324,6 @@ async function handleAction(target) {
     }
     case 'start-task': {
       if (engine.startTask(target.dataset.taskId)) {
-        const task = engine.state.tasks.find((candidate) => candidate.instanceId === target.dataset.taskId);
-        if (task?.endAt && 'Notification' in window && Notification.permission === 'default') requestNotifications();
         audio.play('move'); persist(); render();
       }
       break;
@@ -4203,7 +5332,9 @@ async function handleAction(target) {
       if (engine.completeTask(target.dataset.taskId)) {
         const task = engine.state.tasks.find((entry) => entry.instanceId === target.dataset.taskId);
         const score = task?.challengeCoinValue ?? 0;
-        showToast(`${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
+        showToast(task?.challengeResult === 'background'
+          ? (language() === 'de' ? 'Hintergrundzeit beendet · keine Münzwertung' : 'Background time complete · no coin score')
+          : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
         audio.play('complete'); persist(); render();
       }
       break;
@@ -4211,7 +5342,7 @@ async function handleAction(target) {
       if (engine.undoTaskCompletion(target.dataset.taskId)) { audio.play('move'); persist(); render(); }
       break;
     case 'lock-basket-ingredient':
-      if (engine.lockIngredientFromBasket(target.dataset.ingredientId)) { audio.play('treasure'); persist(); render(); }
+      if (engine.lockIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
       break;
     case 'remove-basket-ingredient':
       if (engine.removeIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
@@ -4302,6 +5433,34 @@ audioButton.addEventListener('click', async () => {
   preferences = repository.savePreferences({ audio: audio.enabled });
   if (engine) { engine.state.settings.audio = audio.enabled; persist(); }
   if (audio.enabled) await audio.play('card');
+  render();
+});
+notificationButton.addEventListener('click', async () => {
+  const currentLanguage = language();
+  if (!('Notification' in window)) {
+    showToast(currentLanguage === 'de' ? 'Dieser Browser unterstützt keine Systemmeldungen.' : 'This browser does not support system notifications.');
+    return;
+  }
+  if (preferences.notifications && Notification.permission === 'granted') {
+    preferences = repository.savePreferences({ notifications: false });
+    showToast(currentLanguage === 'de'
+      ? 'Meldungen bei abgelaufenen Timern sind ausgeschaltet.'
+      : 'Timer-finished notifications are disabled.');
+    render();
+    return;
+  }
+  const granted = await requestNotifications();
+  showToast(currentLanguage === 'de'
+    ? granted
+      ? 'Du wirst nur benachrichtigt, wenn ein Timer abgelaufen ist.'
+      : Notification.permission === 'denied'
+        ? 'Systemmeldungen sind im Browser blockiert. Du kannst sie in den Website-Einstellungen freigeben.'
+        : 'Systemmeldungen bleiben ausgeschaltet.'
+    : granted
+      ? 'You will only be notified when a timer has finished.'
+      : Notification.permission === 'denied'
+        ? 'System notifications are blocked by the browser. You can enable them in the site settings.'
+        : 'System notifications remain disabled.');
   render();
 });
 menuButton.addEventListener('click', () => {
