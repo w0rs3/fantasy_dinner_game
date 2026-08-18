@@ -120,7 +120,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
       const pending = engine.state.turn.pendingTaskAssignment;
       const group = engine.state.groups.find((candidate) => candidate.id === pending?.groupId);
       const candidates = group ? engine.freePlayersForTask(group)
-        .sort((a, b) => a.taskMarkers - b.taskMarkers || a.id.localeCompare(b.id)) : [];
+        .sort((a, b) => engine.taskAssignmentPriority(a, b)) : [];
       const alreadySelected = new Set(pending?.selectedPlayerIds ?? []);
       const remaining = Math.max(0, (pending?.requiredPeople ?? 0) - alreadySelected.size);
       for (const player of candidates.filter((candidate) => !alreadySelected.has(candidate.id)).slice(0, remaining)) {
@@ -173,7 +173,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
   const cauldronWatches = engine.state.tasks
     .map((instance) => ({ instance, card: engine.getTaskCard(instance) }))
     .filter((entry) => entry.card?.chapterId === 'soup' && entry.card.questId === 'cauldron' && entry.card.timingMode === 'background')
-    .sort((a, b) => a.card.questStep - b.card.questStep);
+    .sort((a, b) => engine.questStepNumber(a.card) - engine.questStepNumber(b.card));
   const cauldronHandoffViolations = cauldronWatches.slice(1).filter((entry, index) =>
     entry.instance.assignedPlayerIds.some((playerId) => cauldronWatches[index].instance.assignedPlayerIds.includes(playerId))
   ).length;

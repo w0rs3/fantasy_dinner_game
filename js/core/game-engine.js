@@ -4,7 +4,7 @@ import { CHAPTERS, EXPECTED_SESSION_MINUTES } from '../data/chapters.js';
 import { EVENT_DECKS, EVENT_STAGES, WATCH_CHALLENGES } from '../data/events.js';
 import { COURSE_INGREDIENT_RULES, INGREDIENTS, buildIngredientPlan } from '../data/ingredients.js';
 import { ROLES, getRole } from '../data/roles.js';
-import { TASK_DECKS } from '../data/tasks.js';
+import { TASK_DECKS, getPlayableQuestLines } from '../data/tasks.js';
 
 const clone = (value) => typeof structuredClone === 'function'
   ? structuredClone(value)
@@ -68,7 +68,8 @@ function freshTurn() {
     resolvedPreviousIngredientId: null,
     taskBriefingEndsTurn: true,
     activeAbilityUsed: false,
-    ingredientsAddedThisTurn: 0
+    ingredientsAddedThisTurn: 0,
+    tasksAssignedThisTurn: 0
   };
 }
 
@@ -214,9 +215,7 @@ export class GameEngine {
     );
     this.state.taskQueues = this.state.taskQueues.map((queue, chapterIndex) => {
       const playable = new Set(TASK_DECKS[chapterIndex].filter((card) => card.playable).map((card) => card.id));
-      const retained = queue.filter((taskId) => playable.has(taskId));
-      const missing = [...playable].filter((taskId) => !retained.includes(taskId));
-      return [...retained, ...missing];
+      return [...new Set(queue.filter((taskId) => playable.has(taskId)))];
     });
     this.state.ingredients.forEach((ingredient) => {
       ingredient.basketTaskId ??= null;
@@ -229,8 +228,16 @@ export class GameEngine {
     this.state.chapter.queuedChallenges ??= [];
     this.state.chapter.scheduledChallenges ??= [];
     this.state.chapter.courseStyle ??= this.state.chapterIndex === 1 ? null : 'not-required';
+    for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
+      this.reconcileTaskQueue(chapterIndex);
+    }
     this.state.activeChallenges ??= [];
     this.state.turnsElapsed ??= this.state.players.reduce((total, player) => total + (player.turns ?? 0), 0);
+    const validBusyAnchor = Number.isInteger(this.state.busyAfterPlayerIndex) &&
+      this.state.busyAfterPlayerIndex >= 0 && this.state.busyAfterPlayerIndex < this.state.players.length;
+    this.state.busyAfterPlayerIndex = this.state.turn.phase === 'crewBusy'
+      ? (validBusyAnchor ? this.state.busyAfterPlayerIndex : this.state.activePlayerIndex)
+      : null;
     this.state.players.forEach((player) => { player.ingredientBonuses ??= freshBonuses(); });
     if (this.state.bonuses && Object.values(this.state.bonuses).some((value) => Number(value) > 0)) {
       Object.entries(this.state.bonuses).forEach(([key, value]) => {
@@ -262,6 +269,9 @@ export class GameEngine {
       };
     });
 
+    const startingPlayer = randomInt(rngState, 0, players.length - 1);
+    rngState = startingPlayer.state;
+
     const ingredients = buildIngredientPlan(rngState, players.length);
     rngState = ingredients.state;
 
@@ -290,12 +300,10 @@ export class GameEngine {
 
     const taskQueues = [];
     for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
-      const ids = TASK_DECKS[chapterIndex]
-        .filter((taskCard) => taskCard.playable)
-        .map((taskCard) => taskCard.id);
-      // Task cards form prepared quest lines. Their catalog order is deliberate;
-      // prerequisites expose only the next physically sensible steps.
-      taskQueues.push(ids);
+      const starts = getPlayableQuestLines(chapterIndex).map((line) => line[0].id);
+      const shuffled = shuffle(starts, rngState);
+      rngState = shuffled.state;
+      taskQueues.push(shuffled.value);
     }
 
     const ingredientQueues = [];
@@ -325,7 +333,8 @@ export class GameEngine {
       rngState,
       expectedMinutes: EXPECTED_SESSION_MINUTES,
       players,
-      activePlayerIndex: 0,
+      activePlayerIndex: startingPlayer.value,
+      busyAfterPlayerIndex: null,
       chapterIndex: 0,
       chapter: chapterState(players.map((player) => player.id), 0),
       groups: [{
@@ -356,7 +365,10 @@ export class GameEngine {
     };
 
     const engine = new GameEngine(state);
-    engine.log('voyageStarted', { players: players.map((player) => player.name) }, now);
+    engine.log('voyageStarted', {
+      players: players.map((player) => player.name),
+      startingPlayerId: engine.activePlayer.id
+    }, now);
     engine.initializeChapter(now);
     return engine;
   }
@@ -499,7 +511,7 @@ export class GameEngine {
     });
     this.state.chapter.stage = 'tasks';
     const firstTask = this.assignTask({ group: this.activeGroup, now });
-    if (firstTask) this.briefTask(firstTask, false, now);
+    if (firstTask) this.briefTask(firstTask, true, now);
     this.log('chapterStageChanged', { chapterIndex: 0, stage: 'tasks', automatic: true }, now);
     return true;
   }
@@ -690,7 +702,64 @@ export class GameEngine {
   }
 
   taskAppliesToCourse(card) {
-    return !card?.courseStyles?.length || card.courseStyles.includes(this.state.chapter.courseStyle);
+    return this.taskAppliesToChapter(card, this.state.chapterIndex);
+  }
+
+  courseStyleForChapter(chapterIndex) {
+    if (chapterIndex === this.state.chapterIndex) return this.state.chapter.courseStyle;
+    if (chapterIndex === 1) return this.state.menu?.[chapterIndex]?.courseStyle ?? null;
+    return 'not-required';
+  }
+
+  taskAppliesToChapter(card, chapterIndex) {
+    const style = this.courseStyleForChapter(chapterIndex);
+    return !card?.courseStyles?.length || style == null || card.courseStyles.includes(style);
+  }
+
+  nextAvailableQuestCards(chapterIndex = this.state.chapterIndex) {
+    const instances = this.state.tasks.filter((instance) => instance.chapterIndex === chapterIndex);
+    const byTaskId = new Map(instances.map((instance) => [instance.taskId, instance]));
+    return getPlayableQuestLines(chapterIndex).flatMap((line) => {
+      const applicableLine = line.filter((card) => this.taskAppliesToChapter(card, chapterIndex));
+      for (const card of applicableLine) {
+        const instance = byTaskId.get(card.id);
+        if (!instance) return [card];
+        if (instance.status !== 'done') return [];
+      }
+      return [];
+    });
+  }
+
+  questStepNumber(card) {
+    if (!card) return 0;
+    const chapterIndex = CHAPTERS.findIndex((chapter) => chapter.id === card.chapterId);
+    const line = getPlayableQuestLines(chapterIndex).find((candidate) => candidate.some((entry) => entry.id === card.id));
+    const index = line?.findIndex((entry) => entry.id === card.id) ?? -1;
+    return index >= 0 ? index + 1 : card.questStep;
+  }
+
+  reconcileTaskQueue(chapterIndex = this.state.chapterIndex, randomizeMissing = false, now = Date.now()) {
+    const desiredCards = this.nextAvailableQuestCards(chapterIndex);
+    const desiredIds = new Set(desiredCards.map((card) => card.id));
+    const queue = [...new Set((this.state.taskQueues[chapterIndex] ?? []).filter((taskId) => desiredIds.has(taskId)))];
+    const missingCards = desiredCards.filter((card) => !queue.includes(card.id));
+    missingCards.forEach((card) => {
+      if (randomizeMissing) {
+        const insertion = randomInt(this.state.rngState, 0, Math.min(2, queue.length));
+        this.state.rngState = insertion.state;
+        queue.splice(insertion.value, 0, card.id);
+        this.log('questTaskUnlocked', {
+          chapterIndex,
+          taskId: card.id,
+          questId: card.questId,
+          position: insertion.value
+        }, now);
+      } else {
+        queue.push(card.id);
+      }
+    });
+    this.state.taskQueues[chapterIndex] = queue;
+    return missingCards;
   }
 
   openTasksForPlayer(playerId, excludingInstanceId = null) {
@@ -715,6 +784,31 @@ export class GameEngine {
       .filter((player) => player && this.isPlayerFreeForTask(player.id));
   }
 
+  taskAssignmentPriority(a, b) {
+    return (b.turns ?? 0) - (a.turns ?? 0) ||
+      (a.taskMarkers ?? 0) - (b.taskMarkers ?? 0) ||
+      a.id.localeCompare(b.id);
+  }
+
+  prioritizedFreePlayersForTask(group = this.activeGroup) {
+    return this.freePlayersForTask(group).sort((a, b) => {
+      if (a.id === this.activePlayer.id) return -1;
+      if (b.id === this.activePlayer.id) return 1;
+      return this.taskAssignmentPriority(a, b);
+    });
+  }
+
+  recommendedTaskPlayers(card, group = this.activeGroup, peopleMode = null) {
+    const requiredPeople = this.requiredPeopleForTask(card, peopleMode);
+    const free = this.freePlayersForTask(group);
+    const active = free.find((player) => player.id === this.activePlayer.id);
+    if (!active || free.length < requiredPeople) return [];
+    const helpers = free
+      .filter((player) => player.id !== active.id)
+      .sort((a, b) => this.taskAssignmentPriority(a, b));
+    return [active, ...helpers.slice(0, requiredPeople - 1)];
+  }
+
   requiredPeopleForTask(card, peopleMode = null) {
     if (!card) return Infinity;
     return peopleMode === 'team'
@@ -734,13 +828,13 @@ export class GameEngine {
     const previous = this.state.tasks
       .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
       .map((instance) => ({ instance, card: this.getTaskCard(instance) }))
-      .filter((entry) => entry.card?.questId === card.questId && entry.card.questStep < card.questStep)
-      .sort((a, b) => b.card.questStep - a.card.questStep)[0];
+      .filter((entry) => entry.card?.questId === card.questId && this.questStepNumber(entry.card) < this.questStepNumber(card))
+      .sort((a, b) => this.questStepNumber(b.card) - this.questStepNumber(a.card))[0];
     if (!previous || !group.playerIds.includes(this.activePlayer.id)) return true;
     return !previous.instance.assignedPlayerIds.includes(this.activePlayer.id);
   }
 
-  assignableTaskCards(peopleMode = null, group = this.activeGroup) {
+  taskCardCandidates(peopleMode = null, group = this.activeGroup) {
     const queue = this.state.taskQueues[this.state.chapterIndex] ?? [];
     const freeCount = this.freePlayersForTask(group).length;
     const usedBlueprints = new Set(this.state.tasks
@@ -757,15 +851,23 @@ export class GameEngine {
       .filter((card) => this.requiredPeopleForTask(card, peopleMode) <= freeCount);
   }
 
+  assignableTaskCards(peopleMode = null, group = this.activeGroup) {
+    if (!group.playerIds.includes(this.activePlayer.id) || !this.isPlayerFreeForTask(this.activePlayer.id) ||
+      this.state.turn.tasksAssignedThisTurn >= 1) return [];
+    return this.taskCardCandidates(peopleMode, group);
+  }
+
   hasUnassignedCourseTasks() {
-    return (this.state.taskQueues[this.state.chapterIndex] ?? [])
-      .map((taskId) => taskById(taskId))
-      .some((card) => card?.playable && this.taskAppliesToCourse(card));
+    const assignedTaskIds = new Set(this.state.tasks
+      .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
+      .map((instance) => instance.taskId));
+    return TASK_DECKS[this.state.chapterIndex]
+      .some((card) => card.playable && this.taskAppliesToCourse(card) && !assignedTaskIds.has(card.id));
   }
 
   currentEventStage() {
     if (this.state.chapter.stage === 'ingredients') return 'ingredients';
-    if (this.assignableTaskCards().length) return 'tasks';
+    if (this.taskCardCandidates().length) return 'tasks';
     return 'cooking';
   }
 
@@ -1432,8 +1534,9 @@ export class GameEngine {
       const chainDepth = this.state.turn.chainDepth;
       const activeAbilityUsed = this.state.turn.activeAbilityUsed;
       const ingredientsAddedThisTurn = this.state.turn.ingredientsAddedThisTurn;
+      const tasksAssignedThisTurn = this.state.turn.tasksAssignedThisTurn;
       this.log('eventReplacedByIngredient', { eventId }, now);
-      this.state.turn = { ...freshTurn(), chainDepth, activeAbilityUsed, ingredientsAddedThisTurn };
+      this.state.turn = { ...freshTurn(), chainDepth, activeAbilityUsed, ingredientsAddedThisTurn, tasksAssignedThisTurn };
       this.beginEvent(now);
       return true;
     }
@@ -1516,12 +1619,13 @@ export class GameEngine {
   chooseSoupStyle(style, now = Date.now()) {
     if (this.state.chapterIndex !== 1 || this.state.turn.phase !== 'courseDecision' || !['clear', 'cream'].includes(style)) return false;
     this.state.chapter.courseStyle = style;
-    const queue = this.state.taskQueues[this.state.chapterIndex];
+    this.state.menu[this.state.chapterIndex].courseStyle = style;
+    const queue = [...this.state.taskQueues[this.state.chapterIndex]];
     const removed = queue.filter((taskId) => {
       const card = taskById(taskId);
       return card?.courseStyles?.length && !card.courseStyles.includes(style);
     });
-    this.state.taskQueues[this.state.chapterIndex] = queue.filter((taskId) => !removed.includes(taskId));
+    this.reconcileTaskQueue(this.state.chapterIndex, true, now);
     this.state.turn = freshTurn();
     this.log('soupStyleChosen', { style, removedTaskIds: removed }, now);
     return true;
@@ -1591,13 +1695,15 @@ export class GameEngine {
     const card = this.assignableTaskCards(peopleMode, group)[0] ?? null;
     if (!card) return false;
     if (this.shouldOfferTaskAssigneeChoice(card, group, peopleMode)) {
+      const recommendedPlayerIds = this.recommendedTaskPlayers(card, group, peopleMode).map((player) => player.id);
       this.state.turn.pendingTaskAssignment = {
         taskId: card.id,
         groupId: group.id,
         coreKey,
         peopleMode,
         requiredPeople: this.requiredPeopleForTask(card, peopleMode),
-        selectedPlayerIds: [this.activePlayer.id]
+        selectedPlayerIds: recommendedPlayerIds,
+        recommendedPlayerIds
       };
       this.state.turn.phase = 'taskAssigneeChoice';
       this.log('taskAssigneeChoiceStarted', { taskId: card.id, groupId: group.id, requiredPeople: this.state.turn.pendingTaskAssignment.requiredPeople }, now);
@@ -1659,10 +1765,10 @@ export class GameEngine {
     if (!selected) return null;
 
     const minimumPeople = this.requiredPeopleForTask(selected, peopleMode);
-    const candidates = this.freePlayersForTask(group)
-      .sort((a, b) => a.taskMarkers - b.taskMarkers || a.id.localeCompare(b.id));
+    const candidates = this.freePlayersForTask(group);
     if (candidates.length < minimumPeople) return null;
     const activeMustParticipate = group.playerIds.includes(this.activePlayer.id) && candidates.some((candidate) => candidate.id === this.activePlayer.id);
+    if (!activeMustParticipate) return null;
     const selectedPlayerIds = playerIds == null ? null : [...new Set(playerIds)];
     if (selectedPlayerIds && (selectedPlayerIds.length !== minimumPeople ||
       selectedPlayerIds.some((playerId) => !candidates.some((candidate) => candidate.id === playerId)) ||
@@ -1671,11 +1777,7 @@ export class GameEngine {
       const queue = this.state.taskQueues[this.state.chapterIndex];
       queue.splice(queue.indexOf(selected.id), 1);
     }
-    const assignedPlayerIds = selectedPlayerIds ?? [
-      ...(activeMustParticipate ? [this.activePlayer.id] : []),
-      ...candidates.filter((player) => !activeMustParticipate || player.id !== this.activePlayer.id)
-        .slice(0, minimumPeople - (activeMustParticipate ? 1 : 0)).map((player) => player.id)
-    ];
+    const assignedPlayerIds = selectedPlayerIds ?? this.recommendedTaskPlayers(selected, group, peopleMode).map((player) => player.id);
     const instance = {
       instanceId: createId('task'),
       taskId: selected.id,
@@ -1701,6 +1803,7 @@ export class GameEngine {
     };
     instance.basketIngredientIds = this.reserveTaskBasket(selected, instance.instanceId);
     this.state.tasks.push(instance);
+    this.state.turn.tasksAssignedThisTurn += 1;
     this.log('taskAssigned', { taskId: selected.id, instanceId: instance.instanceId, assignedPlayerIds, basketIngredientIds: instance.basketIngredientIds }, now);
     this.updateChapterStage(now);
     return instance;
@@ -1730,8 +1833,18 @@ export class GameEngine {
       const previousIndex = this.state.activePlayerIndex;
       const nextIndex = this.nextFreePlayerIndex(previousIndex);
       this.state.turn = freshTurn();
-      if (nextIndex == null) this.state.turn.phase = 'crewBusy';
-      else this.state.activePlayerIndex = nextIndex;
+      if (nextIndex == null) {
+        this.state.busyAfterPlayerIndex = previousIndex;
+        this.state.turn.phase = 'crewBusy';
+        this.log('allPlayersBusy', { afterPlayerId: this.state.players[previousIndex].id, reason: 'openingTaskStarted' }, now);
+      } else {
+        this.state.busyAfterPlayerIndex = null;
+        this.state.activePlayerIndex = nextIndex;
+        this.log('turnPassedAfterTaskStarted', {
+          playerId: this.state.players[previousIndex].id,
+          nextPlayerId: this.activePlayer.id
+        }, now);
+      }
     }
     return true;
   }
@@ -1748,6 +1861,10 @@ export class GameEngine {
     const timerMinutes = instance.timingMode === 'background' ? instance.backgroundMinutes : instance.challengeMinutes;
     instance.challengeEndsAt = timerMinutes > 0 ? now + timerMinutes * 60_000 : null;
     instance.endAt = instance.challengeEndsAt;
+    if (instance.assignedPlayerIds.includes(this.activePlayer.id) && this.state.turn.chainPending) {
+      this.state.turn.chainPending = false;
+      this.log('eventChainStoppedForTask', { instanceId, taskId: card.id, playerId: this.activePlayer.id }, now);
+    }
     this.log('taskStarted', { instanceId, taskId: card.id, timingMode: instance.timingMode, timerMinutes }, now);
     return true;
   }
@@ -1798,6 +1915,7 @@ export class GameEngine {
     });
     instance.coinDelta = this.addCoins(coinDelta, 'task', now);
     this.log('taskCompleted', { instanceId, taskId: card.id, assignedPlayerIds: instance.assignedPlayerIds, coinDelta: instance.coinDelta, challengeCoinValue: coinDelta, challengeResult }, now);
+    this.reconcileTaskQueue(this.state.chapterIndex, true, now);
     if (completesCurrentBriefing) {
       this.state.turn.resolvedTaskId = instanceId;
       this.state.turn.assignedTaskId = null;
@@ -1809,7 +1927,7 @@ export class GameEngine {
       }
     }
     this.evaluateChapter(now);
-    this.resumeTurnIfCrewWasBusy(now, instance.assignedPlayerIds);
+    this.resumeTurnIfCrewWasBusy(now);
     return true;
   }
 
@@ -1826,6 +1944,7 @@ export class GameEngine {
     instance.coinDelta = null;
     instance.challengeCoinValue = null;
     instance.challengeResult = null;
+    this.reconcileTaskQueue(this.state.chapterIndex);
     this.log('taskCompletionUndone', { instanceId, taskId: instance.taskId }, now);
     this.evaluateChapter(now);
     return true;
@@ -1833,7 +1952,14 @@ export class GameEngine {
 
   canUndoTaskCompletion(instanceId) {
     const instance = this.state.tasks.find((taskInstance) => taskInstance.instanceId === instanceId);
+    const card = instance ? taskById(instance.taskId) : null;
+    const laterQuestStepExists = card && this.state.tasks.some((candidate) => {
+      if (candidate.chapterIndex !== instance.chapterIndex || candidate.instanceId === instance.instanceId) return false;
+      const candidateCard = taskById(candidate.taskId);
+      return candidateCard?.questId === card.questId && this.questStepNumber(candidateCard) > this.questStepNumber(card);
+    });
     return Boolean(instance && instance.status === 'done' && instance.chapterIndex === this.state.chapterIndex && !this.state.chapter.served &&
+      !laterQuestStepExists &&
       instance.assignedPlayerIds.every((playerId) => this.isPlayerFreeForTask(playerId, instanceId)));
   }
 
@@ -1845,16 +1971,22 @@ export class GameEngine {
     return null;
   }
 
-  resumeTurnIfCrewWasBusy(now = Date.now(), preferredPlayerIds = []) {
+  resumeTurnIfCrewWasBusy(now = Date.now()) {
     if (this.state.turn.phase !== 'crewBusy') return false;
-    const preferred = preferredPlayerIds
-      .map((playerId) => this.state.players.findIndex((player) => player.id === playerId))
-      .find((index) => index >= 0 && this.isPlayerFreeForTask(this.state.players[index].id));
-    const nextIndex = preferred ?? this.nextFreePlayerIndex(this.state.activePlayerIndex);
+    const anchorIndex = Number.isInteger(this.state.busyAfterPlayerIndex)
+      ? this.state.busyAfterPlayerIndex
+      : this.state.activePlayerIndex;
+    const nextIndex = this.nextFreePlayerIndex(anchorIndex);
     if (nextIndex == null) return false;
     this.state.activePlayerIndex = nextIndex;
+    this.state.busyAfterPlayerIndex = null;
     this.state.turn = freshTurn();
-    this.log('crewTurnResumed', { playerId: this.activePlayer.id }, now);
+    this.resolveActiveChallengesAfterTurn(null, this.activePlayer.id, now);
+    this.log('crewTurnResumed', {
+      afterPlayerId: this.state.players[anchorIndex].id,
+      playerId: this.activePlayer.id
+    }, now);
+    this.evaluateChapter(now);
     return true;
   }
 
@@ -1916,12 +2048,13 @@ export class GameEngine {
 
   endTurn(now = Date.now()) {
     if (this.state.turn.phase !== 'resolved') return false;
-    if (this.state.turn.chainPending) {
+    if (this.state.turn.chainPending && this.isPlayerFreeForTask(this.activePlayer.id)) {
       this.state.turn = {
         ...freshTurn(),
         chainDepth: this.state.turn.chainDepth + 1,
         activeAbilityUsed: this.state.turn.activeAbilityUsed,
-        ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+        ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
+        tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
       };
       this.log('eventChainContinued', { playerId: this.activePlayer.id }, now);
       return 'chain';
@@ -1945,12 +2078,14 @@ export class GameEngine {
         if (!this.isPlayerFreeForTask(this.state.players[index].id)) skippedPlayerIds.push(this.state.players[index].id);
       }
       this.state.activePlayerIndex = nextIndex;
+      this.state.busyAfterPlayerIndex = null;
       if (nextIndex <= previousIndex) this.state.chapter.round += 1;
       this.state.turn = freshTurn();
       this.resolveActiveChallengesAfterTurn(player.id, this.activePlayer.id, now);
       skippedPlayerIds.forEach((playerId) => this.log('turnSkippedForTask', { playerId }, now));
       this.log('turnEnded', { playerId: player.id, nextPlayerId: this.activePlayer.id, skippedPlayerIds }, now);
     } else {
+      this.state.busyAfterPlayerIndex = previousIndex;
       this.state.turn = { ...freshTurn(), phase: 'crewBusy' };
       this.resolveActiveChallengesAfterTurn(player.id, null, now);
       this.log('allPlayersBusy', { afterPlayerId: player.id }, now);
@@ -2111,7 +2246,8 @@ export class GameEngine {
         this.state.turn = {
           ...freshTurn(),
           chainDepth: this.state.turn.chainDepth,
-          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
+          tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
         };
         this.beginEvent(now);
         break;
@@ -2125,7 +2261,8 @@ export class GameEngine {
         this.state.turn = {
           ...freshTurn(),
           chainDepth: this.state.turn.chainDepth,
-          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
+          tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
         };
         this.beginEvent(now);
         break;

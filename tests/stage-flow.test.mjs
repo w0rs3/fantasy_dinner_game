@@ -13,6 +13,8 @@ function create(seed = 71) {
 }
 
 function beginSecondCourse(engine) {
+  const openingTask = engine.state.tasks.find((task) => ['queued', 'active', 'ready'].includes(task.status));
+  if (openingTask) assert.equal(engine.completeTask(openingTask.instanceId, now + 500), true);
   engine.state.turn.phase = 'eating';
   assert.equal(engine.startNextChapter(now + 1_000), true);
   assert.equal(engine.state.chapterIndex, 1);
@@ -36,21 +38,26 @@ test('Tapas starts with fixed ingredients and one concrete automatic task instea
   assert.ok(task.assignedPlayerIds.includes(engine.activePlayer.id));
 
   const html = renderGame(engine, 'de');
-  assert.match(html, /Speckdatteln/);
+  assert.match(html, new RegExp(card.title.de));
   assert.match(html, /Relevante Zutaten dieses Gangs/);
   assert.match(html, /Aufgabe übernehmen/);
   assert.doesNotMatch(html, /Der Plan des Hafenmeisters/);
 
   const activePlayer = engine.activePlayer.id;
   assert.equal(engine.acceptTaskBriefing(now + 2_000), true);
-  assert.equal(engine.state.turn.phase, 'draw');
-  assert.notEqual(engine.activePlayer.id, activePlayer, 'the busy opening-task owner is skipped');
+  assert.equal(engine.state.turn.phase, 'resolved');
+  assert.equal(engine.activePlayer.id, activePlayer, 'the first assignment remains the active player’s only action');
+  assert.equal(engine.state.tasks.length, 1, 'the first turn creates exactly one task');
   assert.equal(task.status, 'active');
+  assert.equal(engine.endTurn(now + 2_100), true);
+  assert.equal(engine.state.turn.phase, 'draw');
+  assert.notEqual(engine.activePlayer.id, activePlayer, 'handover then skips the busy opening-task owner');
 });
 
 test('separate state decks never expose an impossible ingredient or task action', () => {
   const engine = create(72);
   engine.acceptTaskBriefing(now + 1_000);
+  engine.endTurn(now + 1_500);
   const taskEvent = engine.beginEvent(now + 2_000);
   assert.equal(taskEvent.stage, 'tasks');
   assert.ok((taskEvent.options ?? taskEvent.outcomes).every((action) => engine.actionAvailable(action)));
@@ -88,6 +95,8 @@ test('fun events can be drawn and resolved during ingredient rounds without chan
 
 test('fun events can also be drawn during task rounds and dice outcomes stay distinct', () => {
   const engine = create(723);
+  assert.equal(engine.acceptTaskBriefing(now + 500), true);
+  assert.equal(engine.endTurn(now + 1_000), true);
   engine.state.chapter.stage = 'tasks';
   engine.state.turn.phase = 'draw';
   engine.activeGroup.locationIndex = 1;

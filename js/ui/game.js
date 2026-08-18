@@ -485,12 +485,14 @@ function renderTaskAssigneeChoice(engine, language) {
   const group = pending ? engine.state.groups.find((candidate) => candidate.id === pending.groupId) : null;
   if (!pending || !card || !group) return renderDrawCard(engine, language);
   const selected = new Set(pending.selectedPlayerIds ?? []);
-  const freePlayers = engine.freePlayersForTask(group);
+  const recommended = new Set(pending.recommendedPlayerIds ?? []);
+  const freePlayers = engine.prioritizedFreePlayersForTask(group);
   const choices = freePlayers.map((player) => {
     const role = getRole(player.roleId);
     const isSelected = selected.has(player.id);
+    const isRecommended = recommended.has(player.id);
     return `<button type="button" class="choice-button task-assignee-option" data-action="toggle-task-assignee" data-player-id="${escapeHtml(player.id)}" data-selected="${isSelected}" aria-pressed="${isSelected}">
-      <strong>${escapeHtml(player.name)}</strong><small>${role.icon} ${t(role.name, language)}</small>
+      <strong>${escapeHtml(player.name)}</strong><small>${role.icon} ${t(role.name, language)} · ${player.turns} ${language === 'de' ? 'Züge' : 'turns'}${isRecommended ? ` · ${language === 'de' ? 'fairer Vorschlag' : 'fair suggestion'}` : ''}</small>
     </button>`;
   }).join('');
   const complete = selected.size === pending.requiredPeople;
@@ -504,7 +506,7 @@ function renderTaskAssigneeChoice(engine, language) {
         ? `${engine.activePlayer.name} wählt genau ${pending.requiredPeople} ${pending.requiredPeople === 1 ? 'freie Person' : 'freie Personen'}. Die Crew darf beraten.`
         : `${engine.activePlayer.name} chooses exactly ${pending.requiredPeople} free ${pending.requiredPeople === 1 ? 'person' : 'people'}. The crew may discuss.`}</strong></div>
       <div class="choice-list task-assignee-choices">${choices}</div>
-      <div class="next-action"><strong>${language === 'de' ? `${selected.size}/${pending.requiredPeople} ausgewählt` : `${selected.size}/${pending.requiredPeople} selected`}</strong><span>${language === 'de' ? 'Belegte Personen werden nicht angeboten.' : 'Busy players are not offered.'}</span></div>
+      <div class="next-action"><strong>${language === 'de' ? `${selected.size}/${pending.requiredPeople} ausgewählt` : `${selected.size}/${pending.requiredPeople} selected`}</strong><span>${language === 'de' ? 'Vorbelegt sind freie Personen mit besonders vielen bisherigen Zügen. Die Auswahl darf geändert werden.' : 'Free players with the most completed turns are preselected. You may change the choice.'}</span></div>
       <button class="primary-button" type="button" data-action="confirm-task-assignees" ${complete ? '' : 'disabled'}>${language === 'de' ? 'Besetzung bestätigen' : 'Confirm crew'}</button>
     </article>`;
 }
@@ -521,11 +523,11 @@ function renderTaskBriefing(engine, language) {
   const timerMinutes = background ? card.backgroundMinutes : card.challengeMinutes;
   const after = engine.state.turn.taskBriefingEndsTurn
     ? (language === 'de' ? 'Danach wird das Tablet weitergegeben; die Aufgabe läuft unabhängig von den nächsten Zügen weiter.' : 'Then pass the tablet; the task continues independently of later turns.')
-    : (language === 'de' ? 'Danach zieht dieselbe aktive Person die erste Auftrags-Ereigniskarte.' : 'Then the same active player draws the first work-order event.');
+    : (language === 'de' ? 'Danach wird sichtbar an die nächste freie Person in Zugreihenfolge übergeben. Wer diese Aufgabe übernimmt, wird übersprungen.' : 'Then the tablet visibly passes to the next free player in turn order. Anyone taking this task is skipped.');
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
-      <p class="eyebrow">${t(card.questName, language)} · ${language === 'de' ? 'Questschritt' : 'quest step'} ${card.questStep}</p>
+      <p class="eyebrow">${t(card.questName, language)} · ${language === 'de' ? 'Questschritt' : 'quest step'} ${engine.questStepNumber(card)}</p>
       <h2>${t(card.title, language)}</h2>
       ${event ? `<p class="card-story">${t(event.story, language)}</p>` : `<p class="card-story">${language === 'de' ? 'Die Tapas-Zutaten stehen bereits fest. Deshalb beginnt die Reise direkt mit einem echten Küchenauftrag.' : 'The tapas ingredients are already fixed, so the voyage begins with a real kitchen job.'}</p>`}
       <div class="task-briefing">
@@ -551,10 +553,17 @@ function renderResolvedCard(engine, language) {
   const event = engine.currentEvent;
   const code = engine.state.turn.outcomeCode;
   const chain = engine.state.turn.chainPending;
-  const nextPlayer = engine.state.players[(engine.state.activePlayerIndex + 1) % engine.state.players.length];
+  const nextPlayerIndex = engine.nextFreePlayerIndex(engine.state.activePlayerIndex);
+  const nextPlayer = nextPlayerIndex == null ? null : engine.state.players[nextPlayerIndex];
   const handoverText = chain
     ? (language === 'de' ? 'Die Ereigniskette geht für dieselbe Person weiter.' : 'The event chain continues for the same player.')
-    : `${tx('handTablet', language)} ${escapeHtml(nextPlayer.name)}.`;
+    : nextPlayer
+      ? `${tx('handTablet', language)} ${escapeHtml(nextPlayer.name)}.${nextPlayerIndex !== (engine.state.activePlayerIndex + 1) % engine.state.players.length
+        ? ` ${language === 'de' ? 'Beschäftigte Personen werden dabei übersprungen.' : 'Busy players are skipped.'}`
+        : ''}`
+      : (language === 'de'
+        ? 'Danach pausiert die Zugfolge, bis eine Aufgabe erledigt und die nächste freie Person in Reihenfolge übergeben wurde.'
+        : 'Turn order then pauses until a task is completed and the next free player in sequence receives the handover.');
   return `
     <article class="game-card">
       <p class="eyebrow">${tx('outcome', language)}</p>
@@ -563,7 +572,9 @@ function renderResolvedCard(engine, language) {
         ? (language === 'de' ? 'Der Effekt wurde ignoriert.' : 'The effect was ignored.')
         : eventActionText(engine, code, language)}</strong></div>
       <p>${handoverText}</p>
-      <button class="primary-button" type="button" data-action="end-turn">${chain ? (language === 'de' ? 'Nächste Karte der Kette' : 'Next card in the chain') : tx('handOver', language)}</button>
+      <button class="primary-button" type="button" data-action="end-turn">${chain
+        ? (language === 'de' ? 'Nächste Karte der Kette' : 'Next card in the chain')
+        : nextPlayer ? tx('handOver', language) : (language === 'de' ? 'Zug beenden & warten' : 'End turn & wait')}</button>
     </article>`;
 }
 
@@ -660,7 +671,10 @@ function renderCurrentCard(engine, language) {
     case 'resolved': return renderResolvedCard(engine, language);
     case 'watch': return renderWatchCard(engine, language);
     case 'chapterReady': return renderChapterReady(engine, language);
-    case 'crewBusy': return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Alle Hände in der Kombüse' : 'All hands in the galley'}</p><h2>${language === 'de' ? 'Alle Personen haben gerade eine laufende Aufgabe' : 'Every player currently has a running task'}</h2><p class="card-story">${language === 'de' ? 'Es wird kein Zug vergeben. Öffnet die Aufgabenliste und markiert einen fertigen Schritt als erledigt; dann wird die Reise automatisch mit einer freien Person fortgesetzt.' : 'No turn is assigned. Open the task list and mark a finished step complete; the voyage then resumes automatically with a free player.'}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
+    case 'crewBusy': {
+      const anchor = engine.state.players[engine.state.busyAfterPlayerIndex ?? engine.state.activePlayerIndex];
+      return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Alle Hände in der Kombüse' : 'All hands in the galley'}</p><h2>${language === 'de' ? 'Alle Personen haben gerade eine laufende Aufgabe' : 'Every player currently has a running task'}</h2><p class="card-story">${language === 'de' ? `Es wird kein Zug vergeben. Die Reihenfolge ist hinter ${escapeHtml(anchor.name)} gespeichert. Sobald eine Aufgabe erledigt wird, erhält die nächste freie Person in dieser Reihenfolge eine sichtbare Übergabe.` : `No turn is assigned. The order is saved after ${escapeHtml(anchor.name)}. As soon as a task is completed, the next free player in that order receives a visible handover.`}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
+    }
     default: return renderDrawCard(engine, language);
   }
 }

@@ -7,6 +7,7 @@ import { INGREDIENTS, INGREDIENT_EFFECT_TEXT } from '../js/data/ingredients.js';
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Eva', 'Finn'];
 const createEngine = (seed = 801) => {
   const engine = GameEngine.create({ names, title: 'Ingredient effects', defaultLanguage: 'de', seed }, 1_800_000_000_000);
+  engine.completeTask(engine.state.tasks[0].instanceId, 1_800_000_000_050);
   engine.state.turn.phase = 'eating';
   engine.startNextChapter(1_800_000_000_100);
   engine.beginEvent(1_800_000_000_110);
@@ -155,7 +156,7 @@ test('draw, character-choice, deck-swap, repeat, and event-replacement effects c
 
 test('the Cook can ignore one ingredient effect per course and the Alchemist passive is separate from active uses', () => {
   const cookEngine = createEngine(900);
-  cookEngine.state.players[0].roleId = 'cook';
+  cookEngine.activePlayer.roleId = 'cook';
   assert.equal(cookEngine.prepareIngredientChoice('meat', 'ability', { all: true }), true);
   assert.ok(cookEngine.state.turn.pendingIngredientIds.includes('beef'));
   assert.equal(cookEngine.chooseIngredient('beef', Date.now(), true), true);
@@ -163,7 +164,7 @@ test('the Cook can ignore one ingredient effect per course and the Alchemist pas
   assert.equal(cookEngine.canCookIgnoreIngredientEffect(), false);
 
   const alchemistEngine = createEngine(901);
-  alchemistEngine.state.players[0].roleId = 'alchemist';
+  alchemistEngine.activePlayer.roleId = 'alchemist';
   const first = alchemistEngine.ingredientCandidates()[0];
   const alternative = alchemistEngine.ingredientCandidates(first.category)[1];
   assert.ok(alternative, 'test requires an ingredient alternative');
@@ -183,7 +184,7 @@ test('category-role and Treasurer passives follow the character-card wording', (
   ];
   for (const [roleId, ingredientId] of cases) {
     const engine = createEngine(920 + cases.findIndex((entry) => entry[0] === roleId));
-    engine.state.players[0].roleId = roleId;
+    engine.activePlayer.roleId = roleId;
     if (roleId === 'gatherer') {
       completeSoupCompositionForTest(engine);
       engine.state.turn.phase = 'eating';
@@ -197,12 +198,12 @@ test('category-role and Treasurer passives follow the character-card wording', (
   }
 
   const merchant = createEngine(930);
-  merchant.state.players[0].roleId = 'merchant';
+  merchant.activePlayer.roleId = 'merchant';
   assert.equal(merchant.prepareIngredientChoice(), true);
   assert.equal(merchant.state.turn.pendingIngredientIds.length, 2);
 
   const treasurer = createEngine(931);
-  treasurer.state.players[0].roleId = 'treasurer';
+  treasurer.activePlayer.roleId = 'treasurer';
   completeSoupCompositionForTest(treasurer);
   treasurer.state.turn.phase = 'eating';
   assert.equal(treasurer.startNextChapter(), true);
@@ -239,7 +240,7 @@ test('cocktail spirits remain independent optional choices in the global pool', 
 
 test('active abilities can be used at most once before the tablet is handed over', () => {
   const engine = createEngine(960);
-  engine.state.players[0].roleId = 'merchant';
+  engine.activePlayer.roleId = 'merchant';
   assert.equal(engine.useActiveAbility(), true);
   assert.equal(engine.state.turn.activeAbilityUsed, true);
   engine.state.turn.phase = 'draw';

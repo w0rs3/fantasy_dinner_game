@@ -1176,6 +1176,34 @@ function buildTaskDeck(chapterIndex) {
 
 const TASK_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildTaskDeck(index)));
 
+function getPlayableQuestLines(chapterIndex) {
+  const cards = TASK_DECKS[chapterIndex].filter((card) => card.playable);
+  const cardByBlueprint = new Map(cards.map((card) => [card.blueprintIndex, card]));
+  const dependencies = new Map(cards.map((card) => [card.id, new Set(
+    [...(card.prerequisites ?? []), ...(card.alternativePrerequisites ?? [])]
+      .map((requirement) => cardByBlueprint.get(requirement.requiredBlueprintIndex)?.id)
+      .filter(Boolean)
+  )]));
+  const ordered = [];
+  const remaining = new Set(cards.map((card) => card.id));
+  while (remaining.size) {
+    const next = cards
+      .filter((card) => remaining.has(card.id) && [...dependencies.get(card.id)].every((taskId) => !remaining.has(taskId)))
+      .sort((a, b) => a.blueprintIndex - b.blueprintIndex)[0];
+    // The workflow is expected to be acyclic. Keeping a deterministic fallback
+    // makes an older saved catalogue recoverable if custom content violates it.
+    const selected = next ?? cards.filter((card) => remaining.has(card.id)).sort((a, b) => a.blueprintIndex - b.blueprintIndex)[0];
+    ordered.push(selected);
+    remaining.delete(selected.id);
+  }
+  const lines = new Map();
+  ordered.forEach((card) => {
+      if (!lines.has(card.questId)) lines.set(card.questId, []);
+      lines.get(card.questId).push(card);
+  });
+  return [...lines.values()];
+}
+
 function getCoreTask(chapterIndex, locationIndex) {
   return TASK_DECKS[chapterIndex].find((taskCard) => taskCard.coreLocationIndex === locationIndex);
 }
@@ -1565,7 +1593,8 @@ function freshTurn() {
     resolvedPreviousIngredientId: null,
     taskBriefingEndsTurn: true,
     activeAbilityUsed: false,
-    ingredientsAddedThisTurn: 0
+    ingredientsAddedThisTurn: 0,
+    tasksAssignedThisTurn: 0
   };
 }
 
@@ -1711,9 +1740,7 @@ class GameEngine {
     );
     this.state.taskQueues = this.state.taskQueues.map((queue, chapterIndex) => {
       const playable = new Set(TASK_DECKS[chapterIndex].filter((card) => card.playable).map((card) => card.id));
-      const retained = queue.filter((taskId) => playable.has(taskId));
-      const missing = [...playable].filter((taskId) => !retained.includes(taskId));
-      return [...retained, ...missing];
+      return [...new Set(queue.filter((taskId) => playable.has(taskId)))];
     });
     this.state.ingredients.forEach((ingredient) => {
       ingredient.basketTaskId ??= null;
@@ -1726,8 +1753,16 @@ class GameEngine {
     this.state.chapter.queuedChallenges ??= [];
     this.state.chapter.scheduledChallenges ??= [];
     this.state.chapter.courseStyle ??= this.state.chapterIndex === 1 ? null : 'not-required';
+    for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
+      this.reconcileTaskQueue(chapterIndex);
+    }
     this.state.activeChallenges ??= [];
     this.state.turnsElapsed ??= this.state.players.reduce((total, player) => total + (player.turns ?? 0), 0);
+    const validBusyAnchor = Number.isInteger(this.state.busyAfterPlayerIndex) &&
+      this.state.busyAfterPlayerIndex >= 0 && this.state.busyAfterPlayerIndex < this.state.players.length;
+    this.state.busyAfterPlayerIndex = this.state.turn.phase === 'crewBusy'
+      ? (validBusyAnchor ? this.state.busyAfterPlayerIndex : this.state.activePlayerIndex)
+      : null;
     this.state.players.forEach((player) => { player.ingredientBonuses ??= freshBonuses(); });
     if (this.state.bonuses && Object.values(this.state.bonuses).some((value) => Number(value) > 0)) {
       Object.entries(this.state.bonuses).forEach(([key, value]) => {
@@ -1759,6 +1794,9 @@ class GameEngine {
       };
     });
 
+    const startingPlayer = randomInt(rngState, 0, players.length - 1);
+    rngState = startingPlayer.state;
+
     const ingredients = buildIngredientPlan(rngState, players.length);
     rngState = ingredients.state;
 
@@ -1787,12 +1825,10 @@ class GameEngine {
 
     const taskQueues = [];
     for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
-      const ids = TASK_DECKS[chapterIndex]
-        .filter((taskCard) => taskCard.playable)
-        .map((taskCard) => taskCard.id);
-      // Task cards form prepared quest lines. Their catalog order is deliberate;
-      // prerequisites expose only the next physically sensible steps.
-      taskQueues.push(ids);
+      const starts = getPlayableQuestLines(chapterIndex).map((line) => line[0].id);
+      const shuffled = shuffle(starts, rngState);
+      rngState = shuffled.state;
+      taskQueues.push(shuffled.value);
     }
 
     const ingredientQueues = [];
@@ -1822,7 +1858,8 @@ class GameEngine {
       rngState,
       expectedMinutes: EXPECTED_SESSION_MINUTES,
       players,
-      activePlayerIndex: 0,
+      activePlayerIndex: startingPlayer.value,
+      busyAfterPlayerIndex: null,
       chapterIndex: 0,
       chapter: chapterState(players.map((player) => player.id), 0),
       groups: [{
@@ -1853,7 +1890,10 @@ class GameEngine {
     };
 
     const engine = new GameEngine(state);
-    engine.log('voyageStarted', { players: players.map((player) => player.name) }, now);
+    engine.log('voyageStarted', {
+      players: players.map((player) => player.name),
+      startingPlayerId: engine.activePlayer.id
+    }, now);
     engine.initializeChapter(now);
     return engine;
   }
@@ -1996,7 +2036,7 @@ class GameEngine {
     });
     this.state.chapter.stage = 'tasks';
     const firstTask = this.assignTask({ group: this.activeGroup, now });
-    if (firstTask) this.briefTask(firstTask, false, now);
+    if (firstTask) this.briefTask(firstTask, true, now);
     this.log('chapterStageChanged', { chapterIndex: 0, stage: 'tasks', automatic: true }, now);
     return true;
   }
@@ -2187,7 +2227,64 @@ class GameEngine {
   }
 
   taskAppliesToCourse(card) {
-    return !card?.courseStyles?.length || card.courseStyles.includes(this.state.chapter.courseStyle);
+    return this.taskAppliesToChapter(card, this.state.chapterIndex);
+  }
+
+  courseStyleForChapter(chapterIndex) {
+    if (chapterIndex === this.state.chapterIndex) return this.state.chapter.courseStyle;
+    if (chapterIndex === 1) return this.state.menu?.[chapterIndex]?.courseStyle ?? null;
+    return 'not-required';
+  }
+
+  taskAppliesToChapter(card, chapterIndex) {
+    const style = this.courseStyleForChapter(chapterIndex);
+    return !card?.courseStyles?.length || style == null || card.courseStyles.includes(style);
+  }
+
+  nextAvailableQuestCards(chapterIndex = this.state.chapterIndex) {
+    const instances = this.state.tasks.filter((instance) => instance.chapterIndex === chapterIndex);
+    const byTaskId = new Map(instances.map((instance) => [instance.taskId, instance]));
+    return getPlayableQuestLines(chapterIndex).flatMap((line) => {
+      const applicableLine = line.filter((card) => this.taskAppliesToChapter(card, chapterIndex));
+      for (const card of applicableLine) {
+        const instance = byTaskId.get(card.id);
+        if (!instance) return [card];
+        if (instance.status !== 'done') return [];
+      }
+      return [];
+    });
+  }
+
+  questStepNumber(card) {
+    if (!card) return 0;
+    const chapterIndex = CHAPTERS.findIndex((chapter) => chapter.id === card.chapterId);
+    const line = getPlayableQuestLines(chapterIndex).find((candidate) => candidate.some((entry) => entry.id === card.id));
+    const index = line?.findIndex((entry) => entry.id === card.id) ?? -1;
+    return index >= 0 ? index + 1 : card.questStep;
+  }
+
+  reconcileTaskQueue(chapterIndex = this.state.chapterIndex, randomizeMissing = false, now = Date.now()) {
+    const desiredCards = this.nextAvailableQuestCards(chapterIndex);
+    const desiredIds = new Set(desiredCards.map((card) => card.id));
+    const queue = [...new Set((this.state.taskQueues[chapterIndex] ?? []).filter((taskId) => desiredIds.has(taskId)))];
+    const missingCards = desiredCards.filter((card) => !queue.includes(card.id));
+    missingCards.forEach((card) => {
+      if (randomizeMissing) {
+        const insertion = randomInt(this.state.rngState, 0, Math.min(2, queue.length));
+        this.state.rngState = insertion.state;
+        queue.splice(insertion.value, 0, card.id);
+        this.log('questTaskUnlocked', {
+          chapterIndex,
+          taskId: card.id,
+          questId: card.questId,
+          position: insertion.value
+        }, now);
+      } else {
+        queue.push(card.id);
+      }
+    });
+    this.state.taskQueues[chapterIndex] = queue;
+    return missingCards;
   }
 
   openTasksForPlayer(playerId, excludingInstanceId = null) {
@@ -2212,6 +2309,31 @@ class GameEngine {
       .filter((player) => player && this.isPlayerFreeForTask(player.id));
   }
 
+  taskAssignmentPriority(a, b) {
+    return (b.turns ?? 0) - (a.turns ?? 0) ||
+      (a.taskMarkers ?? 0) - (b.taskMarkers ?? 0) ||
+      a.id.localeCompare(b.id);
+  }
+
+  prioritizedFreePlayersForTask(group = this.activeGroup) {
+    return this.freePlayersForTask(group).sort((a, b) => {
+      if (a.id === this.activePlayer.id) return -1;
+      if (b.id === this.activePlayer.id) return 1;
+      return this.taskAssignmentPriority(a, b);
+    });
+  }
+
+  recommendedTaskPlayers(card, group = this.activeGroup, peopleMode = null) {
+    const requiredPeople = this.requiredPeopleForTask(card, peopleMode);
+    const free = this.freePlayersForTask(group);
+    const active = free.find((player) => player.id === this.activePlayer.id);
+    if (!active || free.length < requiredPeople) return [];
+    const helpers = free
+      .filter((player) => player.id !== active.id)
+      .sort((a, b) => this.taskAssignmentPriority(a, b));
+    return [active, ...helpers.slice(0, requiredPeople - 1)];
+  }
+
   requiredPeopleForTask(card, peopleMode = null) {
     if (!card) return Infinity;
     return peopleMode === 'team'
@@ -2231,13 +2353,13 @@ class GameEngine {
     const previous = this.state.tasks
       .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
       .map((instance) => ({ instance, card: this.getTaskCard(instance) }))
-      .filter((entry) => entry.card?.questId === card.questId && entry.card.questStep < card.questStep)
-      .sort((a, b) => b.card.questStep - a.card.questStep)[0];
+      .filter((entry) => entry.card?.questId === card.questId && this.questStepNumber(entry.card) < this.questStepNumber(card))
+      .sort((a, b) => this.questStepNumber(b.card) - this.questStepNumber(a.card))[0];
     if (!previous || !group.playerIds.includes(this.activePlayer.id)) return true;
     return !previous.instance.assignedPlayerIds.includes(this.activePlayer.id);
   }
 
-  assignableTaskCards(peopleMode = null, group = this.activeGroup) {
+  taskCardCandidates(peopleMode = null, group = this.activeGroup) {
     const queue = this.state.taskQueues[this.state.chapterIndex] ?? [];
     const freeCount = this.freePlayersForTask(group).length;
     const usedBlueprints = new Set(this.state.tasks
@@ -2254,15 +2376,23 @@ class GameEngine {
       .filter((card) => this.requiredPeopleForTask(card, peopleMode) <= freeCount);
   }
 
+  assignableTaskCards(peopleMode = null, group = this.activeGroup) {
+    if (!group.playerIds.includes(this.activePlayer.id) || !this.isPlayerFreeForTask(this.activePlayer.id) ||
+      this.state.turn.tasksAssignedThisTurn >= 1) return [];
+    return this.taskCardCandidates(peopleMode, group);
+  }
+
   hasUnassignedCourseTasks() {
-    return (this.state.taskQueues[this.state.chapterIndex] ?? [])
-      .map((taskId) => taskById(taskId))
-      .some((card) => card?.playable && this.taskAppliesToCourse(card));
+    const assignedTaskIds = new Set(this.state.tasks
+      .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
+      .map((instance) => instance.taskId));
+    return TASK_DECKS[this.state.chapterIndex]
+      .some((card) => card.playable && this.taskAppliesToCourse(card) && !assignedTaskIds.has(card.id));
   }
 
   currentEventStage() {
     if (this.state.chapter.stage === 'ingredients') return 'ingredients';
-    if (this.assignableTaskCards().length) return 'tasks';
+    if (this.taskCardCandidates().length) return 'tasks';
     return 'cooking';
   }
 
@@ -2929,8 +3059,9 @@ class GameEngine {
       const chainDepth = this.state.turn.chainDepth;
       const activeAbilityUsed = this.state.turn.activeAbilityUsed;
       const ingredientsAddedThisTurn = this.state.turn.ingredientsAddedThisTurn;
+      const tasksAssignedThisTurn = this.state.turn.tasksAssignedThisTurn;
       this.log('eventReplacedByIngredient', { eventId }, now);
-      this.state.turn = { ...freshTurn(), chainDepth, activeAbilityUsed, ingredientsAddedThisTurn };
+      this.state.turn = { ...freshTurn(), chainDepth, activeAbilityUsed, ingredientsAddedThisTurn, tasksAssignedThisTurn };
       this.beginEvent(now);
       return true;
     }
@@ -3013,12 +3144,13 @@ class GameEngine {
   chooseSoupStyle(style, now = Date.now()) {
     if (this.state.chapterIndex !== 1 || this.state.turn.phase !== 'courseDecision' || !['clear', 'cream'].includes(style)) return false;
     this.state.chapter.courseStyle = style;
-    const queue = this.state.taskQueues[this.state.chapterIndex];
+    this.state.menu[this.state.chapterIndex].courseStyle = style;
+    const queue = [...this.state.taskQueues[this.state.chapterIndex]];
     const removed = queue.filter((taskId) => {
       const card = taskById(taskId);
       return card?.courseStyles?.length && !card.courseStyles.includes(style);
     });
-    this.state.taskQueues[this.state.chapterIndex] = queue.filter((taskId) => !removed.includes(taskId));
+    this.reconcileTaskQueue(this.state.chapterIndex, true, now);
     this.state.turn = freshTurn();
     this.log('soupStyleChosen', { style, removedTaskIds: removed }, now);
     return true;
@@ -3088,13 +3220,15 @@ class GameEngine {
     const card = this.assignableTaskCards(peopleMode, group)[0] ?? null;
     if (!card) return false;
     if (this.shouldOfferTaskAssigneeChoice(card, group, peopleMode)) {
+      const recommendedPlayerIds = this.recommendedTaskPlayers(card, group, peopleMode).map((player) => player.id);
       this.state.turn.pendingTaskAssignment = {
         taskId: card.id,
         groupId: group.id,
         coreKey,
         peopleMode,
         requiredPeople: this.requiredPeopleForTask(card, peopleMode),
-        selectedPlayerIds: [this.activePlayer.id]
+        selectedPlayerIds: recommendedPlayerIds,
+        recommendedPlayerIds
       };
       this.state.turn.phase = 'taskAssigneeChoice';
       this.log('taskAssigneeChoiceStarted', { taskId: card.id, groupId: group.id, requiredPeople: this.state.turn.pendingTaskAssignment.requiredPeople }, now);
@@ -3156,10 +3290,10 @@ class GameEngine {
     if (!selected) return null;
 
     const minimumPeople = this.requiredPeopleForTask(selected, peopleMode);
-    const candidates = this.freePlayersForTask(group)
-      .sort((a, b) => a.taskMarkers - b.taskMarkers || a.id.localeCompare(b.id));
+    const candidates = this.freePlayersForTask(group);
     if (candidates.length < minimumPeople) return null;
     const activeMustParticipate = group.playerIds.includes(this.activePlayer.id) && candidates.some((candidate) => candidate.id === this.activePlayer.id);
+    if (!activeMustParticipate) return null;
     const selectedPlayerIds = playerIds == null ? null : [...new Set(playerIds)];
     if (selectedPlayerIds && (selectedPlayerIds.length !== minimumPeople ||
       selectedPlayerIds.some((playerId) => !candidates.some((candidate) => candidate.id === playerId)) ||
@@ -3168,11 +3302,7 @@ class GameEngine {
       const queue = this.state.taskQueues[this.state.chapterIndex];
       queue.splice(queue.indexOf(selected.id), 1);
     }
-    const assignedPlayerIds = selectedPlayerIds ?? [
-      ...(activeMustParticipate ? [this.activePlayer.id] : []),
-      ...candidates.filter((player) => !activeMustParticipate || player.id !== this.activePlayer.id)
-        .slice(0, minimumPeople - (activeMustParticipate ? 1 : 0)).map((player) => player.id)
-    ];
+    const assignedPlayerIds = selectedPlayerIds ?? this.recommendedTaskPlayers(selected, group, peopleMode).map((player) => player.id);
     const instance = {
       instanceId: createId('task'),
       taskId: selected.id,
@@ -3198,6 +3328,7 @@ class GameEngine {
     };
     instance.basketIngredientIds = this.reserveTaskBasket(selected, instance.instanceId);
     this.state.tasks.push(instance);
+    this.state.turn.tasksAssignedThisTurn += 1;
     this.log('taskAssigned', { taskId: selected.id, instanceId: instance.instanceId, assignedPlayerIds, basketIngredientIds: instance.basketIngredientIds }, now);
     this.updateChapterStage(now);
     return instance;
@@ -3227,8 +3358,18 @@ class GameEngine {
       const previousIndex = this.state.activePlayerIndex;
       const nextIndex = this.nextFreePlayerIndex(previousIndex);
       this.state.turn = freshTurn();
-      if (nextIndex == null) this.state.turn.phase = 'crewBusy';
-      else this.state.activePlayerIndex = nextIndex;
+      if (nextIndex == null) {
+        this.state.busyAfterPlayerIndex = previousIndex;
+        this.state.turn.phase = 'crewBusy';
+        this.log('allPlayersBusy', { afterPlayerId: this.state.players[previousIndex].id, reason: 'openingTaskStarted' }, now);
+      } else {
+        this.state.busyAfterPlayerIndex = null;
+        this.state.activePlayerIndex = nextIndex;
+        this.log('turnPassedAfterTaskStarted', {
+          playerId: this.state.players[previousIndex].id,
+          nextPlayerId: this.activePlayer.id
+        }, now);
+      }
     }
     return true;
   }
@@ -3245,6 +3386,10 @@ class GameEngine {
     const timerMinutes = instance.timingMode === 'background' ? instance.backgroundMinutes : instance.challengeMinutes;
     instance.challengeEndsAt = timerMinutes > 0 ? now + timerMinutes * 60_000 : null;
     instance.endAt = instance.challengeEndsAt;
+    if (instance.assignedPlayerIds.includes(this.activePlayer.id) && this.state.turn.chainPending) {
+      this.state.turn.chainPending = false;
+      this.log('eventChainStoppedForTask', { instanceId, taskId: card.id, playerId: this.activePlayer.id }, now);
+    }
     this.log('taskStarted', { instanceId, taskId: card.id, timingMode: instance.timingMode, timerMinutes }, now);
     return true;
   }
@@ -3295,6 +3440,7 @@ class GameEngine {
     });
     instance.coinDelta = this.addCoins(coinDelta, 'task', now);
     this.log('taskCompleted', { instanceId, taskId: card.id, assignedPlayerIds: instance.assignedPlayerIds, coinDelta: instance.coinDelta, challengeCoinValue: coinDelta, challengeResult }, now);
+    this.reconcileTaskQueue(this.state.chapterIndex, true, now);
     if (completesCurrentBriefing) {
       this.state.turn.resolvedTaskId = instanceId;
       this.state.turn.assignedTaskId = null;
@@ -3306,7 +3452,7 @@ class GameEngine {
       }
     }
     this.evaluateChapter(now);
-    this.resumeTurnIfCrewWasBusy(now, instance.assignedPlayerIds);
+    this.resumeTurnIfCrewWasBusy(now);
     return true;
   }
 
@@ -3323,6 +3469,7 @@ class GameEngine {
     instance.coinDelta = null;
     instance.challengeCoinValue = null;
     instance.challengeResult = null;
+    this.reconcileTaskQueue(this.state.chapterIndex);
     this.log('taskCompletionUndone', { instanceId, taskId: instance.taskId }, now);
     this.evaluateChapter(now);
     return true;
@@ -3330,7 +3477,14 @@ class GameEngine {
 
   canUndoTaskCompletion(instanceId) {
     const instance = this.state.tasks.find((taskInstance) => taskInstance.instanceId === instanceId);
+    const card = instance ? taskById(instance.taskId) : null;
+    const laterQuestStepExists = card && this.state.tasks.some((candidate) => {
+      if (candidate.chapterIndex !== instance.chapterIndex || candidate.instanceId === instance.instanceId) return false;
+      const candidateCard = taskById(candidate.taskId);
+      return candidateCard?.questId === card.questId && this.questStepNumber(candidateCard) > this.questStepNumber(card);
+    });
     return Boolean(instance && instance.status === 'done' && instance.chapterIndex === this.state.chapterIndex && !this.state.chapter.served &&
+      !laterQuestStepExists &&
       instance.assignedPlayerIds.every((playerId) => this.isPlayerFreeForTask(playerId, instanceId)));
   }
 
@@ -3342,16 +3496,22 @@ class GameEngine {
     return null;
   }
 
-  resumeTurnIfCrewWasBusy(now = Date.now(), preferredPlayerIds = []) {
+  resumeTurnIfCrewWasBusy(now = Date.now()) {
     if (this.state.turn.phase !== 'crewBusy') return false;
-    const preferred = preferredPlayerIds
-      .map((playerId) => this.state.players.findIndex((player) => player.id === playerId))
-      .find((index) => index >= 0 && this.isPlayerFreeForTask(this.state.players[index].id));
-    const nextIndex = preferred ?? this.nextFreePlayerIndex(this.state.activePlayerIndex);
+    const anchorIndex = Number.isInteger(this.state.busyAfterPlayerIndex)
+      ? this.state.busyAfterPlayerIndex
+      : this.state.activePlayerIndex;
+    const nextIndex = this.nextFreePlayerIndex(anchorIndex);
     if (nextIndex == null) return false;
     this.state.activePlayerIndex = nextIndex;
+    this.state.busyAfterPlayerIndex = null;
     this.state.turn = freshTurn();
-    this.log('crewTurnResumed', { playerId: this.activePlayer.id }, now);
+    this.resolveActiveChallengesAfterTurn(null, this.activePlayer.id, now);
+    this.log('crewTurnResumed', {
+      afterPlayerId: this.state.players[anchorIndex].id,
+      playerId: this.activePlayer.id
+    }, now);
+    this.evaluateChapter(now);
     return true;
   }
 
@@ -3413,12 +3573,13 @@ class GameEngine {
 
   endTurn(now = Date.now()) {
     if (this.state.turn.phase !== 'resolved') return false;
-    if (this.state.turn.chainPending) {
+    if (this.state.turn.chainPending && this.isPlayerFreeForTask(this.activePlayer.id)) {
       this.state.turn = {
         ...freshTurn(),
         chainDepth: this.state.turn.chainDepth + 1,
         activeAbilityUsed: this.state.turn.activeAbilityUsed,
-        ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+        ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
+        tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
       };
       this.log('eventChainContinued', { playerId: this.activePlayer.id }, now);
       return 'chain';
@@ -3442,12 +3603,14 @@ class GameEngine {
         if (!this.isPlayerFreeForTask(this.state.players[index].id)) skippedPlayerIds.push(this.state.players[index].id);
       }
       this.state.activePlayerIndex = nextIndex;
+      this.state.busyAfterPlayerIndex = null;
       if (nextIndex <= previousIndex) this.state.chapter.round += 1;
       this.state.turn = freshTurn();
       this.resolveActiveChallengesAfterTurn(player.id, this.activePlayer.id, now);
       skippedPlayerIds.forEach((playerId) => this.log('turnSkippedForTask', { playerId }, now));
       this.log('turnEnded', { playerId: player.id, nextPlayerId: this.activePlayer.id, skippedPlayerIds }, now);
     } else {
+      this.state.busyAfterPlayerIndex = previousIndex;
       this.state.turn = { ...freshTurn(), phase: 'crewBusy' };
       this.resolveActiveChallengesAfterTurn(player.id, null, now);
       this.log('allPlayersBusy', { afterPlayerId: player.id }, now);
@@ -3608,7 +3771,8 @@ class GameEngine {
         this.state.turn = {
           ...freshTurn(),
           chainDepth: this.state.turn.chainDepth,
-          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
+          tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
         };
         this.beginEvent(now);
         break;
@@ -3622,7 +3786,8 @@ class GameEngine {
         this.state.turn = {
           ...freshTurn(),
           chainDepth: this.state.turn.chainDepth,
-          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn
+          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
+          tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
         };
         this.beginEvent(now);
         break;
@@ -4367,12 +4532,14 @@ function renderTaskAssigneeChoice(engine, language) {
   const group = pending ? engine.state.groups.find((candidate) => candidate.id === pending.groupId) : null;
   if (!pending || !card || !group) return renderDrawCard(engine, language);
   const selected = new Set(pending.selectedPlayerIds ?? []);
-  const freePlayers = engine.freePlayersForTask(group);
+  const recommended = new Set(pending.recommendedPlayerIds ?? []);
+  const freePlayers = engine.prioritizedFreePlayersForTask(group);
   const choices = freePlayers.map((player) => {
     const role = getRole(player.roleId);
     const isSelected = selected.has(player.id);
+    const isRecommended = recommended.has(player.id);
     return `<button type="button" class="choice-button task-assignee-option" data-action="toggle-task-assignee" data-player-id="${escapeHtml(player.id)}" data-selected="${isSelected}" aria-pressed="${isSelected}">
-      <strong>${escapeHtml(player.name)}</strong><small>${role.icon} ${t(role.name, language)}</small>
+      <strong>${escapeHtml(player.name)}</strong><small>${role.icon} ${t(role.name, language)} · ${player.turns} ${language === 'de' ? 'Züge' : 'turns'}${isRecommended ? ` · ${language === 'de' ? 'fairer Vorschlag' : 'fair suggestion'}` : ''}</small>
     </button>`;
   }).join('');
   const complete = selected.size === pending.requiredPeople;
@@ -4386,7 +4553,7 @@ function renderTaskAssigneeChoice(engine, language) {
         ? `${engine.activePlayer.name} wählt genau ${pending.requiredPeople} ${pending.requiredPeople === 1 ? 'freie Person' : 'freie Personen'}. Die Crew darf beraten.`
         : `${engine.activePlayer.name} chooses exactly ${pending.requiredPeople} free ${pending.requiredPeople === 1 ? 'person' : 'people'}. The crew may discuss.`}</strong></div>
       <div class="choice-list task-assignee-choices">${choices}</div>
-      <div class="next-action"><strong>${language === 'de' ? `${selected.size}/${pending.requiredPeople} ausgewählt` : `${selected.size}/${pending.requiredPeople} selected`}</strong><span>${language === 'de' ? 'Belegte Personen werden nicht angeboten.' : 'Busy players are not offered.'}</span></div>
+      <div class="next-action"><strong>${language === 'de' ? `${selected.size}/${pending.requiredPeople} ausgewählt` : `${selected.size}/${pending.requiredPeople} selected`}</strong><span>${language === 'de' ? 'Vorbelegt sind freie Personen mit besonders vielen bisherigen Zügen. Die Auswahl darf geändert werden.' : 'Free players with the most completed turns are preselected. You may change the choice.'}</span></div>
       <button class="primary-button" type="button" data-action="confirm-task-assignees" ${complete ? '' : 'disabled'}>${language === 'de' ? 'Besetzung bestätigen' : 'Confirm crew'}</button>
     </article>`;
 }
@@ -4403,11 +4570,11 @@ function renderTaskBriefing(engine, language) {
   const timerMinutes = background ? card.backgroundMinutes : card.challengeMinutes;
   const after = engine.state.turn.taskBriefingEndsTurn
     ? (language === 'de' ? 'Danach wird das Tablet weitergegeben; die Aufgabe läuft unabhängig von den nächsten Zügen weiter.' : 'Then pass the tablet; the task continues independently of later turns.')
-    : (language === 'de' ? 'Danach zieht dieselbe aktive Person die erste Auftrags-Ereigniskarte.' : 'Then the same active player draws the first work-order event.');
+    : (language === 'de' ? 'Danach wird sichtbar an die nächste freie Person in Zugreihenfolge übergeben. Wer diese Aufgabe übernimmt, wird übersprungen.' : 'Then the tablet visibly passes to the next free player in turn order. Anyone taking this task is skipped.');
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
-      <p class="eyebrow">${t(card.questName, language)} · ${language === 'de' ? 'Questschritt' : 'quest step'} ${card.questStep}</p>
+      <p class="eyebrow">${t(card.questName, language)} · ${language === 'de' ? 'Questschritt' : 'quest step'} ${engine.questStepNumber(card)}</p>
       <h2>${t(card.title, language)}</h2>
       ${event ? `<p class="card-story">${t(event.story, language)}</p>` : `<p class="card-story">${language === 'de' ? 'Die Tapas-Zutaten stehen bereits fest. Deshalb beginnt die Reise direkt mit einem echten Küchenauftrag.' : 'The tapas ingredients are already fixed, so the voyage begins with a real kitchen job.'}</p>`}
       <div class="task-briefing">
@@ -4433,10 +4600,17 @@ function renderResolvedCard(engine, language) {
   const event = engine.currentEvent;
   const code = engine.state.turn.outcomeCode;
   const chain = engine.state.turn.chainPending;
-  const nextPlayer = engine.state.players[(engine.state.activePlayerIndex + 1) % engine.state.players.length];
+  const nextPlayerIndex = engine.nextFreePlayerIndex(engine.state.activePlayerIndex);
+  const nextPlayer = nextPlayerIndex == null ? null : engine.state.players[nextPlayerIndex];
   const handoverText = chain
     ? (language === 'de' ? 'Die Ereigniskette geht für dieselbe Person weiter.' : 'The event chain continues for the same player.')
-    : `${tx('handTablet', language)} ${escapeHtml(nextPlayer.name)}.`;
+    : nextPlayer
+      ? `${tx('handTablet', language)} ${escapeHtml(nextPlayer.name)}.${nextPlayerIndex !== (engine.state.activePlayerIndex + 1) % engine.state.players.length
+        ? ` ${language === 'de' ? 'Beschäftigte Personen werden dabei übersprungen.' : 'Busy players are skipped.'}`
+        : ''}`
+      : (language === 'de'
+        ? 'Danach pausiert die Zugfolge, bis eine Aufgabe erledigt und die nächste freie Person in Reihenfolge übergeben wurde.'
+        : 'Turn order then pauses until a task is completed and the next free player in sequence receives the handover.');
   return `
     <article class="game-card">
       <p class="eyebrow">${tx('outcome', language)}</p>
@@ -4445,7 +4619,9 @@ function renderResolvedCard(engine, language) {
         ? (language === 'de' ? 'Der Effekt wurde ignoriert.' : 'The effect was ignored.')
         : eventActionText(engine, code, language)}</strong></div>
       <p>${handoverText}</p>
-      <button class="primary-button" type="button" data-action="end-turn">${chain ? (language === 'de' ? 'Nächste Karte der Kette' : 'Next card in the chain') : tx('handOver', language)}</button>
+      <button class="primary-button" type="button" data-action="end-turn">${chain
+        ? (language === 'de' ? 'Nächste Karte der Kette' : 'Next card in the chain')
+        : nextPlayer ? tx('handOver', language) : (language === 'de' ? 'Zug beenden & warten' : 'End turn & wait')}</button>
     </article>`;
 }
 
@@ -4542,7 +4718,10 @@ function renderCurrentCard(engine, language) {
     case 'resolved': return renderResolvedCard(engine, language);
     case 'watch': return renderWatchCard(engine, language);
     case 'chapterReady': return renderChapterReady(engine, language);
-    case 'crewBusy': return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Alle Hände in der Kombüse' : 'All hands in the galley'}</p><h2>${language === 'de' ? 'Alle Personen haben gerade eine laufende Aufgabe' : 'Every player currently has a running task'}</h2><p class="card-story">${language === 'de' ? 'Es wird kein Zug vergeben. Öffnet die Aufgabenliste und markiert einen fertigen Schritt als erledigt; dann wird die Reise automatisch mit einer freien Person fortgesetzt.' : 'No turn is assigned. Open the task list and mark a finished step complete; the voyage then resumes automatically with a free player.'}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
+    case 'crewBusy': {
+      const anchor = engine.state.players[engine.state.busyAfterPlayerIndex ?? engine.state.activePlayerIndex];
+      return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Alle Hände in der Kombüse' : 'All hands in the galley'}</p><h2>${language === 'de' ? 'Alle Personen haben gerade eine laufende Aufgabe' : 'Every player currently has a running task'}</h2><p class="card-story">${language === 'de' ? `Es wird kein Zug vergeben. Die Reihenfolge ist hinter ${escapeHtml(anchor.name)} gespeichert. Sobald eine Aufgabe erledigt wird, erhält die nächste freie Person in dieser Reihenfolge eine sichtbare Übergabe.` : `No turn is assigned. The order is saved after ${escapeHtml(anchor.name)}. As soon as a task is completed, the next free player in that order receives a visible handover.`}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
+    }
     default: return renderDrawCard(engine, language);
   }
 }
@@ -4693,7 +4872,7 @@ function renderTasks(engine, language) {
           : 0;
         return `<li class="task-item" data-status="${instance.status}">
           <div class="card-row">
-            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${card.questStep}</p><h3>${t(card.title, language)}</h3></div>
+            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${engine.questStepNumber(card)}</p><h3>${t(card.title, language)}</h3></div>
             ${statusTag(taskStatusLabel(instance.status, language), STATUS_TONE[instance.status])}
           </div>
           <p>${t(card.instruction, language)}</p>
@@ -4825,7 +5004,7 @@ function renderCrew(engine, language) {
             ? statusTag(language === 'de' ? 'Aufgabe läuft' : 'task in progress', 'coral')
             : statusTag(language === 'de' ? 'frei für neue Aufgabe' : 'free for a new task', 'green');
           return `<article class="role-card" data-active="${isActive}">
-            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability}</span></div>
+            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : ''} ${statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability}</span></div>
             <p class="eyebrow" style="margin-top:1rem">${role.icon} ${t(role.name, language)}</p>
             <h2>${escapeHtml(player.name)}</h2>
             <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p><b>${t(role.passive, language)}</b></p><p class="muted">${t(role.passiveUsage, language)}</p></div>
@@ -4853,33 +5032,33 @@ function historyLabel(entry, language) {
   const labels = language === 'de' ? {
     voyageStarted: 'Reise gestartet', eventDrawn: 'Ereigniskarte gezogen', eventResolved: 'Ereignis abgeschlossen',
     eventIgnoredByBonus: 'Ereignisbonus eingesetzt', eventIgnoredByTactician: 'Ereignis taktisch ignoriert',
-    eventChainContinued: 'Ereigniskette fortgesetzt', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
+    eventChainContinued: 'Ereigniskette fortgesetzt', eventChainStoppedForTask: 'Ereigniskette wegen Küchenauftrag beendet', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
     treasureFound: 'Münzen gefunden', coinsChanged: 'Münzstand verändert', ingredientDiscovered: 'Zutat in den Gangkorb gelegt', ingredientLocked: 'Zutat festgelegt', ingredientReturned: 'Zutat zurückgelegt', bonusIngredientDiscovered: 'Bonuszutat entdeckt',
     ingredientSwapped: 'Zutat getauscht', taskAssigneeChoiceStarted: 'Aufgabenbesetzung geöffnet', taskAssigneesChosen: 'Aufgabenbesetzung gewählt', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
-    taskCompleted: 'Aufgabe erledigt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt', crewSplit: 'Crew aufgeteilt',
+    taskCompleted: 'Aufgabe erledigt', questTaskUnlocked: 'Nächster Questschritt eingemischt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt', crewSplit: 'Crew aufgeteilt',
     crewReunited: 'Crew wieder vereint', locationCompleted: 'Ort abgeschlossen', turnEnded: 'Zug beendet',
     chapterReady: 'Gang bereit', courseServed: 'Gang serviert', chapterStarted: 'Neuer Gang gestartet',
     voyageCompleted: 'Reise abgeschlossen', activeAbilityUsed: 'Rollenfähigkeit eingesetzt',
     playerLanguageChanged: 'Spielersprache geändert', optionalIngredientChanged: 'Optionale Zutat geändert',
     watchChallengeStarted: 'Deckwache geöffnet', watchChallengeActionStarted: 'Geheime Challenge gestartet', watchChallengeActivated: 'Mehrzug-Challenge aktiviert', watchChallengeCompleted: 'Deckwache erledigt', watchChallengeExpired: 'Challenge mit der Reise beendet',
     watchFollowUpScheduled: 'Verknüpfte Challenge vorgemerkt', watchFollowUpsReleased: 'Verknüpfte Challenge freigegeben',
-    turnSkippedForTask: 'Beschäftigte Person übersprungen', allPlayersBusy: 'Ganze Crew beschäftigt', crewTurnResumed: 'Crewzug fortgesetzt',
+    turnSkippedForTask: 'Beschäftigte Person übersprungen', turnPassedAfterTaskStarted: 'Nach Aufgabenstart weitergegeben', allPlayersBusy: 'Ganze Crew beschäftigt', crewTurnResumed: 'Crewzug fortgesetzt',
     soupStyleChosen: 'Suppenstil festgelegt', ingredientBasketAutoCleared: 'Gangkorb automatisch geleert',
     chapterStageChanged: 'Kartendeck gewechselt', taskBriefingShown: 'Auftrag geöffnet'
   } : {
     voyageStarted: 'Voyage started', eventDrawn: 'Event card drawn', eventResolved: 'Event resolved',
     eventIgnoredByBonus: 'Event bonus used', eventIgnoredByTactician: 'Event ignored tactically',
-    eventChainContinued: 'Event chain continued', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
+    eventChainContinued: 'Event chain continued', eventChainStoppedForTask: 'Event chain ended for kitchen task', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
     treasureFound: 'Coins found', coinsChanged: 'Coin balance changed', ingredientDiscovered: 'Ingredient put in course basket', ingredientLocked: 'Ingredient locked', ingredientReturned: 'Ingredient returned', bonusIngredientDiscovered: 'Bonus ingredient discovered',
     ingredientSwapped: 'Ingredient swapped', taskAssigneeChoiceStarted: 'Task crew selection opened', taskAssigneesChosen: 'Task crew selected', taskAssigned: 'Task assigned', taskStarted: 'Task started',
-    taskCompleted: 'Task completed', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins', crewSplit: 'Crew split',
+    taskCompleted: 'Task completed', questTaskUnlocked: 'Next quest step shuffled in', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins', crewSplit: 'Crew split',
     crewReunited: 'Crew reunited', locationCompleted: 'Location completed', turnEnded: 'Turn ended',
     chapterReady: 'Course ready', courseServed: 'Course served', chapterStarted: 'New course started',
     voyageCompleted: 'Voyage completed', activeAbilityUsed: 'Role ability used',
     playerLanguageChanged: 'Player language changed', optionalIngredientChanged: 'Optional ingredient changed',
     watchChallengeStarted: 'Deck watch opened', watchChallengeActionStarted: 'Secret challenge started', watchChallengeActivated: 'Multi-turn challenge activated', watchChallengeCompleted: 'Deck watch completed', watchChallengeExpired: 'Challenge ended with the voyage',
     watchFollowUpScheduled: 'Linked challenge scheduled', watchFollowUpsReleased: 'Linked challenge released',
-    turnSkippedForTask: 'Busy player skipped', allPlayersBusy: 'Whole crew busy', crewTurnResumed: 'Crew turn resumed',
+    turnSkippedForTask: 'Busy player skipped', turnPassedAfterTaskStarted: 'Turn passed after task start', allPlayersBusy: 'Whole crew busy', crewTurnResumed: 'Crew turn resumed',
     soupStyleChosen: 'Soup style chosen', ingredientBasketAutoCleared: 'Course basket cleared automatically',
     chapterStageChanged: 'Event deck changed', taskBriefingShown: 'Work order opened'
   };
@@ -4923,20 +5102,20 @@ function renderSessions(sessions, currentSessionId, language) {
 
 function renderRules(language) {
   const sections = language === 'de' ? [
-    ['1. Reihum spielen – Beschäftigte werden übersprungen', 'Die hervorgehobene freie Person führt den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde.'],
+    ['1. Zufällig beginnen, dann reihum spielen', 'Zu Reisebeginn wird die erste Person zufällig bestimmt. Danach führt die hervorgehobene freie Person den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde. Die Crewansicht zählt alle Züge pro Person.'],
     ['2. Drei Decks plus Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Harmlose Spaßkarten können schon in Zutaten- und Auftragsrunden erscheinen. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
-    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Weitere freie Personen dürfen bei manchen Karten ausdrücklich gewählt werden.'],
-    ['4. Vorgefertigte Questlinien', 'Aufträge sind nach fachlichen Questlinien und Schritten sortiert. Speckdatteln werden erst gerollt, später gebacken und herausgeholt; Brot wird eingeschoben, gebacken, herausgeholt, geschnitten und serviert. Abhängige Schritte erscheinen erst, wenn ihre Voraussetzung erledigt ist.'],
+    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Für weitere Plätze werden freie Personen mit den meisten bisherigen Zügen bevorzugt; bei manchen Karten darf die aktive Person den fairen Vorschlag ändern.'],
+    ['4. Gemischte Questlinien', 'Im Auftragsstapel liegen anfangs nur die Startkarten aller fachlichen Questlinien. Wird ein Schritt erledigt, wird sein Nachfolger zufällig auf einer der drei obersten Positionen eingemischt. So können etwa Brot und Speckdatteln in wechselnder Reihenfolge laufen; ihre Schritte bleiben trotzdem praktisch korrekt. Spaßkarten bleiben zwischen den Auftragsereignissen erhalten.'],
     ['5. Arbeits-Challenge oder Hintergrundzeit', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Backen, Garen, Ruhen und Kühlen laufen als unbewertete Hintergrundtimer. Jede offene Aufgabe kann jederzeit in der Aufgabenliste abgehakt werden.'],
     ['6. Orte automatisch bereisen', 'Jede abgeschlossene Ortsaktion bewegt die Gruppe sichtbar voran. Nach genug Aktionen zieht sie automatisch zum nächsten Ort; aufgeteilte Gruppen werden am gemeinsamen Ziel wieder vereint.'],
     ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Die Suppe wird zuerst als klar oder cremig festgelegt; Brühe und Sahne sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
     ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
     ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
   ] : [
-    ['1. Round robin – busy players are skipped', 'The highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off.'],
+    ['1. Random start, then round robin', 'The first player is chosen randomly when the voyage begins. After that, the highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off. The crew view counts every player’s turns.'],
     ['2. Three decks plus fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. Harmless fun cards can appear during ingredient and task rounds. A real break appears only when no kitchen task is open.'],
-    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Some cards let them choose additional free players.'],
-    ['4. Prepared quest lines', 'Jobs are ordered into practical quest lines and steps. Bacon dates are wrapped, baked, and removed later; bread is inserted, baked, removed, sliced, and served. Dependent steps appear only when their prerequisites are complete.'],
+    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Free players with the most completed turns are preferred for extra places; on some cards the active player may change that fair suggestion.'],
+    ['4. Shuffled quest lines', 'At first, the work-order stack contains only the starting card of each practical quest line. Completing a step shuffles its successor into one of the top three positions. Bread and bacon dates can therefore unfold in different orders while each sequence remains practical. Fun cards stay mixed between work-order events.'],
     ['5. Work challenge or background time', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Baking, cooking, resting, and chilling use unscored background timers. Every open job can be checked off from the task list at any time.'],
     ['6. Travel automatically', 'Every resolved location action advances the group. After enough actions it moves automatically; split groups reunite at their shared target.'],
     ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. Soup is first chosen as clear or cream; stock and cream are pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
@@ -5272,8 +5451,10 @@ async function handleAction(target) {
       if (engine.confirmRoll()) audio.play(cueForAction(engine.state.turn.outcomeCode));
       persist(); render(); break;
     case 'accept-task': {
+      const previousPlayerId = engine.activePlayer.id;
       if (engine.acceptTaskBriefing()) {
         audio.play('move'); persist(); render();
+        if (engine.state.turn.phase !== 'crewBusy' && engine.activePlayer.id !== previousPlayerId) showHandover();
       }
       break;
     }
@@ -5287,7 +5468,7 @@ async function handleAction(target) {
         audio.play('move');
         persist();
         render();
-        if (result !== 'chain') showHandover();
+        if (result !== 'chain' && engine.state.turn.phase !== 'crewBusy') showHandover();
       }
       break;
     }
@@ -5319,7 +5500,7 @@ async function handleAction(target) {
       audio.play(result === 'chain' ? 'card' : 'move');
       persist();
       render();
-      if (result !== 'chain') showHandover();
+      if (result !== 'chain' && engine.state.turn.phase !== 'crewBusy') showHandover();
       break;
     }
     case 'start-task': {
@@ -5328,7 +5509,8 @@ async function handleAction(target) {
       }
       break;
     }
-    case 'complete-task':
+    case 'complete-task': {
+      const wasCrewBusy = engine.state.turn.phase === 'crewBusy';
       if (engine.completeTask(target.dataset.taskId)) {
         const task = engine.state.tasks.find((entry) => entry.instanceId === target.dataset.taskId);
         const score = task?.challengeCoinValue ?? 0;
@@ -5336,8 +5518,10 @@ async function handleAction(target) {
           ? (language() === 'de' ? 'Hintergrundzeit beendet · keine Münzwertung' : 'Background time complete · no coin score')
           : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
         audio.play('complete'); persist(); render();
+        if (wasCrewBusy && engine.state.turn.phase !== 'crewBusy') showHandover();
       }
       break;
+    }
     case 'undo-task':
       if (engine.undoTaskCompletion(target.dataset.taskId)) { audio.play('move'); persist(); render(); }
       break;

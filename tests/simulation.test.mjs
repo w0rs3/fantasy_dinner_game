@@ -33,7 +33,7 @@ test('complete games finish for every supported crew size without pure waiting',
       assert.equal(result.tasks, result.completedTasks);
       assert.equal(result.tasks, 71);
       assert.ok(result.backgroundTasks >= 8);
-      assert.ok(result.taskMarkerSpread <= 3, `task spread was ${result.taskMarkerSpread}`);
+      assert.ok(result.turnSpread <= 20, `turn spread was ${result.turnSpread}`);
       assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 350, `duration was ${result.durationMinutes}`);
       assert.equal(result.soupStyle, seed % 2 ? 'clear' : 'cream');
       assert.ok(result.maxConcurrentTasks >= 2, 'parallel tasks should occur');

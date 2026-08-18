@@ -90,7 +90,7 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.equal(result.cauldronHandoffViolations, 0, `${label} cauldron watches must change hands`);
     assert.ok(result.events >= 150 && result.events <= 540, `${label} events=${result.events}`);
     assert.ok(result.splitCount >= 1, label);
-    assert.ok(result.taskMarkerSpread <= 3, `${label} taskMarkerSpread=${result.taskMarkerSpread}`);
+    assert.ok(result.turnSpread <= 20, `${label} turnSpread=${result.turnSpread}`);
     assert.equal(new Set(state.players.map((player) => player.roleId)).size, state.players.length, label);
     assert.ok(state.history.every((entry, index) => index === 0 || entry.timestamp >= state.history[index - 1].timestamp), `${label} history order`);
 

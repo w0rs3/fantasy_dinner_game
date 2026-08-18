@@ -4,6 +4,7 @@ import { GameEngine, validateSessionState } from '../js/core/game-engine.js';
 import { MemoryStorage, SessionRepository } from '../js/core/storage.js';
 import { updateTaskTimers } from '../js/core/timers.js';
 import { EVENT_DECKS } from '../js/data/events.js';
+import { getPlayableQuestLines } from '../js/data/tasks.js';
 import { renderGame } from '../js/ui/game.js';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Eva', 'Finn'];
@@ -22,6 +23,47 @@ test('new voyages assign unique random roles and preserve individual languages',
       .state.players.map((player) => player.roleId).join(',')
   ));
   assert.ok(assignments.size >= 6, 'new voyages should produce meaningfully different role rosters');
+});
+
+test('new voyages choose a reproducible but genuinely varied random starting player', () => {
+  const starters = Array.from({ length: 24 }, (_, index) =>
+    GameEngine.create({ names, title: `Starter ${index}`, defaultLanguage: 'de', seed: 20_000 + index }, 1_800_000_000_000)
+      .activePlayer.id
+  );
+  assert.ok(new Set(starters).size >= 4, `expected varied starters, got ${new Set(starters).size}`);
+  const again = GameEngine.create({ names, title: 'Same starter', defaultLanguage: 'de', seed: 20_007 }, 1_800_000_000_000);
+  assert.equal(again.activePlayer.id, starters[7], 'the same seed keeps the random start reproducible');
+});
+
+test('quest stacks start with one card per line and mix a completed line successor into the top three', () => {
+  const engine = GameEngine.create({ names, title: 'Quest stack', defaultLanguage: 'de', seed: 20_101 }, 1_800_000_000_000);
+  for (let chapterIndex = 1; chapterIndex < engine.state.taskQueues.length; chapterIndex += 1) {
+    const starts = new Set(getPlayableQuestLines(chapterIndex).map((line) => line[0].id));
+    assert.equal(engine.state.taskQueues[chapterIndex].length, starts.size);
+    assert.ok(engine.state.taskQueues[chapterIndex].every((taskId) => starts.has(taskId)));
+  }
+
+  const opening = engine.state.tasks[0];
+  const openingCard = engine.getTaskCard(opening);
+  const line = getPlayableQuestLines(0).find((candidate) => candidate[0].questId === openingCard.questId);
+  assert.equal(openingCard.id, line[0].id, 'the automatic Tapas job is a quest-line start');
+  assert.ok(line.length > 1);
+  assert.ok(engine.state.taskQueues[0].every((taskId) => !line.slice(1).some((card) => card.id === taskId)));
+
+  assert.equal(engine.completeTask(opening.instanceId, 1_800_000_001_000), true);
+  const successorIndex = engine.state.taskQueues[0].indexOf(line[1].id);
+  assert.ok(successorIndex >= 0 && successorIndex <= 2, `successor landed at stack position ${successorIndex}`);
+  assert.ok(engine.state.taskQueues[0].every((taskId) => !line.slice(2).some((card) => card.id === taskId)));
+});
+
+test('different Tapas voyages can open with different quest lines', () => {
+  const openingQuests = new Set(Array.from({ length: 30 }, (_, index) => {
+    const engine = GameEngine.create({ names, title: `Quest order ${index}`, defaultLanguage: 'de', seed: 21_000 + index }, 1_800_000_000_000);
+    return engine.getTaskCard(engine.state.tasks[0]).questId;
+  }));
+  assert.ok(openingQuests.has('bread'));
+  assert.ok(openingQuests.has('dates'));
+  assert.ok(openingQuests.size >= 3, `expected interleaved opening quests, got ${[...openingQuests].join(', ')}`);
 });
 
 test('new and saved voyages use 500 coins as the complete treasure', () => {
@@ -136,8 +178,9 @@ test('the current briefing task can be checked directly from the task list witho
   assert.equal(task.status, 'queued');
   assert.equal(engine.completeTask(task.instanceId, now + 1_000), true);
   assert.equal(task.status, 'done');
-  assert.equal(engine.state.turn.phase, 'draw');
+  assert.equal(engine.state.turn.phase, 'resolved');
   assert.equal(engine.state.turn.assignedTaskId, null);
+  assert.equal(engine.state.tasks.length, 1, 'checking the opening task does not create another assignment');
 });
 
 test('timer alerts fire once at completion and stay silent at five and one minute', () => {
@@ -187,6 +230,9 @@ test('handover advances to the next free player and skips task owners', () => {
   const engine = GameEngine.create({ names, title: 'Round robin', defaultLanguage: 'de', seed: 51 }, 1_800_000_000_000);
   const firstId = engine.activePlayer.id;
   assert.equal(engine.acceptTaskBriefing(), true, 'the automatic opening task is accepted before the first event');
+  assert.equal(engine.state.turn.phase, 'resolved');
+  assert.equal(engine.endTurn(), true);
+  assert.notEqual(engine.activePlayer.id, firstId);
   engine.beginEvent();
   if (engine.currentEvent.type === 'choice') {
     engine.resolveChoice(engine.currentEvent.options[0]);
@@ -214,6 +260,8 @@ test('resolved work-order cards keep the task that was actually assigned', () =>
   const engine = GameEngine.create({ names, title: 'Stable result', defaultLanguage: 'de', seed: 52 }, 1_800_000_000_000);
   const assigned = engine.state.tasks[0];
   const assignedTitle = engine.getTaskCard(assigned).title.de;
+  engine.acceptTaskBriefing();
+  engine.endTurn();
   const nextTitle = engine.taskForAction('drawTask').title.de;
   assert.notEqual(assignedTitle, nextTitle);
 

@@ -250,6 +250,34 @@ export function buildTaskDeck(chapterIndex) {
 
 export const TASK_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildTaskDeck(index)));
 
+export function getPlayableQuestLines(chapterIndex) {
+  const cards = TASK_DECKS[chapterIndex].filter((card) => card.playable);
+  const cardByBlueprint = new Map(cards.map((card) => [card.blueprintIndex, card]));
+  const dependencies = new Map(cards.map((card) => [card.id, new Set(
+    [...(card.prerequisites ?? []), ...(card.alternativePrerequisites ?? [])]
+      .map((requirement) => cardByBlueprint.get(requirement.requiredBlueprintIndex)?.id)
+      .filter(Boolean)
+  )]));
+  const ordered = [];
+  const remaining = new Set(cards.map((card) => card.id));
+  while (remaining.size) {
+    const next = cards
+      .filter((card) => remaining.has(card.id) && [...dependencies.get(card.id)].every((taskId) => !remaining.has(taskId)))
+      .sort((a, b) => a.blueprintIndex - b.blueprintIndex)[0];
+    // The workflow is expected to be acyclic. Keeping a deterministic fallback
+    // makes an older saved catalogue recoverable if custom content violates it.
+    const selected = next ?? cards.filter((card) => remaining.has(card.id)).sort((a, b) => a.blueprintIndex - b.blueprintIndex)[0];
+    ordered.push(selected);
+    remaining.delete(selected.id);
+  }
+  const lines = new Map();
+  ordered.forEach((card) => {
+      if (!lines.has(card.questId)) lines.set(card.questId, []);
+      lines.get(card.questId).push(card);
+  });
+  return [...lines.values()];
+}
+
 export function getCoreTask(chapterIndex, locationIndex) {
   return TASK_DECKS[chapterIndex].find((taskCard) => taskCard.coreLocationIndex === locationIndex);
 }

@@ -81,6 +81,13 @@ test('generated bundle is classic-script compatible and up to date', async () =>
   assert.doesNotThrow(() => new Script(bundle));
 });
 
+test('automatic task skips and busy-crew resumes always trigger a visible handover', async () => {
+  const app = await readFile(join(root, 'js', 'app.js'), 'utf8');
+  assert.match(app, /previousPlayerId[\s\S]*activePlayer\.id !== previousPlayerId\) showHandover\(\)/);
+  assert.match(app, /wasCrewBusy[\s\S]*state\.turn\.phase !== 'crewBusy'\) showHandover\(\)/);
+  assert.doesNotMatch(app, /if \(result !== 'chain'\) showHandover\(\)/);
+});
+
 test('parchment card choices use a dark high-contrast palette in every state', async () => {
   const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
   assert.match(css, /\.game-card \.choice-button,[\s\S]*?color:\s*#2a2012;[\s\S]*?background:\s*#fff1c9;/);

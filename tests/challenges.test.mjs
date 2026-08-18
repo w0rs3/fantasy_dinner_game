@@ -13,7 +13,7 @@ function startChallenge(id, seed = 700, targetPlayerId = null) {
   engine.state.turn = { ...engine.state.turn, phase: 'draw' };
   engine.state.chapter.queuedChallenges.push({
     id,
-    targetPlayerId: targetPlayerId ?? engine.state.players[1].id
+    targetPlayerId: targetPlayerId ?? engine.state.players[engine.nextFreePlayerIndex()].id
   });
   assert.equal(engine.startWatchChallenge('watchChallenge', now + 100), true);
   assert.equal(engine.currentWatchChallenge.id, id);
@@ -242,6 +242,6 @@ test('event choices never reveal a secret challenge before it is drawn', () => {
   engine.state.turn.phase = 'event';
 
   const html = renderGame(engine, 'de');
-  assert.match(html, /Geheime Challenge nur für Anne ziehen · nicht vorlesen/);
+  assert.match(html, new RegExp(`Geheime Challenge nur für ${engine.activePlayer.name} ziehen · nicht vorlesen`));
   assert.doesNotMatch(html, new RegExp(secret.de));
 });

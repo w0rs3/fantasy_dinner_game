@@ -49,7 +49,7 @@ export function renderTasks(engine, language) {
           : 0;
         return `<li class="task-item" data-status="${instance.status}">
           <div class="card-row">
-            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${card.questStep}</p><h3>${t(card.title, language)}</h3></div>
+            <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${engine.questStepNumber(card)}</p><h3>${t(card.title, language)}</h3></div>
             ${statusTag(taskStatusLabel(instance.status, language), STATUS_TONE[instance.status])}
           </div>
           <p>${t(card.instruction, language)}</p>
@@ -181,7 +181,7 @@ export function renderCrew(engine, language) {
             ? statusTag(language === 'de' ? 'Aufgabe läuft' : 'task in progress', 'coral')
             : statusTag(language === 'de' ? 'frei für neue Aufgabe' : 'free for a new task', 'green');
           return `<article class="role-card" data-active="${isActive}">
-            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability}</span></div>
+            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : ''} ${statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability}</span></div>
             <p class="eyebrow" style="margin-top:1rem">${role.icon} ${t(role.name, language)}</p>
             <h2>${escapeHtml(player.name)}</h2>
             <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p><b>${t(role.passive, language)}</b></p><p class="muted">${t(role.passiveUsage, language)}</p></div>
@@ -209,33 +209,33 @@ function historyLabel(entry, language) {
   const labels = language === 'de' ? {
     voyageStarted: 'Reise gestartet', eventDrawn: 'Ereigniskarte gezogen', eventResolved: 'Ereignis abgeschlossen',
     eventIgnoredByBonus: 'Ereignisbonus eingesetzt', eventIgnoredByTactician: 'Ereignis taktisch ignoriert',
-    eventChainContinued: 'Ereigniskette fortgesetzt', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
+    eventChainContinued: 'Ereigniskette fortgesetzt', eventChainStoppedForTask: 'Ereigniskette wegen Küchenauftrag beendet', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
     treasureFound: 'Münzen gefunden', coinsChanged: 'Münzstand verändert', ingredientDiscovered: 'Zutat in den Gangkorb gelegt', ingredientLocked: 'Zutat festgelegt', ingredientReturned: 'Zutat zurückgelegt', bonusIngredientDiscovered: 'Bonuszutat entdeckt',
     ingredientSwapped: 'Zutat getauscht', taskAssigneeChoiceStarted: 'Aufgabenbesetzung geöffnet', taskAssigneesChosen: 'Aufgabenbesetzung gewählt', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
-    taskCompleted: 'Aufgabe erledigt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt', crewSplit: 'Crew aufgeteilt',
+    taskCompleted: 'Aufgabe erledigt', questTaskUnlocked: 'Nächster Questschritt eingemischt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt', crewSplit: 'Crew aufgeteilt',
     crewReunited: 'Crew wieder vereint', locationCompleted: 'Ort abgeschlossen', turnEnded: 'Zug beendet',
     chapterReady: 'Gang bereit', courseServed: 'Gang serviert', chapterStarted: 'Neuer Gang gestartet',
     voyageCompleted: 'Reise abgeschlossen', activeAbilityUsed: 'Rollenfähigkeit eingesetzt',
     playerLanguageChanged: 'Spielersprache geändert', optionalIngredientChanged: 'Optionale Zutat geändert',
     watchChallengeStarted: 'Deckwache geöffnet', watchChallengeActionStarted: 'Geheime Challenge gestartet', watchChallengeActivated: 'Mehrzug-Challenge aktiviert', watchChallengeCompleted: 'Deckwache erledigt', watchChallengeExpired: 'Challenge mit der Reise beendet',
     watchFollowUpScheduled: 'Verknüpfte Challenge vorgemerkt', watchFollowUpsReleased: 'Verknüpfte Challenge freigegeben',
-    turnSkippedForTask: 'Beschäftigte Person übersprungen', allPlayersBusy: 'Ganze Crew beschäftigt', crewTurnResumed: 'Crewzug fortgesetzt',
+    turnSkippedForTask: 'Beschäftigte Person übersprungen', turnPassedAfterTaskStarted: 'Nach Aufgabenstart weitergegeben', allPlayersBusy: 'Ganze Crew beschäftigt', crewTurnResumed: 'Crewzug fortgesetzt',
     soupStyleChosen: 'Suppenstil festgelegt', ingredientBasketAutoCleared: 'Gangkorb automatisch geleert',
     chapterStageChanged: 'Kartendeck gewechselt', taskBriefingShown: 'Auftrag geöffnet'
   } : {
     voyageStarted: 'Voyage started', eventDrawn: 'Event card drawn', eventResolved: 'Event resolved',
     eventIgnoredByBonus: 'Event bonus used', eventIgnoredByTactician: 'Event ignored tactically',
-    eventChainContinued: 'Event chain continued', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
+    eventChainContinued: 'Event chain continued', eventChainStoppedForTask: 'Event chain ended for kitchen task', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
     treasureFound: 'Coins found', coinsChanged: 'Coin balance changed', ingredientDiscovered: 'Ingredient put in course basket', ingredientLocked: 'Ingredient locked', ingredientReturned: 'Ingredient returned', bonusIngredientDiscovered: 'Bonus ingredient discovered',
     ingredientSwapped: 'Ingredient swapped', taskAssigneeChoiceStarted: 'Task crew selection opened', taskAssigneesChosen: 'Task crew selected', taskAssigned: 'Task assigned', taskStarted: 'Task started',
-    taskCompleted: 'Task completed', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins', crewSplit: 'Crew split',
+    taskCompleted: 'Task completed', questTaskUnlocked: 'Next quest step shuffled in', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins', crewSplit: 'Crew split',
     crewReunited: 'Crew reunited', locationCompleted: 'Location completed', turnEnded: 'Turn ended',
     chapterReady: 'Course ready', courseServed: 'Course served', chapterStarted: 'New course started',
     voyageCompleted: 'Voyage completed', activeAbilityUsed: 'Role ability used',
     playerLanguageChanged: 'Player language changed', optionalIngredientChanged: 'Optional ingredient changed',
     watchChallengeStarted: 'Deck watch opened', watchChallengeActionStarted: 'Secret challenge started', watchChallengeActivated: 'Multi-turn challenge activated', watchChallengeCompleted: 'Deck watch completed', watchChallengeExpired: 'Challenge ended with the voyage',
     watchFollowUpScheduled: 'Linked challenge scheduled', watchFollowUpsReleased: 'Linked challenge released',
-    turnSkippedForTask: 'Busy player skipped', allPlayersBusy: 'Whole crew busy', crewTurnResumed: 'Crew turn resumed',
+    turnSkippedForTask: 'Busy player skipped', turnPassedAfterTaskStarted: 'Turn passed after task start', allPlayersBusy: 'Whole crew busy', crewTurnResumed: 'Crew turn resumed',
     soupStyleChosen: 'Soup style chosen', ingredientBasketAutoCleared: 'Course basket cleared automatically',
     chapterStageChanged: 'Event deck changed', taskBriefingShown: 'Work order opened'
   };
@@ -279,20 +279,20 @@ export function renderSessions(sessions, currentSessionId, language) {
 
 export function renderRules(language) {
   const sections = language === 'de' ? [
-    ['1. Reihum spielen – Beschäftigte werden übersprungen', 'Die hervorgehobene freie Person führt den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde.'],
+    ['1. Zufällig beginnen, dann reihum spielen', 'Zu Reisebeginn wird die erste Person zufällig bestimmt. Danach führt die hervorgehobene freie Person den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde. Die Crewansicht zählt alle Züge pro Person.'],
     ['2. Drei Decks plus Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Harmlose Spaßkarten können schon in Zutaten- und Auftragsrunden erscheinen. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
-    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Weitere freie Personen dürfen bei manchen Karten ausdrücklich gewählt werden.'],
-    ['4. Vorgefertigte Questlinien', 'Aufträge sind nach fachlichen Questlinien und Schritten sortiert. Speckdatteln werden erst gerollt, später gebacken und herausgeholt; Brot wird eingeschoben, gebacken, herausgeholt, geschnitten und serviert. Abhängige Schritte erscheinen erst, wenn ihre Voraussetzung erledigt ist.'],
+    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Für weitere Plätze werden freie Personen mit den meisten bisherigen Zügen bevorzugt; bei manchen Karten darf die aktive Person den fairen Vorschlag ändern.'],
+    ['4. Gemischte Questlinien', 'Im Auftragsstapel liegen anfangs nur die Startkarten aller fachlichen Questlinien. Wird ein Schritt erledigt, wird sein Nachfolger zufällig auf einer der drei obersten Positionen eingemischt. So können etwa Brot und Speckdatteln in wechselnder Reihenfolge laufen; ihre Schritte bleiben trotzdem praktisch korrekt. Spaßkarten bleiben zwischen den Auftragsereignissen erhalten.'],
     ['5. Arbeits-Challenge oder Hintergrundzeit', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Backen, Garen, Ruhen und Kühlen laufen als unbewertete Hintergrundtimer. Jede offene Aufgabe kann jederzeit in der Aufgabenliste abgehakt werden.'],
     ['6. Orte automatisch bereisen', 'Jede abgeschlossene Ortsaktion bewegt die Gruppe sichtbar voran. Nach genug Aktionen zieht sie automatisch zum nächsten Ort; aufgeteilte Gruppen werden am gemeinsamen Ziel wieder vereint.'],
     ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Die Suppe wird zuerst als klar oder cremig festgelegt; Brühe und Sahne sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
     ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
     ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
   ] : [
-    ['1. Round robin – busy players are skipped', 'The highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off.'],
+    ['1. Random start, then round robin', 'The first player is chosen randomly when the voyage begins. After that, the highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off. The crew view counts every player’s turns.'],
     ['2. Three decks plus fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. Harmless fun cards can appear during ingredient and task rounds. A real break appears only when no kitchen task is open.'],
-    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Some cards let them choose additional free players.'],
-    ['4. Prepared quest lines', 'Jobs are ordered into practical quest lines and steps. Bacon dates are wrapped, baked, and removed later; bread is inserted, baked, removed, sliced, and served. Dependent steps appear only when their prerequisites are complete.'],
+    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Free players with the most completed turns are preferred for extra places; on some cards the active player may change that fair suggestion.'],
+    ['4. Shuffled quest lines', 'At first, the work-order stack contains only the starting card of each practical quest line. Completing a step shuffles its successor into one of the top three positions. Bread and bacon dates can therefore unfold in different orders while each sequence remains practical. Fun cards stay mixed between work-order events.'],
     ['5. Work challenge or background time', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Baking, cooking, resting, and chilling use unscored background timers. Every open job can be checked off from the task list at any time.'],
     ['6. Travel automatically', 'Every resolved location action advances the group. After enough actions it moves automatically; split groups reunite at their shared target.'],
     ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. Soup is first chosen as clear or cream; stock and cream are pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],

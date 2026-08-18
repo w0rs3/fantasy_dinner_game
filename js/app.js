@@ -330,8 +330,10 @@ async function handleAction(target) {
       if (engine.confirmRoll()) audio.play(cueForAction(engine.state.turn.outcomeCode));
       persist(); render(); break;
     case 'accept-task': {
+      const previousPlayerId = engine.activePlayer.id;
       if (engine.acceptTaskBriefing()) {
         audio.play('move'); persist(); render();
+        if (engine.state.turn.phase !== 'crewBusy' && engine.activePlayer.id !== previousPlayerId) showHandover();
       }
       break;
     }
@@ -345,7 +347,7 @@ async function handleAction(target) {
         audio.play('move');
         persist();
         render();
-        if (result !== 'chain') showHandover();
+        if (result !== 'chain' && engine.state.turn.phase !== 'crewBusy') showHandover();
       }
       break;
     }
@@ -377,7 +379,7 @@ async function handleAction(target) {
       audio.play(result === 'chain' ? 'card' : 'move');
       persist();
       render();
-      if (result !== 'chain') showHandover();
+      if (result !== 'chain' && engine.state.turn.phase !== 'crewBusy') showHandover();
       break;
     }
     case 'start-task': {
@@ -386,7 +388,8 @@ async function handleAction(target) {
       }
       break;
     }
-    case 'complete-task':
+    case 'complete-task': {
+      const wasCrewBusy = engine.state.turn.phase === 'crewBusy';
       if (engine.completeTask(target.dataset.taskId)) {
         const task = engine.state.tasks.find((entry) => entry.instanceId === target.dataset.taskId);
         const score = task?.challengeCoinValue ?? 0;
@@ -394,8 +397,10 @@ async function handleAction(target) {
           ? (language() === 'de' ? 'Hintergrundzeit beendet · keine Münzwertung' : 'Background time complete · no coin score')
           : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
         audio.play('complete'); persist(); render();
+        if (wasCrewBusy && engine.state.turn.phase !== 'crewBusy') showHandover();
       }
       break;
+    }
     case 'undo-task':
       if (engine.undoTaskCompletion(target.dataset.taskId)) { audio.play('move'); persist(); render(); }
       break;
