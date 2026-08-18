@@ -1,19 +1,23 @@
 import { CHAPTERS } from '../data/chapters.js';
+import { COIN_VALUES } from '../config.js';
 import { EFFECT_TEXT } from '../data/events.js';
 import { INGREDIENT_EFFECT_TEXT } from '../data/ingredients.js';
 import { localize, formatDuration } from '../data/i18n.js';
 import { getRole } from '../data/roles.js';
-import { getRemainingSeconds } from '../core/timers.js';
 import { avatar, escapeHtml, percent, statusTag, t, tx } from './helpers.js';
 
 const STAGE_COPY = Object.freeze({
+  clearing: {
+    de: { label: '0 · Vorigen Gang abräumen', title: 'Tisch klarmachen', button: 'Abräum-Aufgabe ansehen', lead: 'Der vorige Gang wird vollständig abgeräumt. Erst nach diesem Küchenauftrag beginnt die Zutatenwahl.' },
+    en: { label: '0 · Clear the previous course', title: 'Clear the table', button: 'View clearing task', lead: 'The previous course is cleared completely. Ingredient selection begins only after this kitchen job.' }
+  },
   ingredients: {
     de: { label: '1 · Zutaten bestimmen', title: 'Vorratsereignis ziehen', button: 'Vorrats-Ereigniskarte ziehen', lead: 'Entdeckt, verändert und sichert die Zutaten dieses Gangs. Erst wenn alle festgelegt sind, öffnet sich das Auftragsdeck.' },
     en: { label: '1 · Choose ingredients', title: 'Draw a provision event', button: 'Draw provision event', lead: 'Discover, change, and lock the ingredients for this course. The work-order deck opens only when all are fixed.' }
   },
   tasks: {
-    de: { label: '2 · Aufgaben verteilen', title: 'Auftragsereignis ziehen', button: 'Auftrags-Ereigniskarte ziehen', lead: 'Die Zutaten stehen fest. Jede Karte weist jetzt einen konkreten, fachlich möglichen Küchenauftrag zu.' },
-    en: { label: '2 · Assign tasks', title: 'Draw a work-order event', button: 'Draw work-order event', lead: 'The ingredients are fixed. Every card now assigns a concrete and feasible kitchen job.' }
+    de: { label: '2 · Spaß & Aufgaben', title: 'Karte aus dem Auftragsdeck ziehen', button: 'Nächste Karte ziehen', lead: 'Zieht die nächste Karte und entdeckt, was die Reise für eure Crew bereithält.' },
+    en: { label: '2 · Fun & tasks', title: 'Draw from the work deck', button: 'Draw next card', lead: 'Draw the next card and discover what the voyage has in store for your crew.' }
   },
   cooking: {
     de: { label: '3 · Parallel kochen', title: 'Freies Ereignis ziehen', button: 'Eventkarte ziehen', lead: 'Küchenarbeit läuft parallel. Freie Personen erleben Challenges, Pausen, geheime Späße und Münzereignisse.' },
@@ -73,16 +77,21 @@ function renderDieFace(className, value) {
 }
 
 function stageCopy(engine, language) {
-  return STAGE_COPY[engine.currentEventStage()]?.[language] ?? STAGE_COPY.cooking[language];
+  const stage = engine.state.chapter.stage === 'clearing' ? 'clearing' : engine.currentEventStage();
+  return STAGE_COPY[stage]?.[language] ?? STAGE_COPY.cooking[language];
 }
 
 function renderCourseFlow(engine, language) {
-  const current = engine.currentEventStage();
-  const order = ['ingredients', 'tasks', 'cooking'];
+  const current = engine.state.chapter.stage === 'clearing' ? 'clearing' : engine.currentEventStage();
+  const order = engine.state.chapterIndex === 0
+    ? ['ingredients', 'tasks', 'cooking']
+    : ['clearing', 'ingredients', 'tasks', 'cooking'];
+  const labelMap = language === 'de'
+    ? { clearing: 'Abräumen', ingredients: 'Zutaten', tasks: 'Aufgaben', cooking: 'Kochen' }
+    : { clearing: 'Clear table', ingredients: 'Ingredients', tasks: 'Tasks', cooking: 'Cooking' };
   return `<div class="course-flow" aria-label="${language === 'de' ? 'Ablauf des Gangs' : 'Course flow'}">${order.map((stage, index) => {
     const state = order.indexOf(current) > index ? 'done' : current === stage ? 'active' : 'future';
-    const labels = language === 'de' ? ['Zutaten', 'Aufgaben', 'Kochen'] : ['Ingredients', 'Tasks', 'Cooking'];
-    return `<span data-state="${state}"><b>${state === 'done' ? '✓' : index + 1}</b>${labels[index]}</span>`;
+    return `<span data-state="${state}"><b>${state === 'done' ? '✓' : engine.state.chapterIndex === 0 ? index + 1 : index}</b>${labelMap[stage]}</span>`;
   }).join('')}</div>`;
 }
 
@@ -116,12 +125,20 @@ function eventActionText(engine, actionCode, language) {
     const challengeCode = actionCode === 'watchChallengeAlt' ? 'watchChallengeAlt' : 'watchChallenge';
     const challenge = engine.state.turn.watchChallengeId ? engine.currentWatchChallenge : engine.watchChallengeForAction(challengeCode);
     const treasure = actionCode === 'treasureAndWatch' ? (language === 'de' ? '+2 Münzen + ' : '+2 coins + ') : '';
+    const challengeChoice = engine.currentEvent?.archetype === 'interlude' || engine.currentEvent?.funVariant === 'crew-ritual';
+    const accept = challengeChoice
+      ? (language === 'de' ? 'Challenge annehmen: ' : 'Accept challenge: ')
+      : '';
     if (challenge.secret) {
-      return `${treasure}${language === 'de'
+      return `${treasure}${accept}${language === 'de'
         ? `Geheime Challenge nur für ${escapeHtml(engine.activePlayer.name)} ziehen · nicht vorlesen`
         : `Draw a secret challenge for ${escapeHtml(engine.activePlayer.name)} only · do not read aloud`}`;
     }
-    return `${treasure}${t(challenge, language)}`;
+    return `${treasure}${accept}${t(challenge, language)}`;
+  }
+  if (actionCode === 'coinLoss' && (engine.currentEvent?.archetype === 'interlude' || engine.currentEvent?.funVariant === 'crew-ritual')) {
+    const loss = Math.abs(COIN_VALUES.coinLoss);
+    return language === 'de' ? `Challenge ablehnen · −${loss} Münzen` : `Decline challenge · −${loss} coins`;
   }
   if (actionCode === 'lockIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
@@ -196,21 +213,50 @@ function renderCourseBasket(engine, language) {
   const categoryLabels = {
     vegetable: { de: 'Gemüse', en: 'vegetables' }, pantry: { de: 'Grundlage/Extras', en: 'base/extras' },
     meat: { de: 'Fleisch', en: 'meat' }, fruit: { de: 'Obst', en: 'fruit' },
-    dessert: { de: 'Dessertbasis', en: 'dessert base' }, drinks: { de: 'Getränkebasis', en: 'drink base' }
+    dessert: { de: 'Dessertbasis', en: 'dessert base' }, drinks: { de: 'Getränkebasis', en: 'drink base' },
+    alcohol: { de: 'Spirituose', en: 'spirit' }
+  };
+  const cocktailCourse = engine.currentChapter.id === 'cocktails';
+  const cocktailUseLabel = (use) => t({
+    de: { alcoholic: 'nur alkoholische Mischung', 'alcohol-free': 'nur alkoholfreie Mischung', shared: 'für beide Mischungen' }[use],
+    en: { alcoholic: 'alcoholic mix only', 'alcohol-free': 'alcohol-free mix only', shared: 'both mixes' }[use]
+  }, language);
+  const cocktailUseButtons = (ingredient, action) => {
+    const uses = ingredient.category === 'alcohol' ? ['alcoholic'] : ['alcoholic', 'alcohol-free', 'shared'];
+    return `<div class="button-row">${uses.map((use) => `<button class="${ingredient.cocktailUse === use ? 'primary-button' : 'secondary-button'}" type="button" data-action="${action}" data-ingredient-id="${escapeHtml(ingredient.id)}" data-cocktail-use="${use}">${cocktailUseLabel(use)}</button>`).join('')}</div>`;
   };
   const profile = Object.entries(engine.courseRule().categoryMinimums ?? {}).map(([category, required]) => {
     const current = engine.courseCategoryCount(category, ['discovered', 'locked', 'used']);
     return statusTag(`${current}/${required} ${t(categoryLabels[category] ?? { de: category, en: category }, language)}`, current >= required ? 'green' : 'gold');
   }).join('');
+  const cocktailSpirit = cocktailCourse
+    ? engine.courseIngredients().some((ingredient) => ingredient.category === 'alcohol' && ['discovered', 'locked', 'used'].includes(ingredient.status))
+    : false;
   return `<section class="course-basket panel">
     <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Vorläufige Auswahl' : 'Draft selection'}</p><h3>${language === 'de' ? 'Gangkorb' : 'Course basket'}</h3></div>${statusTag(`${essentialLocked}/${target} ${language === 'de' ? 'Pflichtzutaten' : 'required'}`, essentialLocked >= target ? 'green' : 'gold')}</div>
     <p class="muted">${language === 'de' ? `Dieser Gang braucht genau ${target} Pflichtzutaten${optionalLimit ? ` und erlaubt höchstens ${optionalLimit} optionales Extra` : ''}. Vor dem Wechsel zu den Aufgaben muss der offene Korb leer sein.` : `This course needs exactly ${target} required ingredients${optionalLimit ? ` and allows at most ${optionalLimit} optional extra` : ''}. The open basket must be empty before tasks begin.`}</p>
-    ${profile ? `<div class="stat-strip">${profile}</div>` : ''}
+    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei echte Rezeptkörbe' : 'Two real recipe baskets'}</strong><span>${language === 'de' ? 'Ordnet jede Zutat der alkoholischen Mischung, der alkoholfreien Mischung oder beiden zu. Die Spirituose bleibt immer ausschließlich im alkoholischen Rezept; mindestens eine Geschmackszutat gehört ausschließlich zur alkoholfreien Variante.' : 'Assign every ingredient to the alcoholic mix, the alcohol-free mix, or both. The spirit always stays exclusively in the alcoholic recipe; at least one flavour ingredient must belong exclusively to the alcohol-free version.'}</span></div>` : ''}
+    ${profile || cocktailCourse ? `<div class="stat-strip">${profile}${cocktailCourse ? statusTag(language === 'de' ? `${cocktailSpirit ? '1/1' : '0/1'} Spirituose für die alkoholische Mischung` : `${cocktailSpirit ? '1/1' : '0/1'} spirit for the alcoholic mix`, cocktailSpirit ? 'green' : 'gold') : ''}</div>` : ''}
     ${basket.length ? `<div class="course-basket-list">${basket.map((ingredient) => `<article>
       <strong>${t(ingredient.name, language)}</strong>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : `<small>${language === 'de' ? 'Kein zusätzlicher Karteneffekt.' : 'No additional card effect.'}</small>`}
-      <div class="button-row"><button class="secondary-button" type="button" data-action="lock-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Fest zuordnen' : 'Lock into course'}</button><button class="quiet-button" type="button" data-action="remove-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Zurücklegen' : 'Return'}</button></div>
+      ${cocktailCourse ? cocktailUseButtons(ingredient, 'lock-basket-ingredient') : `<div class="button-row"><button class="secondary-button" type="button" data-action="lock-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Fest zuordnen' : 'Lock into course'}</button></div>`}
+      <div class="button-row"><button class="quiet-button" type="button" data-action="remove-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Zurücklegen' : 'Return'}</button></div>
     </article>`).join('')}</div>` : `<p class="muted">${language === 'de' ? 'Gefundene Zutaten landen zuerst hier. Ordnet sie fest zu oder legt sie zurück.' : 'Discovered ingredients land here first. Lock them in or return them.'}</p>`}
+    ${cocktailCourse && locked.length ? `<div class="cocktail-ingredient-assignments"><h4>${language === 'de' ? 'Bereits festgelegte Cocktailzutaten' : 'Locked cocktail ingredients'}</h4>${locked.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong><small>${cocktailUseLabel(ingredient.cocktailUse)}</small></div>${cocktailUseButtons(ingredient, 'assign-cocktail-ingredient')}</article>`).join('')}</div>` : ''}
+  </section>`;
+}
+
+function renderCocktailTeams(engine, language) {
+  if (engine.currentChapter.id !== 'cocktails') return '';
+  const team = (id, title, tone) => {
+    const names = engine.cocktailTeamMembers(id).map((player) => escapeHtml(player.name));
+    return `<div data-team="${id}"><strong>${title}</strong>${statusTag(names.join(', '), tone)}</div>`;
+  };
+  return `<section class="cocktail-team-board" aria-label="${language === 'de' ? 'Cocktail-Teams' : 'Cocktail teams'}">
+    ${team('alcoholic', language === 'de' ? 'Mit Alkohol' : 'Alcoholic', 'coral')}
+    ${team('alcohol-free', language === 'de' ? 'Alkoholfrei' : 'Alcohol-free', 'green')}
+    <p>${language === 'de' ? 'Nur die beiden Misch-Aufträge sind teamgebunden. Grundlagen, Eis, Sicherheit und Servieren bleiben gemeinsame Crew-Aufgaben.' : 'Only the two mixing jobs are team-specific. Bases, ice, safety, and serving remain shared crew jobs.'}</p>
   </section>`;
 }
 
@@ -234,13 +280,13 @@ function renderStatusPanel(engine, language) {
         ${statusTag(`${tx('group', language)} ${group.id}`, 'blue')}
       </div>
       <p class="muted">${t(engine.currentChapter.atmosphere, language)}</p>
+      ${renderCocktailTeams(engine, language)}
       <div class="stat-strip">
         ${statusTag(`${tx('round', language)} ${engine.state.chapter.round}`)}
         ${statusTag(`● ${engine.state.coins}/${engine.state.coinGoal} ${tx('treasure', language)}`, 'gold')}
         ${statusTag(`${tx('events', language)} ${engine.state.chapter.eventsResolved}`)}
         ${statusTag(stage.label, 'blue')}
         ${statusTag(language === 'de' ? `${freeCrew}/${group.playerIds.length} frei für Aufgaben` : `${freeCrew}/${group.playerIds.length} free for tasks`, freeCrew ? 'green' : 'coral')}
-        ${engine.state.groups.length > 1 ? statusTag(language === 'de' ? 'Crew geteilt' : 'Crew split', 'coral') : ''}
       </div>
       <div class="progress-track" aria-label="${language === 'de' ? 'Ortsfortschritt' : 'Location progress'}"><span style="--progress:${percent(group.locationProgress, goal)}%"></span></div>
       <p class="muted" style="font-family:system-ui,sans-serif;font-size:.72rem;margin:.45rem 0 0">
@@ -249,7 +295,7 @@ function renderStatusPanel(engine, language) {
       <p class="muted" style="font-family:system-ui,sans-serif;font-size:.72rem;margin:.35rem 0 0">
         ${language === 'de' ? `${fixedIngredients} Zutaten für diesen Gang festgelegt · ${chapterTasks.length} Aufgaben zugewiesen` : `${fixedIngredients} ingredients locked for this course · ${chapterTasks.length} tasks assigned`}
       </p>
-      <div class="coin-meter"><span style="--progress:${engine.coinProgress}%"></span><b>${engine.coinProgress}% ${language === 'de' ? 'der Süßigkeitenbeute' : 'of the sweet loot'}</b></div>
+      <div class="coin-meter"><span style="--progress:${engine.coinProgress}%"></span><b>${engine.state.coins}/${engine.state.coinGoal} ${language === 'de' ? 'Münzen' : 'coins'} · ${engine.coinProgress}% ${language === 'de' ? 'der Süßigkeitenbeute' : 'of the sweet loot'}</b></div>
     </section>`;
 }
 
@@ -361,7 +407,9 @@ function renderEventCard(engine, language) {
   const pauseBlocked = event.archetype === 'respite' && !event.options?.includes('fiveMinuteBreak');
   const choices = event.options?.map((code) => `
     <button type="button" class="choice-button" data-action="resolve-choice" data-choice="${code}">${eventActionText(engine, code, language)}</button>`).join('') ?? '';
-  const copy = STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
+  const copy = engine.state.chapter.stage === 'clearing'
+    ? STAGE_COPY.clearing[language]
+    : STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
@@ -486,7 +534,8 @@ function renderTaskAssigneeChoice(engine, language) {
   if (!pending || !card || !group) return renderDrawCard(engine, language);
   const selected = new Set(pending.selectedPlayerIds ?? []);
   const recommended = new Set(pending.recommendedPlayerIds ?? []);
-  const freePlayers = engine.prioritizedFreePlayersForTask(group);
+  const freePlayers = engine.prioritizedFreePlayersForTask(group, card);
+  const cocktailTeam = engine.cocktailTeamForTask(card);
   const choices = freePlayers.map((player) => {
     const role = getRole(player.roleId);
     const isSelected = selected.has(player.id);
@@ -504,7 +553,7 @@ function renderTaskAssigneeChoice(engine, language) {
       <p class="card-story">${t(card.instruction, language)}</p>
       <div class="card-effect"><strong>${language === 'de'
         ? `${engine.activePlayer.name} wählt genau ${pending.requiredPeople} ${pending.requiredPeople === 1 ? 'freie Person' : 'freie Personen'}. Die Crew darf beraten.`
-        : `${engine.activePlayer.name} chooses exactly ${pending.requiredPeople} free ${pending.requiredPeople === 1 ? 'person' : 'people'}. The crew may discuss.`}</strong></div>
+        : `${engine.activePlayer.name} chooses exactly ${pending.requiredPeople} free ${pending.requiredPeople === 1 ? 'person' : 'people'}. The crew may discuss.`}</strong>${cocktailTeam ? `<span>${language === 'de' ? `Für diesen Auftrag stehen nur freie Personen aus dem ${cocktailTeam === 'alcoholic' ? 'alkoholischen' : 'alkoholfreien'} Cocktail-Team zur Wahl.` : `Only free people from the ${cocktailTeam === 'alcoholic' ? 'alcoholic' : 'alcohol-free'} cocktail team can be chosen for this job.`}</span>` : ''}</div>
       <div class="choice-list task-assignee-choices">${choices}</div>
       <div class="next-action"><strong>${language === 'de' ? `${selected.size}/${pending.requiredPeople} ausgewählt` : `${selected.size}/${pending.requiredPeople} selected`}</strong><span>${language === 'de' ? 'Vorbelegt sind freie Personen mit besonders vielen bisherigen Zügen. Die Auswahl darf geändert werden.' : 'Free players with the most completed turns are preselected. You may change the choice.'}</span></div>
       <button class="primary-button" type="button" data-action="confirm-task-assignees" ${complete ? '' : 'disabled'}>${language === 'de' ? 'Besetzung bestätigen' : 'Confirm crew'}</button>
@@ -519,8 +568,10 @@ function renderTaskBriefing(engine, language) {
     .map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name)
     .filter(Boolean);
   const event = engine.currentEvent;
+  const cocktailTeam = engine.cocktailTeamForTask(card);
   const background = card.timingMode === 'background';
-  const timerMinutes = background ? card.backgroundMinutes : card.challengeMinutes;
+  const manual = card.timingMode === 'manual';
+  const timerMinutes = background ? card.backgroundMinutes : manual ? 0 : card.challengeMinutes;
   const after = engine.state.turn.taskBriefingEndsTurn
     ? (language === 'de' ? 'Danach wird das Tablet weitergegeben; die Aufgabe läuft unabhängig von den nächsten Zügen weiter.' : 'Then pass the tablet; the task continues independently of later turns.')
     : (language === 'de' ? 'Danach wird sichtbar an die nächste freie Person in Zugreihenfolge übergeben. Wer diese Aufgabe übernimmt, wird übersprungen.' : 'Then the tablet visibly passes to the next free player in turn order. Anyone taking this task is skipped.');
@@ -529,21 +580,32 @@ function renderTaskBriefing(engine, language) {
       ${renderCourseFlow(engine, language)}
       <p class="eyebrow">${t(card.questName, language)} · ${language === 'de' ? 'Questschritt' : 'quest step'} ${engine.questStepNumber(card)}</p>
       <h2>${t(card.title, language)}</h2>
-      ${event ? `<p class="card-story">${t(event.story, language)}</p>` : `<p class="card-story">${language === 'de' ? 'Die Tapas-Zutaten stehen bereits fest. Deshalb beginnt die Reise direkt mit einem echten Küchenauftrag.' : 'The tapas ingredients are already fixed, so the voyage begins with a real kitchen job.'}</p>`}
+      ${event
+        ? `<p class="card-story">${t(event.story, language)}</p>`
+        : `<p class="card-story">${card.questId === 'reset'
+          ? (language === 'de' ? 'Bevor der neue Gang geplant wird, macht die Crew den Tisch gemeinsam für die nächste Etappe frei.' : 'Before planning the new course, the crew clears the table together for the next stage.')
+          : (language === 'de' ? 'Die Spaßkarten des Auftakts sind beendet. Jetzt führt die gezogene Auftragskarte in die echte Küchenarbeit.' : 'The opening fun cards are complete. This work-order card now leads into the real kitchen work.')}</p>`}
       <div class="task-briefing">
         <strong>${language === 'de' ? 'Konkreter Auftrag' : 'Concrete job'}</strong>
         <p>${t(card.instruction, language)}</p>
         <div class="stat-strip">
           ${statusTag(`${language === 'de' ? 'Verantwortlich' : 'Responsible'}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
-          ${statusTag(`${timerMinutes} min`, background ? 'blue' : 'gold')}
-          ${statusTag(background
-            ? (language === 'de' ? 'Hintergrundtimer · keine Belohnung oder Strafe' : 'Background timer · no reward or penalty')
-            : (language === 'de' ? 'Kurze Arbeits-Challenge mit Münzwertung' : 'Short scored work challenge'), background ? 'blue' : 'coral')}
+          ${cocktailTeam ? statusTag(language === 'de' ? `Rezeptkorb: ${cocktailTeam === 'alcoholic' ? 'alkoholisch' : 'alkoholfrei'}` : `Recipe basket: ${cocktailTeam === 'alcoholic' ? 'alcoholic' : 'alcohol-free'}`, cocktailTeam === 'alcoholic' ? 'coral' : 'green') : ''}
+          ${manual
+            ? statusTag(language === 'de' ? 'Nach Gargrad · kein Spieltimer' : 'By doneness · no game timer', 'blue')
+            : statusTag(`${timerMinutes} min`, background ? 'blue' : 'gold')}
+          ${statusTag(manual
+            ? (language === 'de' ? 'Manuell abhaken · keine Zeitwertung' : 'Check off manually · no time score')
+            : background
+              ? (language === 'de' ? 'Hintergrundtimer · keine Belohnung oder Strafe' : 'Background timer · no reward or penalty')
+              : (language === 'de' ? 'Kurze Arbeits-Challenge mit Münzwertung' : 'Short scored work challenge'), (background || manual) ? 'blue' : 'coral')}
         </div>
       </div>
-      <button class="primary-button" type="button" data-action="accept-task">${background
-        ? (language === 'de' ? 'Questschritt übernehmen & Hintergrundtimer starten' : 'Take quest step & start background timer')
-        : (language === 'de' ? 'Aufgabe übernehmen & Arbeits-Challenge starten' : 'Take task & start work challenge')}</button>
+      <button class="primary-button" type="button" data-action="accept-task">${manual
+        ? (language === 'de' ? 'Aufgabe ohne Spieltimer übernehmen' : 'Take task without game timer')
+        : background
+          ? (language === 'de' ? 'Questschritt übernehmen & Hintergrundtimer starten' : 'Take quest step & start background timer')
+          : (language === 'de' ? 'Aufgabe übernehmen & Arbeits-Challenge starten' : 'Take task & start work challenge')}</button>
       ${renderIngredientBasket(engine, instance, language)}
       <div class="next-action"><strong>${language === 'de' ? `${assigned.map(escapeHtml).join(' & ')} übernehmen diese Aufgabe jetzt.` : `${assigned.map(escapeHtml).join(' & ')} take this task now.`}</strong><span>${after}</span></div>
     </article>`;
@@ -581,6 +643,28 @@ function renderResolvedCard(engine, language) {
 function renderWatchCard(engine, language) {
   const event = engine.currentEvent;
   const challenge = engine.currentWatchChallenge;
+  if (challenge.playerSelection) {
+    const selectedId = engine.state.turn.watchTargetPlayerId;
+    const choices = engine.state.players.map((player) => {
+      const isSelected = player.id === selectedId;
+      return `<button type="button" class="choice-button task-assignee-option" data-action="choose-watch-player" data-player-id="${escapeHtml(player.id)}" data-selected="${isSelected}" aria-pressed="${isSelected}">
+        ${avatar(player)}<span><strong>${escapeHtml(player.name)}</strong><small>${language === 'de' ? 'Als Portionswache auswählen' : 'Choose as portion lookout'}</small></span>
+      </button>`;
+    }).join('');
+    return `
+      <article class="game-card">
+        ${renderCourseFlow(engine, language)}
+        <p class="eyebrow">${language === 'de' ? 'Crewauftrag · Person bestimmen' : 'Crew duty · choose a player'}</p>
+        <h2>${t(challenge.title, language)}</h2>
+        ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
+        <p class="card-story">${t(challenge, language)}</p>
+        <div class="card-effect">${language === 'de'
+          ? 'Die ausgewählte Person wird beim nächsten Servieren als Portionswache angezeigt. Für diese Karte läuft kein Timer.'
+          : 'The selected player will be shown as portion lookout at the next serving. This card has no timer.'}</div>
+        <div class="choice-list task-assignee-choices">${choices}</div>
+        <button class="primary-button" type="button" data-action="confirm-watch-player" ${selectedId ? '' : 'disabled'}>${language === 'de' ? 'Portionswache bestätigen' : 'Confirm portion lookout'}</button>
+      </article>`;
+  }
   const ongoing = challenge.flow === 'ongoing';
   const mandatory = challenge.mandatory;
   const awaitingSecretStart = challenge.secret && !ongoing && !mandatory && engine.state.turn.watchStartedAt == null;
@@ -643,6 +727,7 @@ function renderPreparationSummary(engine, language) {
 
 function renderChapterReady(engine, language) {
   const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === engine.state.chapterIndex && (ingredient.essential || ['discovered', 'locked', 'used'].includes(ingredient.status)));
+  const portionCaptain = engine.state.players.find((player) => player.id === engine.state.chapter.portionCaptainPlayerId);
   return `
     <article class="game-card">
       <p class="eyebrow">${tx('chapterComplete', language)}</p>
@@ -651,8 +736,9 @@ function renderChapterReady(engine, language) {
       <div class="stat-strip">
         ${statusTag(`${engine.state.coins}/${engine.state.coinGoal} ${tx('treasure', language)}`, 'gold')}
         ${statusTag(`${ingredients.length} ${language === 'de' ? 'Zutaten' : 'ingredients'}`, 'green')}
+        ${portionCaptain ? statusTag(language === 'de' ? `Portionswache: ${escapeHtml(portionCaptain.name)}` : `Portion lookout: ${escapeHtml(portionCaptain.name)}`, 'blue') : ''}
       </div>
-      <p>${language === 'de' ? 'Richtet gemeinsam an. Essen hat keinen Zeitdruck – setzt die Reise fort, wenn alle bereit sind.' : 'Plate together. Eating is never timed — continue when everyone is ready.'}</p>
+      <p>${language === 'de' ? 'Der Gang ist fertig zubereitet und serviert. Essen hat keinen Zeitdruck – setzt die Reise fort, wenn alle bereit sind.' : 'The course is prepared and served. Eating is never timed — continue when everyone is ready.'}</p>
       ${renderPreparationSummary(engine, language)}
       <button class="primary-button" type="button" data-action="serve-course">${tx('serveCourse', language)}</button>
     </article>`;
@@ -673,37 +759,13 @@ function renderCurrentCard(engine, language) {
     case 'chapterReady': return renderChapterReady(engine, language);
     case 'crewBusy': {
       const anchor = engine.state.players[engine.state.busyAfterPlayerIndex ?? engine.state.activePlayerIndex];
+      if (engine.state.busyReason === 'waitingForTask') {
+        return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Kurze Ruhe auf See' : 'A quiet moment at sea'}</p><h2>${language === 'de' ? 'Die Zugfolge wartet auf eine laufende Aufgabe' : 'Turn order is waiting for a running task'}</h2><p class="card-story">${language === 'de' ? `Gerade ist keine weitere Aktion offen. Die Reihenfolge ist hinter ${escapeHtml(anchor.name)} gespeichert. Sobald eine Aufgabe erledigt wird, erhält die nächste freie Person eine sichtbare Übergabe.` : `No further action is currently open. The order is saved after ${escapeHtml(anchor.name)}. As soon as a task is completed, the next free player receives a visible handover.`}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
+      }
       return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Alle Hände in der Kombüse' : 'All hands in the galley'}</p><h2>${language === 'de' ? 'Alle Personen haben gerade eine laufende Aufgabe' : 'Every player currently has a running task'}</h2><p class="card-story">${language === 'de' ? `Es wird kein Zug vergeben. Die Reihenfolge ist hinter ${escapeHtml(anchor.name)} gespeichert. Sobald eine Aufgabe erledigt wird, erhält die nächste freie Person in dieser Reihenfolge eine sichtbare Übergabe.` : `No turn is assigned. The order is saved after ${escapeHtml(anchor.name)}. As soon as a task is completed, the next free player in that order receives a visible handover.`}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
     }
     default: return renderDrawCard(engine, language);
   }
-}
-
-function renderAssignedTasks(engine, language) {
-  const tasks = engine.state.tasks.filter((instance) =>
-    instance.chapterIndex === engine.state.chapterIndex &&
-    instance.assignedPlayerIds.includes(engine.activePlayer.id) &&
-    instance.status !== 'done'
-  );
-  if (!tasks.length) return '';
-  return `
-    <section class="panel" style="box-shadow:none">
-      <div class="panel-header"><h3>${language === 'de' ? 'Deine Küchenaufgaben' : 'Your galley tasks'}</h3>${statusTag(tasks.length, 'coral')}</div>
-      <ul class="task-list">
-        ${tasks.slice(0, 3).map((instance) => {
-          const card = engine.getTaskCard(instance);
-          const remaining = getRemainingSeconds(instance);
-          return `<li class="task-item" data-status="${instance.status}">
-            <div class="card-row"><strong>${t(card.title, language)}</strong>${instance.endAt ? `<span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span>` : ''}</div>
-            <p class="muted">${t(card.instruction, language)}</p>
-            ${renderIngredientBasket(engine, instance, language)}
-            ${instance.status === 'queued' && instance.instanceId !== engine.state.turn.assignedTaskId ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${card.timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
-            ${['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${tx('completeTask', language)}</button>` : ''}
-          </li>`;
-        }).join('')}
-      </ul>
-      ${tasks.length > 3 ? `<button class="quiet-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Alle Aufgaben öffnen' : 'Open all tasks'}</button>` : ''}
-    </section>`;
 }
 
 export function renderGame(engine, language) {
@@ -711,6 +773,11 @@ export function renderGame(engine, language) {
   if (engine.state.turn.phase === 'complete' || engine.state.status === 'completed') return renderComplete(engine, language);
   const player = engine.activePlayer;
   const role = getRole(player.roleId);
+  const activeAssignment = engine.currentChapter.id === 'cocktails'
+    ? player.cocktailTeam === 'alcoholic'
+      ? (language === 'de' ? 'Cocktail-Team alkoholisch' : 'alcoholic cocktail team')
+      : (language === 'de' ? 'Cocktail-Team alkoholfrei' : 'alcohol-free cocktail team')
+    : `${tx('group', language)} ${engine.activeGroup.id}`;
   return `
     <h1 class="sr-only">Adventure Dinner · ${t(engine.currentChapter.name, language)} · ${t(engine.currentChapter.locations[engine.activeGroup.locationIndex], language)}</h1>
     <div class="game-grid">
@@ -722,14 +789,13 @@ export function renderGame(engine, language) {
         <section class="turn-banner">
           ${avatar(player)}
           <div>
-            <p>${tx('activePlayer', language)} · ${t(role.name, language)} · ${tx('group', language)} ${engine.activeGroup.id}</p>
+            <p>${tx('activePlayer', language)} · ${t(role.name, language)} · ${activeAssignment}</p>
             <h2>${escapeHtml(player.name)}</h2>
           </div>
         </section>
         ${renderAbility(engine, language)}
         ${renderCurrentCard(engine, language)}
         ${renderCourseBasket(engine, language)}
-        ${renderAssignedTasks(engine, language)}
       </div>
     </div>`;
 }

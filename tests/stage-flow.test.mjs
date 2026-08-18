@@ -18,46 +18,87 @@ function beginSecondCourse(engine) {
   engine.state.turn.phase = 'eating';
   assert.equal(engine.startNextChapter(now + 1_000), true);
   assert.equal(engine.state.chapterIndex, 1);
+  assert.equal(engine.state.chapter.stage, 'clearing');
+  assert.equal(engine.state.turn.phase, 'taskBriefing');
+  const clearingTask = engine.state.tasks.find((task) => task.chapterIndex === 1 && engine.getTaskCard(task)?.questId === 'reset');
+  assert.ok(clearingTask);
+  assert.equal(engine.completeTask(clearingTask.instanceId, now + 1_005), true);
+  assert.equal(engine.state.chapter.stage, 'ingredients');
+  assert.equal(engine.endTurn(now + 1_006), true);
   assert.ok(engine.beginEvent(now + 1_010));
   assert.equal(engine.state.turn.phase, 'courseDecision');
   assert.equal(engine.chooseSoupStyle('cream', now + 1_020), true);
 }
 
-test('Tapas starts with fixed ingredients and one concrete automatic task instead of a planning task', () => {
+test('every later course starts by clearing the previous table before ingredient selection', () => {
+  const engine = create(70);
+  engine.state.tasks.forEach((task) => { task.status = 'done'; });
+  engine.state.turn.phase = 'eating';
+  assert.equal(engine.startNextChapter(now + 1_000), true);
+  const clearing = engine.state.tasks.find((task) => task.chapterIndex === 1 && engine.getTaskCard(task)?.questId === 'reset');
+  assert.ok(clearing);
+  assert.equal(engine.state.chapter.stage, 'clearing');
+  assert.equal(engine.state.turn.phase, 'taskBriefing');
+  assert.equal(engine.currentEventStage(), 'tasks');
+  assert.equal(engine.courseIngredients().length, 0);
+  const html = renderGame(engine, 'de');
+  assert.match(html, /Tapastafel abräumen/);
+  assert.match(html, /Abräumen/);
+  assert.doesNotMatch(html, /Vorrats-Ereigniskarte ziehen/);
+  assert.equal(engine.completeTask(clearing.instanceId, now + 1_100), true);
+  assert.equal(engine.state.chapter.stage, 'ingredients');
+});
+
+test('Tapas starts with fixed ingredients and the fun-card draw instead of a kitchen task', () => {
   const engine = create();
-  const task = engine.state.tasks[0];
-  const card = engine.getTaskCard(task);
 
   assert.equal(engine.state.chapter.stage, 'tasks');
-  assert.equal(engine.state.turn.phase, 'taskBriefing');
+  assert.equal(engine.state.turn.phase, 'draw');
   assert.ok(engine.courseIngredients().every((ingredient) => ingredient.status === 'locked'));
-  assert.equal(card.playable, true);
-  assert.notEqual(card.area, 'planning');
-  assert.notEqual(card.area, 'story');
-  assert.ok(task.basketIngredientIds.every((ingredientId) => engine.getIngredient(ingredientId).chapterIndex === 0));
-  assert.ok(task.assignedPlayerIds.includes(engine.activePlayer.id));
+  assert.equal(engine.state.tasks.length, 0);
+  assert.equal(engine.freePlayersForTask().length, names.length);
 
   const html = renderGame(engine, 'de');
-  assert.match(html, new RegExp(card.title.de));
-  assert.match(html, /Relevante Zutaten dieses Gangs/);
-  assert.match(html, /Aufgabe übernehmen/);
+  assert.match(html, /Nächste Karte ziehen/);
   assert.doesNotMatch(html, /Der Plan des Hafenmeisters/);
+  assert.equal(engine.beginEvent(now + 2_000)?.archetype, 'work-mischief');
+});
 
-  const activePlayer = engine.activePlayer.id;
-  assert.equal(engine.acceptTaskBriefing(now + 2_000), true);
-  assert.equal(engine.state.turn.phase, 'resolved');
-  assert.equal(engine.activePlayer.id, activePlayer, 'the first assignment remains the active player’s only action');
-  assert.equal(engine.state.tasks.length, 1, 'the first turn creates exactly one task');
-  assert.equal(task.status, 'active');
-  assert.equal(engine.endTurn(now + 2_100), true);
-  assert.equal(engine.state.turn.phase, 'draw');
-  assert.notEqual(engine.activePlayer.id, activePlayer, 'handover then skips the busy opening-task owner');
+test('the first three event cards are varied fun cards and later task stacks keep fun between jobs', () => {
+  for (let seed = 80; seed < 90; seed += 1) {
+    const engine = create(seed);
+    const firstQueue = engine.eventQueue('tasks');
+    const firstThree = firstQueue.slice(0, 3).map((eventId) => EVENT_DECKS[0].find((event) => event.id === eventId));
+    assert.ok(firstThree.every((event) => event?.archetype === 'work-mischief'));
+    assert.equal(new Set(firstThree.map((event) => event.funVariant)).size, 3);
+
+    engine.state.eventQueues.forEach((chapterQueues, chapterIndex) => {
+      chapterQueues.tasks.forEach((queue, locationIndex) => {
+        const firstFunIndex = queue.findIndex((eventId) => EVENT_DECKS[chapterIndex].find((event) => event.id === eventId)?.archetype === 'work-mischief');
+        assert.ok(firstFunIndex >= 0 && firstFunIndex <= 1, `chapter=${chapterIndex} location=${locationIndex}`);
+      });
+    });
+  }
+});
+
+test('a new voyage actually draws three fun cards before its first possible work-order card', () => {
+  const engine = create(91);
+  for (let index = 0; index < 3; index += 1) {
+    const event = engine.beginEvent(now + index * 100);
+    assert.equal(event.archetype, 'work-mischief', `card ${index + 1}`);
+    engine.markEventResolved(event, now + index * 100 + 1);
+    engine.state.turn.phase = 'resolved';
+    assert.equal(engine.endTurn(now + index * 100 + 2), true);
+    assert.equal(engine.state.tasks.length, 0, `card ${index + 1} must not create a hidden task`);
+  }
+  const fourth = engine.beginEvent(now + 400);
+  assert.equal(fourth.stage, 'tasks');
+  assert.notEqual(fourth.archetype, 'work-mischief');
+  assert.ok(['orders', 'duty', 'guild'].includes(fourth.archetype));
 });
 
 test('separate state decks never expose an impossible ingredient or task action', () => {
   const engine = create(72);
-  engine.acceptTaskBriefing(now + 1_000);
-  engine.endTurn(now + 1_500);
   const taskEvent = engine.beginEvent(now + 2_000);
   assert.equal(taskEvent.stage, 'tasks');
   assert.ok((taskEvent.options ?? taskEvent.outcomes).every((action) => engine.actionAvailable(action)));
@@ -86,17 +127,19 @@ test('fun events can be drawn and resolved during ingredient rounds without chan
   assert.equal(event.stage, 'ingredients');
   assert.equal(event.archetype, 'pantry-mischief');
   assert.ok(event.options.includes('watchChallenge'));
+  assert.ok(event.options.includes('treasure'));
+  assert.equal(event.options.includes('storyMoment'), false);
   assert.equal(engine.actionAvailable('watchChallenge'), true);
-  assert.equal(engine.resolveChoice('storyMoment', now + 3_200), true);
+  const coinsBefore = engine.state.coins;
+  assert.equal(engine.resolveChoice('treasure', now + 3_200), true);
   assert.equal(engine.state.turn.phase, 'resolved');
+  assert.ok(engine.state.coins > coinsBefore);
   assert.deepEqual(engine.courseIngredients().map((ingredient) => ingredient.id), basketBefore);
   assert.equal(engine.state.chapter.stage, 'ingredients');
 });
 
 test('fun events can also be drawn during task rounds and dice outcomes stay distinct', () => {
   const engine = create(723);
-  assert.equal(engine.acceptTaskBriefing(now + 500), true);
-  assert.equal(engine.endTurn(now + 1_000), true);
   engine.state.chapter.stage = 'tasks';
   engine.state.turn.phase = 'draw';
   engine.activeGroup.locationIndex = 1;
@@ -153,7 +196,7 @@ test('ingredients must be discovered and locked before the work-order deck can a
   assert.equal(engine.requiredCourseIngredients().filter((ingredient) => ingredient.status === 'locked').length, engine.courseRule().target);
   assert.equal(engine.unlockedCourseIngredients().length, 0);
   assert.equal(engine.state.chapter.stage, 'tasks');
-  assert.equal(engine.state.tasks.filter((task) => task.chapterIndex === chapterIndex).length, 0);
+  assert.equal(engine.state.tasks.filter((task) => task.chapterIndex === chapterIndex && engine.getTaskCard(task)?.questId !== 'reset').length, 0);
   engine.state.turn.phase = 'draw';
   const event = engine.beginEvent(now + 4_000);
   assert.equal(event.stage, 'tasks');

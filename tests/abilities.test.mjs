@@ -9,10 +9,23 @@ import { simulateGame } from '../tools/simulation-lib.mjs';
 const now = 1_800_200_000_000;
 const names = Array.from({ length: 10 }, (_, index) => `Crew ${index + 1}`);
 
+function finishClearingPhase(engine, timestamp) {
+  const clearingTask = engine.state.tasks.find((instance) =>
+    instance.chapterIndex === engine.state.chapterIndex && engine.getTaskCard(instance)?.questId === 'reset' && instance.status !== 'done'
+  );
+  assert.ok(clearingTask, 'the new course starts with a clearing task');
+  assert.equal(engine.completeTask(clearingTask.instanceId, timestamp), true);
+  assert.equal(engine.state.chapter.stage, 'ingredients');
+  assert.equal(engine.state.turn.phase, 'resolved');
+  assert.equal(engine.endTurn(timestamp + 1), true);
+}
+
 function create(roleId, seed = 4_200) {
   const engine = GameEngine.create({ names, title: `Ability ${roleId}`, defaultLanguage: 'de', seed }, now);
+  engine.state.tasks.forEach((task) => { task.status = 'done'; });
   engine.state.turn.phase = 'eating';
   assert.equal(engine.startNextChapter(now + 100), true);
+  finishClearingPhase(engine, now + 105);
   assert.ok(engine.beginEvent(now + 110));
   assert.equal(engine.state.turn.phase, 'courseDecision');
   assert.equal(engine.chooseSoupStyle('cream', now + 120), true);
@@ -55,6 +68,9 @@ test('all ten active role abilities execute once and leave a progressable turn',
       completeSoupCompositionForTest(engine);
       engine.state.turn.phase = 'eating';
       assert.equal(engine.startNextChapter(now + 150), true);
+      finishClearingPhase(engine, now + 160);
+      engine.activePlayer.roleId = role.id;
+      engine.activePlayer.activeUsesRemaining = 3;
     }
     const beforeUses = engine.activePlayer.activeUsesRemaining;
     let option = null;

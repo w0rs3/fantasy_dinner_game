@@ -2,10 +2,12 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine, validateSessionState } from '../js/core/game-engine.js';
 import { MemoryStorage, SessionRepository } from '../js/core/storage.js';
-import { updateTaskTimers } from '../js/core/timers.js';
+import { getElapsedSeconds, getRemainingSeconds, getTaskTimerProgress, updateTaskTimers } from '../js/core/timers.js';
 import { EVENT_DECKS } from '../js/data/events.js';
 import { getPlayableQuestLines } from '../js/data/tasks.js';
 import { renderGame } from '../js/ui/game.js';
+import { renderTasks } from '../js/ui/overlays.js';
+import { addOpeningTask, createEngineWithTask } from './test-helpers.mjs';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Eva', 'Finn'];
 
@@ -43,7 +45,7 @@ test('quest stacks start with one card per line and mix a completed line success
     assert.ok(engine.state.taskQueues[chapterIndex].every((taskId) => starts.has(taskId)));
   }
 
-  const opening = engine.state.tasks[0];
+  const opening = addOpeningTask(engine, 1_800_000_000_100);
   const openingCard = engine.getTaskCard(opening);
   const line = getPlayableQuestLines(0).find((candidate) => candidate[0].questId === openingCard.questId);
   assert.equal(openingCard.id, line[0].id, 'the automatic Tapas job is a quest-line start');
@@ -59,7 +61,7 @@ test('quest stacks start with one card per line and mix a completed line success
 test('different Tapas voyages can open with different quest lines', () => {
   const openingQuests = new Set(Array.from({ length: 30 }, (_, index) => {
     const engine = GameEngine.create({ names, title: `Quest order ${index}`, defaultLanguage: 'de', seed: 21_000 + index }, 1_800_000_000_000);
-    return engine.getTaskCard(engine.state.tasks[0]).questId;
+    return engine.getTaskCard(addOpeningTask(engine, 1_800_000_000_100 + index)).questId;
   }));
   assert.ok(openingQuests.has('bread'));
   assert.ok(openingQuests.has('dates'));
@@ -77,10 +79,12 @@ test('new and saved voyages use 500 coins as the complete treasure', () => {
   assert.equal(restored.state.coinGoal, 500, 'the old reward goal is migrated');
   assert.equal(restored.coinProgress, 8);
   assert.match(renderGame(restored, 'de'), /41\/500 Münzen/);
+  assert.match(renderGame(restored, 'de'), /41\/500 Münzen · 8% der Süßigkeitenbeute/);
 });
 
 test('saved voyages silently retire yoghurt as an ordinary optional kitchen staple', () => {
   const engine = GameEngine.create({ names, title: 'Legacy yoghurt', defaultLanguage: 'de', seed: 431 }, 1_800_000_000_000);
+  addOpeningTask(engine, 1_800_000_000_010);
   const legacy = engine.snapshot();
   legacy.ingredients.push({
     id: 'yoghurt', category: 'pantry', name: { de: 'Joghurt', en: 'Yoghurt' },
@@ -151,8 +155,7 @@ test('saved voyages return an unlocked cucumber from the soup basket', () => {
 
 test('every task can be completed early and its challenge score survives persistence', () => {
   const now = 1_800_000_000_000;
-  const engine = GameEngine.create({ names, title: 'Timer test', defaultLanguage: 'de', seed: 45 }, now);
-  engine.beginEvent(now);
+  const engine = createEngineWithTask({ names, title: 'Timer test', defaultLanguage: 'de', seed: 45 }, now);
   const coreTask = engine.state.tasks[0];
   const card = engine.getTaskCard(coreTask);
   assert.ok(card);
@@ -170,9 +173,29 @@ test('every task can be completed early and its challenge score survives persist
   assert.notEqual(restored.state.tasks[0].status, 'done');
 });
 
+test('manual frying tasks have no countdown and no time-based coin score', () => {
+  const now = 1_800_000_050_000;
+  const engine = createEngineWithTask({ names, title: 'Doneness test', defaultLanguage: 'de', seed: 451 }, now);
+  const task = engine.state.tasks[0];
+  const fryingCard = getPlayableQuestLines(0).flat().find((card) => card.title.de === 'Speckdatteln in der Pfanne braten');
+  task.taskId = fryingCard.id;
+
+  assert.equal(engine.startTask(task.instanceId, now), true);
+  assert.equal(task.timingMode, 'manual');
+  assert.equal(task.endAt, null);
+  assert.equal(task.challengeEndsAt, null);
+  assert.deepEqual(updateTaskTimers(engine.state, now + 60 * 60_000).notices, []);
+
+  const coinsBefore = engine.state.coins;
+  assert.equal(engine.completeTask(task.instanceId, now + 60 * 60_000), true);
+  assert.equal(task.challengeResult, 'manual');
+  assert.equal(task.challengeCoinValue, 0);
+  assert.equal(engine.state.coins, coinsBefore);
+});
+
 test('the current briefing task can be checked directly from the task list without blocking the turn', () => {
   const now = 1_800_000_100_000;
-  const engine = GameEngine.create({ names, title: 'Direct check', defaultLanguage: 'de', seed: 46 }, now);
+  const engine = createEngineWithTask({ names, title: 'Direct check', defaultLanguage: 'de', seed: 46 }, now);
   const task = engine.state.tasks[0];
   assert.equal(engine.state.turn.phase, 'taskBriefing');
   assert.equal(task.status, 'queued');
@@ -203,6 +226,37 @@ test('timer alerts fire once at completion and stay silent at five and one minut
   assert.deepEqual(updateTaskTimers(restored, start + 11 * 60_000).notices, []);
 });
 
+test('scored task timers run into overtime and freeze their duration, bar, and coin result on completion', () => {
+  const start = 1_800_000_000_000;
+  const engine = createEngineWithTask({ names, title: 'Frozen result', defaultLanguage: 'de', seed: 452 }, start);
+  const task = engine.state.tasks[0];
+  assert.equal(engine.startTask(task.instanceId, start), true);
+  const targetSeconds = task.challengeMinutes * 60;
+  const completedAt = start + (targetSeconds + 30) * 1000;
+
+  assert.equal(getRemainingSeconds(task, completedAt), -30);
+  assert.equal(engine.completeTask(task.instanceId, completedAt), true);
+  assert.equal(task.challengeCoinValue, -2);
+  assert.equal(getRemainingSeconds(task, completedAt + 60 * 60_000), -30, 'completed countdown remains frozen');
+  assert.equal(getElapsedSeconds(task, completedAt + 60 * 60_000), targetSeconds + 30, 'completed duration remains frozen');
+  assert.equal(getTaskTimerProgress(task, completedAt + 60 * 60_000), 100, 'completed progress bar remains frozen');
+
+  const html = renderTasks(engine, 'de');
+  assert.match(html, /Überlänge beim Abschluss/);
+  assert.match(html, /Dauer: \d{2}:\d{2}/);
+  assert.match(html, /Münzwertung: −2 Münzen/);
+  assert.match(html, /data-overdue="true">−00:30/);
+});
+
+test('unscored background timers stop at zero instead of accumulating overtime', () => {
+  const start = 1_800_000_000_000;
+  const task = {
+    status: 'ready', timingMode: 'background', startedAt: start,
+    endAt: start + 60_000, completedAt: null
+  };
+  assert.equal(getRemainingSeconds(task, start + 90_000), 0);
+});
+
 test('repository round-trips the complete game state and deletes only the target voyage', () => {
   const storage = new MemoryStorage();
   const repository = new SessionRepository(storage);
@@ -227,9 +281,9 @@ test('repository round-trips the complete game state and deletes only the target
 });
 
 test('handover advances to the next free player and skips task owners', () => {
-  const engine = GameEngine.create({ names, title: 'Round robin', defaultLanguage: 'de', seed: 51 }, 1_800_000_000_000);
+  const engine = createEngineWithTask({ names, title: 'Round robin', defaultLanguage: 'de', seed: 51 }, 1_800_000_000_000);
   const firstId = engine.activePlayer.id;
-  assert.equal(engine.acceptTaskBriefing(), true, 'the automatic opening task is accepted before the first event');
+  assert.equal(engine.acceptTaskBriefing(), true, 'the task fixture is accepted before the event');
   assert.equal(engine.state.turn.phase, 'resolved');
   assert.equal(engine.endTurn(), true);
   assert.notEqual(engine.activePlayer.id, firstId);
@@ -248,7 +302,10 @@ test('handover advances to the next free player and skips task owners', () => {
     engine.confirmTaskAssignees();
   }
   if (engine.state.turn.phase === 'taskBriefing') engine.acceptTaskBriefing();
-  if (engine.state.turn.phase === 'watch') engine.completeWatchChallenge();
+  if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.playerSelection) {
+    engine.selectWatchChallengePlayer(engine.activePlayer.id);
+    engine.confirmWatchChallengePlayer();
+  } else if (engine.state.turn.phase === 'watch') engine.completeWatchChallenge();
   while (engine.state.turn.chainPending) engine.state.turn.chainPending = false;
   assert.equal(engine.state.turn.phase, 'resolved');
   engine.endTurn();
@@ -257,7 +314,7 @@ test('handover advances to the next free player and skips task owners', () => {
 });
 
 test('resolved work-order cards keep the task that was actually assigned', () => {
-  const engine = GameEngine.create({ names, title: 'Stable result', defaultLanguage: 'de', seed: 52 }, 1_800_000_000_000);
+  const engine = createEngineWithTask({ names, title: 'Stable result', defaultLanguage: 'de', seed: 52 }, 1_800_000_000_000);
   const assigned = engine.state.tasks[0];
   const assignedTitle = engine.getTaskCard(assigned).title.de;
   engine.acceptTaskBriefing();

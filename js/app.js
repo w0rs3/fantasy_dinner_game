@@ -2,7 +2,7 @@ import { DEFAULT_PREFERENCES } from './config.js';
 import { GameAudio } from './core/audio.js';
 import { GameEngine, validateSessionState } from './core/game-engine.js';
 import { SessionRepository } from './core/storage.js';
-import { getRemainingSeconds, updateTaskTimers } from './core/timers.js';
+import { getRemainingSeconds, getTaskTimerProgress, updateTaskTimers } from './core/timers.js';
 import { formatDuration, localize, ui } from './data/i18n.js';
 import { getRole } from './data/roles.js';
 import { AppDialog } from './ui/dialog.js';
@@ -35,7 +35,8 @@ let setupDraft = {
   title: '',
   playerCount: 6,
   defaultLanguage: preferences.language,
-  names: Array(10).fill('')
+  names: Array(10).fill(''),
+  cocktailTeams: Array(10).fill('')
 };
 
 const currentSnapshot = repository.getCurrentSession();
@@ -140,12 +141,16 @@ function readSetupForm() {
   const names = Array.from({ length: Math.max(playerCount, setupDraft.names.length) }, (_, index) =>
     String(data.get(`player-${index}`) ?? setupDraft.names[index] ?? '').trim()
   );
+  const cocktailTeams = Array.from({ length: Math.max(playerCount, setupDraft.cocktailTeams.length) }, (_, index) =>
+    String(data.get(`cocktail-team-${index}`) ?? setupDraft.cocktailTeams[index] ?? '')
+  );
   setupDraft = {
     ...setupDraft,
     title: String(data.get('title') ?? setupDraft.title),
     playerCount,
     defaultLanguage: String(data.get('defaultLanguage') ?? setupDraft.defaultLanguage),
-    names
+    names,
+    cocktailTeams
   };
   return setupDraft;
 }
@@ -187,7 +192,10 @@ function showCrewReveal() {
     title: currentLanguage === 'de' ? 'Willkommen an Bord' : 'Welcome aboard',
     content: `<div class="crew-list">${engine.state.players.map((player) => {
       const role = getRole(player.roleId);
-      return `<div class="crew-item"><div class="card-row"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(player.name))}</span><div style="flex:1"><strong>${escapeHtml(player.name)}</strong><br><span class="muted">${escapeHtml(localize(role.name, currentLanguage))} · ${escapeHtml(localize(role.passive, currentLanguage))}</span></div></div></div>`;
+      const cocktailTeam = player.cocktailTeam === 'alcoholic'
+        ? (currentLanguage === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
+        : (currentLanguage === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free');
+      return `<div class="crew-item"><div class="card-row"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(player.name))}</span><div style="flex:1"><strong>${escapeHtml(player.name)}</strong><br><span class="muted">${escapeHtml(localize(role.name, currentLanguage))} · ${escapeHtml(localize(role.passive, currentLanguage))}<br>${escapeHtml(cocktailTeam)}</span></div></div></div>`;
     }).join('')}</div>`,
     actions: `<button type="button" class="primary-button" data-action="close-dialog">${ui('confirmHandover', currentLanguage)}</button>`
   });
@@ -197,10 +205,15 @@ function showHandover() {
   const next = engine.activePlayer;
   const nextLanguage = next.language;
   const role = getRole(next.roleId);
+  const assignment = engine.currentChapter.id === 'cocktails'
+    ? next.cocktailTeam === 'alcoholic'
+      ? (nextLanguage === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
+      : (nextLanguage === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free')
+    : `${ui('group', nextLanguage)} ${engine.activeGroup.id}`;
   dialog.show({
     kicker: ui('handTablet', nextLanguage),
     title: next.name,
-    content: `<div class="turn-banner"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(next.name))}</span><div><p>${escapeHtml(localize(role.name, nextLanguage))} · ${ui('group', nextLanguage)} ${engine.activeGroup.id}</p><h2>${escapeHtml(localize(engine.currentChapter.locations[engine.activeGroup.locationIndex], nextLanguage))}</h2></div></div>`,
+    content: `<div class="turn-banner"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(next.name))}</span><div><p>${escapeHtml(localize(role.name, nextLanguage))} · ${escapeHtml(assignment)}</p><h2>${escapeHtml(localize(engine.currentChapter.locations[engine.activeGroup.locationIndex], nextLanguage))}</h2></div></div>`,
     actions: `<button type="button" class="primary-button" data-action="close-dialog">${ui('confirmHandover', nextLanguage)}</button>`
   });
 }
@@ -249,17 +262,26 @@ function updateVisibleTimers() {
   if (!engine) return;
   document.querySelectorAll('[data-task-timer]').forEach((element) => {
     const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskTimer);
-    if (task) element.textContent = formatDuration(getRemainingSeconds(task));
+    if (task) {
+      const remaining = getRemainingSeconds(task);
+      element.textContent = formatDuration(remaining);
+      element.dataset.overdue = String(remaining < 0);
+      const caption = document.querySelector(`[data-task-timer-caption="${task.instanceId}"]`);
+      if (caption && task.timingMode !== 'background') {
+        caption.textContent = remaining < 0
+          ? task.status === 'done'
+            ? (language() === 'de' ? 'Überlänge beim Abschluss' : 'overtime at completion')
+            : (language() === 'de' ? 'Überlänge' : 'overtime')
+          : task.status === 'done'
+            ? (language() === 'de' ? 'Restzeit beim Abschluss' : 'time remaining at completion')
+            : ui('remaining', language());
+      }
+    }
   });
   document.querySelectorAll('[data-task-progress]').forEach((element) => {
     const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskProgress);
     if (!task?.startedAt) return;
-    const card = engine.getTaskCard(task);
-    const minutes = task.timingMode === 'background'
-      ? (task.backgroundMinutes || card.backgroundMinutes)
-      : (task.challengeMinutes || card.challengeMinutes);
-    const elapsed = Math.max(0, Date.now() - task.startedAt);
-    element.style.setProperty('--progress', `${Math.min(100, Math.round((elapsed / Math.max(1, minutes * 60_000)) * 100))}%`);
+    element.style.setProperty('--progress', `${getTaskTimerProgress(task)}%`);
   });
   document.querySelectorAll('[data-watch-timer]').forEach((element) => {
     const remaining = Math.max(0, Math.ceil(((engine.state.turn.watchEndsAt ?? Date.now()) - Date.now()) / 1000));
@@ -301,7 +323,7 @@ async function handleAction(target) {
   await audio.unlock();
   switch (action) {
     case 'open-setup':
-      setupDraft = { title: '', playerCount: 6, defaultLanguage: preferences.language, names: Array(10).fill('') };
+      setupDraft = { title: '', playerCount: 6, defaultLanguage: preferences.language, names: Array(10).fill(''), cocktailTeams: Array(10).fill('') };
       publicHomeView = 'setup';
       navigate('setup');
       break;
@@ -338,6 +360,12 @@ async function handleAction(target) {
       break;
     }
     case 'complete-watch': engine.completeWatchChallenge(); audio.play('complete'); persist(); render(); break;
+    case 'choose-watch-player':
+      if (engine.selectWatchChallengePlayer(target.dataset.playerId)) { audio.play('move'); persist(); render(); }
+      break;
+    case 'confirm-watch-player':
+      if (engine.confirmWatchChallengePlayer()) { audio.play('complete'); persist(); render(); }
+      break;
     case 'start-watch':
       if (engine.startWatchChallengeAction()) { audio.play('move'); persist(); render(); }
       break;
@@ -395,7 +423,9 @@ async function handleAction(target) {
         const score = task?.challengeCoinValue ?? 0;
         showToast(task?.challengeResult === 'background'
           ? (language() === 'de' ? 'Hintergrundzeit beendet · keine Münzwertung' : 'Background time complete · no coin score')
-          : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
+          : task?.challengeResult === 'manual'
+            ? (language() === 'de' ? 'Nach Gargrad erledigt · keine Zeitwertung' : 'Completed by doneness · no time score')
+            : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
         audio.play('complete'); persist(); render();
         if (wasCrewBusy && engine.state.turn.phase !== 'crewBusy') showHandover();
       }
@@ -405,7 +435,10 @@ async function handleAction(target) {
       if (engine.undoTaskCompletion(target.dataset.taskId)) { audio.play('move'); persist(); render(); }
       break;
     case 'lock-basket-ingredient':
-      if (engine.lockIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
+      if (engine.lockIngredientFromBasket(target.dataset.ingredientId, Date.now(), target.dataset.cocktailUse ?? null)) { audio.play('move'); persist(); render(); }
+      break;
+    case 'assign-cocktail-ingredient':
+      if (engine.setCocktailIngredientUse(target.dataset.ingredientId, target.dataset.cocktailUse)) { audio.play('move'); persist(); render(); }
       break;
     case 'remove-basket-ingredient':
       if (engine.removeIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
@@ -464,11 +497,20 @@ document.addEventListener('submit', (event) => {
   event.preventDefault();
   const draft = readSetupForm();
   const names = draft.names.slice(0, draft.playerCount).map((name) => name.trim());
+  const cocktailTeams = draft.cocktailTeams.slice(0, draft.playerCount);
   if (names.some((name) => !name)) {
     showToast(language() === 'de' ? 'Bitte gebt für jede Person einen Namen ein.' : 'Please enter a name for every player.');
     return;
   }
-  engine = GameEngine.create({ ...draft, names, audio: preferences.audio });
+  if (cocktailTeams.some((team) => !['alcoholic', 'alcohol-free'].includes(team))) {
+    showToast(language() === 'de' ? 'Bitte wählt für jede Person ein Cocktail-Team.' : 'Please choose a cocktail team for every player.');
+    return;
+  }
+  if (!cocktailTeams.includes('alcoholic') || !cocktailTeams.includes('alcohol-free')) {
+    showToast(language() === 'de' ? 'Für die zwei Cocktailvarianten braucht jedes Team mindestens eine Person.' : 'Each cocktail version needs at least one person on its team.');
+    return;
+  }
+  engine = GameEngine.create({ ...draft, names, cocktailTeams, audio: preferences.audio });
   preferences = repository.savePreferences({ language: draft.defaultLanguage });
   audio.setEnabled(preferences.audio);
   view = 'game';

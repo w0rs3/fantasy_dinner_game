@@ -15,6 +15,7 @@ const PLAYER_LIMITS = Object.freeze({ min: 6, max: 10 });
 const COIN_GOAL = 500;
 const COIN_VALUES = Object.freeze({
   event: 2,
+  coinLoss: -5,
   challenge: 2,
   veryFastTask: 2,
   onTimeTask: 1,
@@ -251,8 +252,8 @@ const UI_TEXT = Object.freeze({
   usesLeft: { de: 'Einsätze übrig', en: 'uses left' },
   useAbility: { de: 'Fähigkeit einsetzen', en: 'Use ability' },
   locationComplete: { de: 'Ort abgeschlossen – die Crew zieht automatisch weiter.', en: 'Location complete — the crew moves on automatically.' },
-  chapterComplete: { de: 'Gang bereit zum Servieren', en: 'Course ready to serve' },
-  serveCourse: { de: 'Servieren & gemeinsam essen', en: 'Serve & eat together' },
+  chapterComplete: { de: 'Gang fertig', en: 'Course complete' },
+  serveCourse: { de: 'Gemeinsam essen', en: 'Eat together' },
   nextCourse: { de: 'Nächsten Gang beginnen', en: 'Begin next course' },
   treasure: { de: 'Münzen', en: 'Coins' },
   events: { de: 'Ereignisse', en: 'Events' },
@@ -279,7 +280,7 @@ const UI_TEXT = Object.freeze({
   basket: { de: 'im Gangkorb', en: 'in course basket' },
   skipped: { de: 'nicht gewählt', en: 'not chosen' },
   quantitySuggestion: { de: 'Mengenvorschlag', en: 'Quantity suggestion' },
-  noWaiting: { de: 'Jede offene Aufgabe kann hier jederzeit erledigt markiert werden. Die Challenge-Zeit bestimmt nur Münzen.', en: 'Every open task can be completed here at any time. Challenge time only determines coins.' },
+  noWaiting: { de: 'Jede offene Aufgabe kann hier jederzeit erledigt markiert werden. Challenge-Zeit bestimmt nur Münzen; Back- und Bratschritte nach Gargrad haben keinen Spieltimer.', en: 'Every open task can be completed here at any time. Challenge time only determines coins; baking and frying steps judged by doneness have no game timer.' },
   handTablet: { de: 'Tablet weitergeben an', en: 'Pass the tablet to' },
   confirmHandover: { de: 'Ich bin bereit', en: 'I am ready' },
   group: { de: 'Gruppe', en: 'Group' },
@@ -309,10 +310,12 @@ function formatDate(timestamp, language = 'de') {
 }
 
 function formatDuration(seconds) {
-  const safe = Math.max(0, Math.ceil(seconds));
+  const numeric = Number.isFinite(Number(seconds)) ? Number(seconds) : 0;
+  const sign = numeric < 0 ? '−' : '';
+  const safe = Math.ceil(Math.abs(numeric));
   const minutes = Math.floor(safe / 60);
   const rest = safe % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
+  return `${sign}${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
 }
 
 
@@ -459,7 +462,7 @@ const COURSE_INGREDIENT_RULES = Object.freeze({
   salad: { target: 9, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
   main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
   dessert: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
-  cocktails: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, drinks: 3 }, categoryLimits: { vegetable: 1, meat: 0 } }
+  cocktails: { target: 7, optionalLimit: 2, categoryMinimums: { fruit: 1, drinks: 3 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 1 } }
 });
 
 const INGREDIENT_EFFECT_TEXT = Object.freeze({
@@ -675,28 +678,28 @@ const ARCHETYPES = Object.freeze([
     id: 'watch', stage: 'cooking', type: 'choice',
     title: { de: 'Die aktive Deckwache von {location}', en: 'The Active Deck Watch at {location}' },
     scene: {
-      de: 'Während Küchenarbeit oder Timer laufen, kann die Crew gemeinsam handeln oder sich für parallele Wege aufteilen.',
-      en: 'While kitchen work or timers continue, the crew can act together or split across parallel routes.'
+      de: 'Während Küchenarbeit oder Timer laufen, entscheidet die Crew zwischen einer kleinen sicheren Beute und einer sofortigen weiteren Ereigniskarte.',
+      en: 'While kitchen work or timers continue, the crew chooses between a small safe reward and immediately drawing another event card.'
     },
-    mechanics: ['watchChallenge', 'splitCrew']
+    mechanics: ['treasure', 'treasureAndChain']
   },
   {
     id: 'cache', stage: 'cooking', type: 'dice',
     title: { de: 'Das Versteck von {location}', en: 'The Cache of {location}' },
     scene: {
-      de: 'Zwischen zwei Arbeitsschritten entdeckt die Crew ein Zeichen. Der Würfel führt zu einer kurzen Bordwache oder einem Schatz.',
-      en: 'Between two kitchen steps the crew spots a sign. The die leads to a short deck duty or treasure.'
+      de: 'Zwischen zwei Arbeitsschritten entdeckt die Crew ein Zeichen. Der Würfel entscheidet über Verlust, Beute oder eine weitere Ereigniskarte.',
+      en: 'Between two kitchen steps the crew spots a sign. The die decides between a loss, loot, or another event card.'
     },
-    mechanics: ['watchChallenge', 'treasure', 'treasureAndWatch']
+    mechanics: ['coinLoss', 'treasure', 'treasureAndChain']
   },
   {
     id: 'interlude', stage: 'cooking', type: 'choice',
     title: { de: 'Eine seltsame Begegnung in {location}', en: 'A Strange Encounter at {location}' },
     scene: {
-      de: 'Für einen Moment geht es nicht um den nächsten Arbeitsschritt. Eine kleine Begegnung, ein geheimer Auftrag oder etwas Glück lockert die Reise auf.',
-      en: 'For a moment, the next kitchen step does not matter. A small encounter, a secret mission, or a little luck loosens up the voyage.'
+      de: 'Für einen Moment geht es nicht um den nächsten Arbeitsschritt. Die aktive Person nimmt eine kleine Challenge an oder lehnt sie ab und zahlt dafür aus der Bordkasse.',
+      en: 'For a moment, the next kitchen step does not matter. The active player accepts a small challenge or declines it and pays from the ship’s purse.'
     },
-    mechanics: ['watchChallenge', 'storyMoment']
+    mechanics: ['watchChallenge', 'coinLoss']
   },
   {
     id: 'fortune', stage: 'cooking', type: 'dice',
@@ -705,16 +708,16 @@ const ARCHETYPES = Object.freeze([
       de: 'Eine alte Münze springt über den Tisch. Manchmal bringt sie Beute, manchmal fordert die See ihren Anteil – und manchmal nur eine alberne Prüfung.',
       en: 'An old coin skips across the table. Sometimes it brings loot, sometimes the sea takes its share, and sometimes it merely demands a silly test.'
     },
-    mechanics: ['coinLoss', 'watchChallengeAlt', 'treasure']
+    mechanics: ['coinLoss', 'treasureAndChain', 'treasure']
   },
   {
     id: 'respite', stage: 'cooking', type: 'choice',
     title: { de: 'Ruhiges Fahrwasser bei {location}', en: 'Calm Waters near {location}' },
     scene: {
-      de: 'Die See wird still. Wenn keine Küchenaufgabe mehr offen ist, darf die Crew fünf Minuten durchatmen; andernfalls nutzt sie den Moment für eine kurze Herausforderung.',
-      en: 'The sea turns calm. If no kitchen task remains open, the crew may take a five-minute breather; otherwise it uses the moment for a short challenge.'
+      de: 'Die See wird still. Wenn keine Küchenaufgabe mehr offen ist, darf die Crew fünf Minuten durchatmen; andernfalls findet sie eine kleine Münzbeute.',
+      en: 'The sea turns calm. If no kitchen task remains open, the crew may take a five-minute breather; otherwise it finds a small coin reward.'
     },
-    mechanics: ['fiveMinuteBreak', 'watchChallenge']
+    mechanics: ['fiveMinuteBreak', 'treasure']
   },
   {
     id: 'mischief', stage: 'cooking', type: 'dice',
@@ -734,18 +737,38 @@ const INGREDIENT_FUN_ARCHETYPE = Object.freeze({
     de: 'Zwischen den Zutaten versteckt sich eine verspielte Botschaft. Für einen Moment darf die Crew lachen, eine kleine Herausforderung annehmen oder nebenbei ein paar Münzen erspielen.',
     en: 'A playful message is hidden among the ingredients. For a moment, the crew may laugh, take on a small challenge, or earn a few coins along the way.'
   },
-  mechanics: ['watchChallenge', 'storyMoment', 'treasureAndWatch']
+  mechanics: ['watchChallenge', 'treasure', 'treasureAndWatch']
 });
 
-const TASK_FUN_ARCHETYPE = Object.freeze({
-  id: 'work-mischief', stage: 'tasks', type: 'dice',
-  title: { de: 'Schabernack zwischen den Aufträgen von {location}', en: 'Mischief between Orders at {location}' },
-  scene: {
-    de: 'Zwischen zwei Questschritten taucht eine versiegelte Spaßkarte auf. Der Würfel bringt eine harmlose Challenge, eine kleine Flaute in der Bordkasse oder einen reinen Storymoment.',
-    en: 'Between two quest steps, a sealed fun card appears. The die brings a harmless challenge, a small dip in the ship’s purse, or a pure story moment.'
+const TASK_FUN_VARIANTS = Object.freeze([
+  {
+    id: 'deck-prank', type: 'dice',
+    title: { de: 'Schabernack zwischen den Aufträgen von {location}', en: 'Mischief between Orders at {location}' },
+    scene: {
+      de: 'Zwischen zwei Questschritten taucht eine versiegelte Spaßkarte auf. Der Würfel bringt eine harmlose Challenge, eine kleine Flaute in der Bordkasse oder einen Münzfund.',
+      en: 'Between two quest steps, a sealed fun card appears. The die brings a harmless challenge, a small dip in the ship’s purse, or a coin find.'
+    },
+    mechanics: ['coinLoss', 'watchChallenge', 'treasure']
   },
-  mechanics: ['coinLoss', 'watchChallenge', 'storyMoment']
-});
+  {
+    id: 'crew-ritual', type: 'choice',
+    title: { de: 'Der seltsame Bordbrauch von {location}', en: 'The Strange Shipboard Custom at {location}' },
+    scene: {
+      de: 'Noch bevor der nächste Küchenauftrag verteilt wird, verlangt ein alter Bordbrauch eine alberne Prüfung. Die aktive Person nimmt sie an oder zahlt aus der Bordkasse.',
+      en: 'Before the next kitchen job is dealt, an old shipboard custom demands a silly trial. The active player accepts it or pays from the ship’s purse.'
+    },
+    mechanics: ['watchChallenge', 'coinLoss']
+  },
+  {
+    id: 'pirate-mood', type: 'dice',
+    title: { de: 'Die Laune der Piraten von {location}', en: 'The Pirates’ Mood at {location}' },
+    scene: {
+      de: 'Die Mannschaft ist noch nicht vollständig in der Kombüse gebunden. Ein Wurf entscheidet über eine zweite Challenge, eine belohnte Mutprobe oder einen kleinen Münzfund.',
+      en: 'The crew is not yet fully occupied in the galley. A roll decides between another challenge, a rewarded dare, or a small coin find.'
+    },
+    mechanics: ['watchChallengeAlt', 'treasureAndWatch', 'treasure']
+  }
+]);
 
 function interpolate(value, location) {
   return {
@@ -804,23 +827,29 @@ function buildEventDeck(chapterIndex) {
     }];
   });
   const taskFunEvents = chapter.locations.flatMap((location, locationIndex) => {
-    if (locationIndex % 2 === 0) return [];
-    const title = interpolate(TASK_FUN_ARCHETYPE.title, location);
-    return [{
-      id: `T${chapterIndex + 1}-${String(locationIndex + 1).padStart(2, '0')}`,
-      chapterId: chapter.id,
-      locationIndex,
-      archetype: TASK_FUN_ARCHETYPE.id,
-      stage: TASK_FUN_ARCHETYPE.stage,
-      type: TASK_FUN_ARCHETYPE.type,
-      title: { de: `${title.de} · ${chapter.name.de}`, en: `${title.en} · ${chapter.name.en}` },
-      story: {
-        de: `In ${location.de} beginnt die Szene: ${TASK_FUN_ARCHETYPE.scene.de} ${chapter.atmosphere.de}`,
-        en: `The scene begins at ${location.en}: ${TASK_FUN_ARCHETYPE.scene.en} ${chapter.atmosphere.en}`
-      },
-      outcomes: [...TASK_FUN_ARCHETYPE.mechanics],
-      variant: locationIndex
-    }];
+    const variants = locationIndex === 0
+      ? TASK_FUN_VARIANTS
+      : [TASK_FUN_VARIANTS[(locationIndex - 1) % TASK_FUN_VARIANTS.length]];
+    return variants.map((variant, variantIndex) => {
+      const title = interpolate(variant.title, location);
+      return {
+        id: `T${chapterIndex + 1}-${String(locationIndex + 1).padStart(2, '0')}-${variant.id}`,
+        chapterId: chapter.id,
+        locationIndex,
+        archetype: 'work-mischief',
+        funVariant: variant.id,
+        stage: 'tasks',
+        type: variant.type,
+        title: { de: `${title.de} · ${chapter.name.de}`, en: `${title.en} · ${chapter.name.en}` },
+        story: {
+          de: `In ${location.de} beginnt die Szene: ${variant.scene.de} ${chapter.atmosphere.de}`,
+          en: `The scene begins at ${location.en}: ${variant.scene.en} ${chapter.atmosphere.en}`
+        },
+        options: variant.type === 'choice' ? [...variant.mechanics] : undefined,
+        outcomes: variant.type === 'dice' ? [...variant.mechanics] : undefined,
+        variant: locationIndex * TASK_FUN_VARIANTS.length + variantIndex
+      };
+    });
   });
   return [...regularEvents, ...ingredientFunEvents, ...taskFunEvents];
 }
@@ -840,15 +869,14 @@ const EFFECT_TEXT = Object.freeze({
   watchChallengeAlt: { de: 'Wählt die zweite kurze Bordaufgabe und führt sie sofort aus.', en: 'Choose the second short deck duty and do it now.' },
   treasureAndWatch: { de: 'Gewinnt Münzen und erledigt danach eine kurze Challenge.', en: 'Gain coins, then complete a short challenge.' },
   treasureAndChain: { de: 'Gewinnt Münzen und deckt sofort eine weitere Ereigniskarte auf.', en: 'Gain coins and immediately reveal another event.' },
-  splitCrew: { de: 'Teilt die Crew möglichst gleichmäßig in zwei Gruppen.', en: 'Split the crew into two groups as evenly as possible.' },
   chain: { de: 'Deckt sofort eine weitere Ereigniskarte auf.', en: 'Immediately reveal another event card.' },
   treasure: { de: 'Gewinnt zwei Münzen.', en: 'Gain two coins.' },
-  coinLoss: { de: 'Die Bordkasse verliert fünfzehn Münzen.', en: 'The ship’s purse loses fifteen coins.' },
-  storyMoment: { de: 'Genießt diesen kleinen Storymoment – er hat keine weitere Auswirkung.', en: 'Enjoy this small story moment — it has no further effect.' },
+  coinLoss: { de: 'Die Bordkasse verliert fünf Münzen.', en: 'The ship’s purse loses five coins.' },
   fiveMinuteBreak: { de: 'Startet eine echte fünfminütige Pause für die ganze Crew.', en: 'Start a real five-minute break for the whole crew.' },
   singleTask: { de: 'Übernehmt den nächsten geeigneten Auftrag mit möglichst kleiner Besetzung.', en: 'Take the next suitable job with the smallest practical crew.' },
   watchComplete: { de: 'Die Bordaufgabe ist erledigt; die laufende Küchenzeit wurde sinnvoll genutzt.', en: 'The deck duty is complete; the running kitchen time was used productively.' },
-  watchActive: { de: 'Die Challenge läuft über weitere Züge und blockiert die Übergabe nicht.', en: 'The challenge continues across later turns without blocking handover.' }
+  watchActive: { de: 'Die Challenge läuft über weitere Züge und blockiert die Übergabe nicht.', en: 'The challenge continues across later turns without blocking handover.' },
+  quietHandover: { de: 'Die Wache wechselt, damit der nächste fachlich mögliche Auftrag an eine andere freie Person gehen kann.', en: 'The watch changes so the next feasible job can go to another free player.' }
 });
 
 const challenge = (id, de, en, options = {}) => ({
@@ -858,27 +886,29 @@ const challenge = (id, de, en, options = {}) => ({
   secret: options.secret ?? false,
   followUpId: options.followUpId ?? null, flow: options.flow ?? 'immediate',
   endTrigger: options.endTrigger ?? null, mandatory: options.mandatory ?? false,
-  followUpOnly: options.followUpOnly ?? false
+  playerSelection: options.playerSelection ?? false,
+  followUpOnly: options.followUpOnly ?? false,
+  requirements: options.requirements ?? []
 });
 
 const WATCH_CHALLENGES = Object.freeze([
   challenge('clear-surface', 'Die aktive Person erfindet in 60 Sekunden einen Piratennamen für eine sichtbare, gerade freie Ablagefläche. Niemand unterbricht dafür die Küchenarbeit oder räumt etwas um.', 'The active player has 60 seconds to invent a pirate name for a visible, currently unused surface. Nobody interrupts kitchen work or moves anything for it.', { title: { de: 'Die geheime Schatzablage', en: 'The Secret Treasure Shelf' } }),
-  challenge('next-steps', 'Prüft alle laufenden Aufgaben und nennt laut, was als Nächstes gebraucht wird.', 'Review every active task and say aloud what will be needed next.'),
-  challenge('fresh-water', 'Stellt für jedes Crewmitglied frisches Wasser bereit.', 'Set out fresh water for every crew member.'),
+  challenge('next-steps', 'Prüft alle laufenden Aufgaben und nennt laut, was als Nächstes gebraucht wird.', 'Review every active task and say aloud what will be needed next.', { requirements: ['openTask'], title: { de: 'Der Blick voraus', en: 'A Look Ahead' } }),
+  challenge('fresh-water', 'Stellt für jedes Crewmitglied frisches Wasser bereit.', 'Set out fresh water for every crew member.', { title: { de: 'Wasser für die Mannschaft', en: 'Water for the Crew' } }),
   challenge('sort-tools', 'Die aktive Person erfindet in 60 Sekunden für drei sichtbare Küchenwerkzeuge je einen Piratennamen. Fasst nichts an, was gerade benutzt wird, und unterbrecht keine Küchenarbeit.', 'The active player has 60 seconds to invent a pirate name for each of three visible kitchen tools. Do not touch anything currently in use or interrupt kitchen work.', { title: { de: 'Die Taufe der Kombüsenwerkzeuge', en: 'Naming the Galley Tools' } }),
-  challenge('name-course', 'Erfindet in höchstens 60 Sekunden einen Namen für den entstehenden Gang.', 'Invent a name for the emerging course in no more than 60 seconds.'),
-  challenge('ingredient-round', 'Nennt reihum je eine Zutat, die heute bereits sinnvoll verwendet wurde.', 'Go around once and name one ingredient already used well tonight.'),
-  challenge('table-check', 'Prüft den Tisch: Fehlt Besteck, Wasser, ein Untersetzer oder Platz zum Servieren?', 'Check the table: is cutlery, water, a trivet, or serving space missing?'),
-  challenge('collect-waste', 'Sammelt Verpackungen und Abfälle ein, ohne laufende Arbeitswege zu blockieren.', 'Collect packaging and waste without blocking active work routes.'),
-  challenge('portion-captain', 'Bestimmt eine Person, die beim nächsten Servieren Portionsgrößen kontrolliert.', 'Choose one person to check portion sizes at the next serving.'),
-  challenge('timer-check', 'Schaut auf alle Challenges und wiederholt gemeinsam die nächste Warnschwelle.', 'Look at every challenge and repeat the next alert threshold together.'),
-  challenge('sea-story', 'Gebt {activePlayer} 60 Sekunden für eine kurze Seefahrergeschichte.', 'Give {activePlayer} 60 seconds for a short seafaring story.'),
+  challenge('name-course', 'Erfindet in höchstens 60 Sekunden einen Namen für den entstehenden Gang.', 'Invent a name for the emerging course in no more than 60 seconds.', { title: { de: 'Die Taufe des Gangs', en: 'Naming the Course' } }),
+  challenge('ingredient-round', 'Nennt reihum jeweils eine andere Zutat, die heute bereits sinnvoll verwendet wurde. Jede Person nennt genau eine.', 'Go around once and have each player name a different ingredient already used well tonight. Every player names exactly one.', { requirements: ['usedIngredientPerPlayer'], title: { de: 'Die Erinnerungskette', en: 'The Ingredient Chain' } }),
+  challenge('table-check', 'Prüft den Tisch: Fehlt Besteck, Wasser, ein Untersetzer oder Platz zum Servieren?', 'Check the table: is cutlery, water, a trivet, or serving space missing?', { title: { de: 'Klar Schiff am Tisch', en: 'Clear the Table Deck' } }),
+  challenge('collect-waste', 'Sammelt Verpackungen und Abfälle ein, ohne laufende Arbeitswege zu blockieren.', 'Collect packaging and waste without blocking active work routes.', { title: { de: 'Die Bilge wird leer', en: 'Emptying the Bilge' } }),
+  challenge('portion-captain', 'Bestimmt eine Person, die beim nächsten Servieren Portionsgrößen kontrolliert.', 'Choose one person to check portion sizes at the next serving.', { requirements: ['courseWorkStarted'], playerSelection: true, title: { de: 'Die Portionswache', en: 'The Portion Lookout' } }),
+  challenge('timer-check', 'Schaut auf alle laufenden Aufgaben-Timer. Nennt gemeinsam, welche Aufgabe als Nächstes endet oder bereits in der Überlänge ist.', 'Check every running task timer. Together, identify which task finishes next or is already in overtime.', { requirements: ['taskTimerRunning'], title: { de: 'Sanduhren im Blick', en: 'Eyes on the Hourglasses' } }),
+  challenge('sea-story', 'Gebt {activePlayer} 60 Sekunden für eine kurze Seefahrergeschichte.', 'Give {activePlayer} 60 seconds for a short seafaring story.', { title: { de: 'Eine Runde Seemannsgarn', en: 'A Tale from the Sea' } }),
   challenge('pirate-verse', 'Erfindet in höchstens 90 Sekunden ein kurzes Piratenlied oder Piratengedicht mit mindestens zwei Zeilen. Singt es gemeinsam oder tragt es dramatisch vor – beides zählt vollständig.', 'In no more than 90 seconds, invent a short pirate song or pirate poem of at least two lines. Sing it together or perform it dramatically — either counts in full.', { minutes: 2, coins: 3, title: { de: 'Die Ballade der wilden Kombüse', en: 'Ballad of the Wild Galley' } }),
-  challenge('safety-check', 'Kontrolliert, dass heiße, scharfe und rohe Arbeitsbereiche klar getrennt sind.', 'Confirm that hot, sharp, and raw-food work areas are clearly separated.'),
+  challenge('safety-check', 'Kontrolliert, dass heiße, scharfe und rohe Arbeitsbereiche klar getrennt sind.', 'Confirm that hot, sharp, and raw-food work areas are clearly separated.', { requirements: ['hazardousTaskOpen'], title: { de: 'Die sichere Kombüse', en: 'The Safe Galley' } }),
   challenge('odd-dance', 'Steh auf und tanze 20 Sekunden so merkwürdig wie möglich. Danach geht das Spiel normal weiter.', 'Stand up and dance as strangely as possible for 20 seconds. Then continue normally.', { coins: 3, title: { de: 'Tanz auf Deck', en: 'Deck Dance' }, secret: true }),
   challenge('table-lap', 'Steh auf, geh einmal um den Tisch und setz dich wieder hin, als wäre nichts passiert.', 'Stand up, walk once around the table, and sit down again as though nothing happened.', { title: { de: 'Geheimer Rundgang', en: 'Secret Circuit' }, secret: true }),
-  challenge('compliments', 'Bis zu deinem nächsten Zug machst du der jeweils aktiven Person ein ehrliches, kurzes Kompliment.', 'Until your next turn, give the active player one brief, genuine compliment.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
-  challenge('love-decisions', 'Bis zu deinem nächsten Zug findest du jede Entscheidung deiner Crew großartig. Übertreib freundlich, aber verrate die Karte nicht.', 'Until your next turn, you think every crew decision is wonderful. Exaggerate kindly, but do not reveal the card.', { coins: 3, title: { de: 'Nur für deine Augen', en: 'For Your Eyes Only' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('compliments', 'Bis zu deinem nächsten Zug machst du der jeweils aktiven Person ein ehrliches, kurzes Kompliment.', 'Until your next turn, give the active player one brief, genuine compliment.', { coins: 3, title: { de: 'Rückenwind für die Crew', en: 'A Tailwind for the Crew' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('love-decisions', 'Bis zu deinem nächsten Zug findest du jede Entscheidung deiner Crew großartig. Übertreib freundlich, aber verrate die Karte nicht.', 'Until your next turn, you think every crew decision is wonderful. Exaggerate kindly, but do not reveal the card.', { coins: 3, title: { de: 'Begeisterung an Bord', en: 'Delight Aboard' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('laugh-turn', 'In {targetPlayer}s nächstem Zug findest du alles erstaunlich lustig. Bleib freundlich und löse die Karte danach auf.', 'During {targetPlayer}’s next turn, find everything remarkably funny. Stay kind and end the bit afterwards.', { coins: 3, title: { de: 'Geheimes Lachen', en: 'Secret Laughter' }, secret: true, flow: 'ongoing', endTrigger: 'targetTurnEnd' }),
   challenge('chicken', 'Gackere einmal pro Minute leise wie ein Huhn. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Cluck quietly like a chicken once per minute. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Der Hühnerfluch', en: 'The Chicken Curse' }, secret: true, followUpId: 'stop-chicken', flow: 'ongoing', endTrigger: 'followUp' }),
   challenge('stop-chicken', 'Verbindliche Anweisung: Sage jetzt zu {targetPlayer}: „Der Hühnerfluch ist gebrochen.“ Erklärt euch erst danach gegenseitig die Karten.', 'Mandatory instruction: Tell {targetPlayer} now: “The chicken curse is broken.” Only then explain the cards to each other.', { coins: 2, title: { de: 'Das Gegenmittel', en: 'The Antidote' }, secret: true, mandatory: true, followUpOnly: true }),
@@ -901,6 +931,66 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('chair-circle', 'Dreh dich sicher einmal mit einem geeigneten Drehstuhl im Kreis. Falls der Stuhl nicht dafür geeignet ist, steh auf und geh einmal um ihn herum.', 'Safely spin once in a suitable swivel chair. If the chair is not suitable, stand and walk around it once instead.', { title: { de: 'Einmal rund um die Insel', en: 'Once Around the Island' }, secret: true }),
   challenge('ceremonial-greeting', 'Bestehe freundlich darauf, deinen Sitznachbarn feierlich zu begrüßen. Die andere Person wählt zwischen Handschlag, Faustgruß oder Winken.', 'Politely insist on ceremonially greeting the person beside you. They choose between a handshake, fist bump, or wave.', { title: { de: 'Feierlicher Matrosengruß', en: 'Ceremonial Sailor Greeting' }, secret: true }),
   challenge('folded-note', 'Nimm einen Zettel und schreibe: „Nicht sagen, was hier draufsteht.“ Falte ihn und gib ihn einer beliebigen Person. Erkläre nichts weiter.', 'Take a note and write: “Do not say what is written here.” Fold it and hand it to any player. Explain nothing further.', { title: { de: 'Die streng geheime Nachricht', en: 'The Highly Secret Note' }, secret: true }),
+  challenge('captain-pose', 'Steh auf und nimm zehn Sekunden lang deine überzeugendste Kapitänspose ein. Setz dich danach wortlos wieder hin.', 'Stand and hold your most convincing captain’s pose for ten seconds. Then sit down again without a word.', { title: { de: 'Die Pose des Kapitäns', en: 'The Captain’s Pose' }, secret: true }),
+  challenge('invisible-parrot', 'Begrüße einen unsichtbaren Papagei auf deiner Schulter und frage ihn leise nach seiner Meinung. Erkläre der Crew nichts.', 'Greet an invisible parrot on your shoulder and quietly ask for its opinion. Explain nothing to the crew.', { title: { de: 'Der unsichtbare Papagei', en: 'The Invisible Parrot' }, secret: true }),
+  challenge('pirate-weather', 'Gib der Crew einen 20-sekündigen Wetterbericht für die aktuelle Piratenreise. Mindestens Wind, Wellen und die Aussicht auf Beute müssen vorkommen.', 'Give the crew a 20-second weather report for the current pirate voyage. Mention wind, waves, and the chance of treasure.', { title: { de: 'Wetterbericht von hoher See', en: 'High-Seas Weather Report' } }),
+  challenge('royal-toast', 'Erhebe dein Getränk und bringe einen kurzen, dramatischen Trinkspruch auf die Crew aus. Ein Glas Wasser zählt genauso.', 'Raise your drink and make a short dramatic toast to the crew. A glass of water counts just as well.', { title: { de: 'Der große Crew-Trinkspruch', en: 'The Grand Crew Toast' } }),
+  challenge('forbidden-yes', 'Vermeide bis zu deinem nächsten Zug das Wort „ja“. Falls es dir herausrutscht, tu so, als wäre nichts gewesen. Verrate die Karte nicht.', 'Avoid the word “yes” until your next turn. If it slips out, act as though nothing happened. Do not reveal the card.', { coins: 3, title: { de: 'Das verbotene Ja', en: 'The Forbidden Yes' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('dramatic-whisper', 'Sprich deinen nächsten vollständigen Satz in einem verschwörerischen Flüsterton. Danach redest du wieder normal und erklärst nichts.', 'Speak your next full sentence in a conspiratorial whisper. Then return to normal and explain nothing.', { title: { de: 'Das Flüstern aus der Kajüte', en: 'The Cabin Whisper' }, secret: true }),
+  challenge('imaginary-rope', 'Zieh zehn Sekunden lang pantomimisch an einem schweren unsichtbaren Tau. Bleib dabei sicher an deinem Platz.', 'Mime pulling a heavy invisible rope for ten seconds. Stay safely in your place while doing it.', { title: { de: 'Das unsichtbare Tau', en: 'The Invisible Rope' }, secret: true }),
+  challenge('tiny-telescope', 'Forme mit den Händen ein Fernrohr und suche fünf Sekunden lang den Raum nach einer fernen Insel ab.', 'Make a telescope with your hands and scan the room for a distant island for five seconds.', { title: { de: 'Land in Sicht', en: 'Land Ahoy' }, secret: true }),
+  challenge('course-riddle', 'Erfinde ein kurzes, leicht lösbares Rätsel über eine Zutat oder ein Küchengerät. Die Crew darf genau dreimal raten.', 'Invent a short, easy riddle about an ingredient or kitchen tool. The crew gets exactly three guesses.', { title: { de: 'Das Rätsel der Kombüse', en: 'The Galley Riddle' } }),
+  challenge('pirate-oath', 'Lege eine Hand aufs Herz und schwöre feierlich, die Crew sicher bis zum nächsten Gang zu begleiten.', 'Place a hand over your heart and solemnly swear to guide the crew safely to the next course.', { title: { de: 'Der feierliche Piratenschwur', en: 'The Solemn Pirate Oath' } }),
+  challenge('table-rhythm', 'Trommle mit zwei Fingern zehn Sekunden lang einen einfachen Rhythmus. Die Crew versucht, ihn einmal gemeinsam nachzumachen.', 'Tap a simple ten-second rhythm with two fingers. The crew tries to repeat it together once.', { title: { de: 'Der Takt der Galeere', en: 'The Galley Beat' } }),
+  challenge('statue-lookout', 'Erstarre zehn Sekunden lang wie eine steinerne Galionsfigur und blicke entschlossen in die Ferne.', 'Freeze for ten seconds like a stone figurehead and stare determinedly into the distance.', { title: { de: 'Die lebende Galionsfigur', en: 'The Living Figurehead' }, secret: true }),
+  challenge('course-nickname', 'Gebt dem entstehenden Gang gemeinsam einen albernen Piraten-Spitznamen. Die aktive Person entscheidet bei Gleichstand.', 'Give the emerging course a silly pirate nickname together. The active player breaks any tie.', { title: { de: 'Der Spitzname der Beute', en: 'A Nickname for the Loot' } }),
+  challenge('one-word-captain', 'Antworte auf die nächste Frage, die dir gestellt wird, nur mit „Kapitän“. Danach sprichst du wieder normal.', 'Answer the next question you are asked using only “Captain”. Then speak normally again.', { title: { de: 'Nur ein Wort: Kapitän', en: 'One Word: Captain' }, secret: true }),
+  challenge('sea-legs', 'Schwanke im Sitzen fünf Sekunden ganz leicht, als hätte das Schiff eine kleine Welle erwischt. Achte auf Abstand zu heißen oder scharfen Dingen.', 'Sway very gently while seated for five seconds as though the ship hit a small wave. Keep clear of anything hot or sharp.', { title: { de: 'Eine kleine Welle', en: 'A Little Wave' }, secret: true }),
+  challenge('treasure-announcer', 'Kündige den aktuellen Münzstand mit der Stimme eines übertrieben wichtigen königlichen Herolds an.', 'Announce the current coin total in the voice of an absurdly important royal herald.', { title: { de: 'Der Herold der Bordkasse', en: 'Herald of the Ship’s Purse' } }),
+  challenge('synchronized-arr', 'Zählt gemeinsam von drei herunter und ruft dann alle gleichzeitig ein möglichst überzeugendes „Arr!“', 'Count down together from three, then everyone gives their most convincing “Arr!” at the same time.', { title: { de: 'Das gemeinsame Arr', en: 'The Crew’s Arr' } }),
+  challenge('imaginary-map', 'Breite pantomimisch eine riesige Schatzkarte aus, zeige auf einen erfundenen Ort und nicke bedeutungsvoll.', 'Mime unrolling a huge treasure map, point to an imaginary place, and nod meaningfully.', { title: { de: 'Die Karte ohne Papier', en: 'The Map Without Paper' }, secret: true }),
+  challenge('pirate-commercial', 'Erfinde in 20 Sekunden einen übertriebenen Werbespruch für den aktuellen Gang, als wäre er die größte Beute der Welt.', 'In 20 seconds, invent an exaggerated advertisement for the current course as though it were the world’s greatest treasure.', { title: { de: 'Reklame für die Beute', en: 'An Advert for the Loot' } }),
+  challenge('friendly-salute', 'Grüße jede Person am Tisch einmal mit einem kleinen, selbst erfundenen Piratengruß, ohne jemanden zu berühren.', 'Give every person at the table a small invented pirate salute without touching anyone.', { title: { de: 'Der Gruß der ganzen Crew', en: 'A Salute for the Whole Crew' } }),
+  challenge('compass-north', 'Zeige plötzlich sehr überzeugt in eine beliebige Richtung und verkünde: „Dort ist Norden.“ Erkläre nichts weiter.', 'Suddenly point confidently in any direction and announce, “That way is north.” Explain nothing further.', { title: { de: 'Der zweifelhafte Kompass', en: 'The Questionable Compass' }, secret: true }),
+  challenge('imaginary-beard', 'Streiche zehn Sekunden nachdenklich über einen unsichtbaren langen Piratenbart und nicke dabei ernst.', 'Thoughtfully stroke an invisible long pirate beard for ten seconds while nodding seriously.', { title: { de: 'Der Bart des alten Seebären', en: 'The Old Sea Dog’s Beard' }, secret: true }),
+  challenge('captain-inspection', 'Mustere den Tisch fünfzehn Sekunden wie ein Kapitän bei einer wichtigen Schiffsinspektion. Berühre und verändere dabei nichts.', 'Inspect the table for fifteen seconds like a captain conducting an important ship inspection. Touch and change nothing.', { title: { de: 'Inspektion an Deck', en: 'Inspection on Deck' }, secret: true }),
+  challenge('three-pirate-laughs', 'Führe nacheinander drei unterschiedliche Piratenlacher vor: leise, vornehm und völlig übertrieben.', 'Perform three different pirate laughs in sequence: quiet, refined, and wildly exaggerated.', { title: { de: 'Dreifaches Piratengelächter', en: 'Three Pirate Laughs' } }),
+  challenge('cannon-countdown', 'Zählt gemeinsam von fünf herunter. Bei null ruft die aktive Person „Kanone!“, alle anderen machen ein kurzes, leises Explosionsgeräusch.', 'Count down together from five. At zero, the active player calls “Cannon!” and everyone else makes a brief, quiet explosion sound.', { title: { de: 'Die freundliche Bordkanone', en: 'The Friendly Deck Cannon' } }),
+  challenge('message-bottle', 'Flüstere einen kurzen freundlichen Satz in eine imaginäre Flasche, verschließe sie pantomimisch und schiebe sie über den Tisch ins Meer.', 'Whisper a short friendly sentence into an imaginary bottle, mime sealing it, and send it across the table into the sea.', { title: { de: 'Post aus der Flasche', en: 'A Message in a Bottle' }, secret: true }),
+  challenge('imaginary-gold-test', 'Prüfe eine unsichtbare Goldmünze fachmännisch gegen das Licht und erkläre sie anschließend feierlich für echt.', 'Examine an invisible gold coin expertly against the light, then solemnly declare it genuine.', { title: { de: 'Die Prüfung des Goldstücks', en: 'Testing the Gold Piece' }, secret: true }),
+  challenge('invisible-knot', 'Erkläre der Crew mit reinen Handbewegungen, wie man einen völlig erfundenen Seemannsknoten bindet. Echtes Küchenmaterial bleibt liegen.', 'Use only hand gestures to teach the crew a completely invented sailor’s knot. Leave real kitchen items untouched.', { title: { de: 'Der Knoten, den keiner kennt', en: 'The Knot Nobody Knows' } }),
+  challenge('gull-call', 'Imitiere einmal kurz und nicht zu laut eine Möwe. Blicke danach empört zur Decke, als wäre das Geräusch von dort gekommen.', 'Briefly imitate a seagull without being too loud. Then glare at the ceiling as though the sound came from there.', { title: { de: 'Die Möwe über der Kombüse', en: 'The Gull Above the Galley' }, secret: true }),
+  challenge('chair-ship-name', 'Gib deinem Stuhl einen würdevollen Schiffsnamen und stelle ihn der Crew in einem einzigen Satz vor.', 'Give your chair a dignified ship name and introduce it to the crew in a single sentence.', { title: { de: 'Die Taufe des Sitzschiffs', en: 'Naming the Chair-Ship' } }),
+  challenge('sea-monster', 'Beschreibe in zwanzig Sekunden ein freundliches Seeungeheuer, das am liebsten Küchenabfälle frisst und beim Kochen hilft.', 'In twenty seconds, describe a friendly sea monster that loves eating kitchen scraps and helping with cooking.', { title: { de: 'Das freundliche Ungeheuer', en: 'The Friendly Sea Monster' } }),
+  challenge('treasure-inventory', 'Wähle drei harmlose sichtbare Gegenstände und führe sie mit übertrieben wertvollen Namen als Teil des Piratenschatzes auf.', 'Choose three harmless visible objects and list them as pirate treasure using extravagantly valuable names.', { title: { de: 'Inventur der kostbaren Beute', en: 'Inventory of Precious Loot' } }),
+  challenge('ship-bell', 'Sage zweimal deutlich „Ding-ding“ und verkünde anschließend mit ernster Stimme den Beginn einer neuen Schiffswache.', 'Say “ding-ding” twice, then solemnly announce the beginning of a new ship’s watch.', { title: { de: 'Die unsichtbare Schiffsglocke', en: 'The Invisible Ship’s Bell' }, secret: true }),
+  challenge('mast-lookout', 'Steh auf, falls es sicher ist, schirme die Augen mit einer Hand ab und melde kurz, was du am Horizont siehst. Im Sitzen gilt es genauso.', 'Stand if safe, shade your eyes with one hand, and briefly report what you see on the horizon. Doing it seated counts equally.', { title: { de: 'Wache im Krähennest', en: 'Watch in the Crow’s Nest' } }),
+  challenge('distant-wave', 'Winke fünf Sekunden freundlich einem weit entfernten erfundenen Schiff zu und warte ernst auf eine Antwort.', 'Wave for five seconds at an imaginary distant ship and wait seriously for a reply.', { title: { de: 'Gruß an das ferne Schiff', en: 'Greeting the Distant Ship' }, secret: true }),
+  challenge('cutlery-vote', 'Lasst die Crew per Handzeichen entscheiden, ob Löffel oder Gabel das bessere Piratenwerkzeug ist. Die aktive Person verkündet das Ergebnis.', 'Have the crew vote by show of hands whether a spoon or fork is the better pirate tool. The active player announces the result.', { title: { de: 'Der große Besteckentscheid', en: 'The Great Cutlery Vote' } }),
+  challenge('galley-motto', 'Erfindet gemeinsam ein kurzes Motto für eure Kombüse, das mit „Eine Crew, ein …“ beginnt.', 'Invent a short motto for your galley together beginning with “One crew, one …”.', { title: { de: 'Das Motto der Kombüse', en: 'The Galley Motto' } }),
+  challenge('pirate-haiku', 'Dichte spontan drei sehr kurze Zeilen über Meer, Essen und Mannschaft. Reime sind ausdrücklich nicht nötig.', 'Improvise three very short lines about sea, food, and crew. Rhymes are explicitly unnecessary.', { title: { de: 'Drei Zeilen auf hoher See', en: 'Three Lines on the High Seas' } }),
+  challenge('secret-wink', 'Zwinkere der nächsten Person, die dich direkt ansieht, einmal verschwörerisch zu. Verhalte dich danach wieder völlig normal.', 'Give one conspiratorial wink to the next person who looks directly at you. Then behave completely normally again.', { title: { de: 'Das verschwörerische Zwinkern', en: 'The Conspiratorial Wink' }, secret: true }),
+  challenge('slow-motion-reach', 'Führe zehn Sekunden lang pantomimisch in Zeitlupe vor, wie du nach einem weit entfernten Schatz greifst. Greife nicht nach echten Gegenständen.', 'For ten seconds, mime reaching for a distant treasure in slow motion. Do not reach for real objects.', { title: { de: 'Die Beute in Zeitlupe', en: 'Treasure in Slow Motion' }, secret: true }),
+  challenge('anchor-drop', 'Mime mit beiden Händen, wie du vorsichtig einen schweren Anker hinablässt, und wische dir danach erleichtert die Stirn.', 'Mime carefully lowering a heavy anchor with both hands, then wipe your brow in relief.', { title: { de: 'Anker fallen lassen', en: 'Lowering the Anchor' }, secret: true }),
+  challenge('captain-log', 'Sprich einen zwanzigsekündigen Eintrag für das Kapitänslogbuch: aktueller Gang, Stimmung der Crew und Zustand der See.', 'Deliver a twenty-second captain’s log entry covering the current course, crew morale, and state of the sea.', { title: { de: 'Eintrag ins Kapitänslogbuch', en: 'Captain’s Log Entry' } }),
+  challenge('crew-flag', 'Beschreibt gemeinsam in höchstens einer Minute eine Flagge für eure Crew: Farbe, Symbol und einen völlig unnötigen Zusatz.', 'In no more than one minute, describe a flag for your crew: its colour, symbol, and one completely unnecessary extra detail.', { title: { de: 'Die Flagge der Mannschaft', en: 'The Crew’s Flag' } }),
+  challenge('compass-crew', 'Die aktive Person ruft eine Himmelsrichtung. Alle zeigen sofort in die Richtung, die sie dafür halten; unterschiedliche Antworten sind ausdrücklich erlaubt.', 'The active player calls a compass direction. Everyone immediately points where they think it is; different answers are explicitly allowed.', { title: { de: 'Kompassprobe der Crew', en: 'The Crew Compass Test' } }),
+  challenge('treasure-guard', 'Verschränke zehn Sekunden die Arme und bewache eine unsichtbare Schatztruhe vor dir mit besonders ernstem Blick.', 'Fold your arms for ten seconds and guard an invisible treasure chest in front of you with an especially serious expression.', { title: { de: 'Wache vor der leeren Truhe', en: 'Guarding the Empty Chest' }, secret: true }),
+  challenge('suspicious-cup', 'Mustere dein eigenes Getränk kurz misstrauisch, rieche nur aus sicherem Abstand daran und nicke dann erleichtert.', 'Briefly inspect your own drink with suspicion, smell it only from a safe distance, then nod with relief.', { title: { de: 'Der verdächtige Becher', en: 'The Suspicious Cup' }, secret: true }),
+  challenge('crew-applause', 'Schenkt allen Personen mit einer laufenden oder bereits erledigten Küchenaufgabe gemeinsam fünf Sekunden Applaus.', 'Give everyone with a current or completed kitchen task five seconds of applause together.', { title: { de: 'Applaus für die Kombüse', en: 'Applause for the Galley' }, requirements: ['courseWorkStarted'] }),
+  challenge('storm-chorus', 'Erzeugt gemeinsam zehn Sekunden lang einen leisen Sturm nur mit Fingerschnippen, Händereiben und sanftem Klopfen.', 'Create a quiet ten-second storm together using only finger snaps, rubbing hands, and gentle tapping.', { title: { de: 'Der Sturm im Kleinformat', en: 'A Pocket-Sized Storm' } }),
+  challenge('parrot-echo', 'Wiederhole das letzte Wort des nächsten vollständigen Satzes, den eine andere Person sagt, einmal leise wie ein Papagei.', 'Quietly repeat the final word of the next full sentence spoken by another player, like a parrot.', { title: { de: 'Das Echo des Papageis', en: 'The Parrot’s Echo' }, secret: true }),
+  challenge('secret-coordinate', 'Verkünde eine frei erfundene Schatzkoordinate aus Zahl, Buchstabe und Himmelsrichtung. Bestehe darauf, dass sie „ungefähr stimmen müsste“.', 'Announce an invented treasure coordinate containing a number, letter, and compass direction. Insist it “should be roughly correct.”', { title: { de: 'Die geheime Koordinate', en: 'The Secret Coordinate' } }),
+  challenge('royal-taster', 'Rieche kurz in die Luft und erkläre mit wichtiger Stimme, dass die Kombüse die königliche Geschmacksprüfung bestanden hat.', 'Briefly sniff the air and announce importantly that the galley has passed the royal taste inspection.', { title: { de: 'Die königliche Geschmackswache', en: 'The Royal Taste Watch' }, secret: true }),
+  challenge('eyebrow-signal', 'Hebe beim Aufdecken der nächsten Karte einmal bedeutungsvoll beide Augenbrauen, egal was darauf steht.', 'When the next card is revealed, raise both eyebrows meaningfully once, no matter what it says.', { title: { de: 'Das geheime Augenbrauensignal', en: 'The Secret Eyebrow Signal' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('invisible-hat', 'Ziehe einen unsichtbaren Piratenhut, verbeuge dich damit kurz vor der Crew und setze ihn wieder auf.', 'Remove an invisible pirate hat, bow briefly to the crew with it, and put it back on.', { title: { de: 'Der unsichtbare Dreispitz', en: 'The Invisible Tricorn' }, secret: true }),
+  challenge('course-prophecy', 'Sage mit geheimnisvoller Stimme voraus, welche Geschmacksrichtung oder welcher Arbeitsschritt als Nächstes wichtig wird.', 'Mysteriously predict which flavour direction or work step will become important next.', { title: { de: 'Die Prophezeiung des Gangs', en: 'The Course Prophecy' } }),
+  challenge('harbor-name', 'Erfinde für den aktuellen Raum einen prächtigen Piratenhafennamen und verkünde, dass ihr soeben dort angelegt habt.', 'Invent a grand pirate-harbour name for the current room and announce that the crew has just docked there.', { title: { de: 'Ein neuer Hafenname', en: 'A New Harbour Name' } }),
+  challenge('cannonball-catch', 'Fange pantomimisch eine federleichte unsichtbare Kanonenkugel, bestaune sie kurz und lege sie vorsichtig ab.', 'Mime catching a feather-light invisible cannonball, admire it briefly, and set it down carefully.', { title: { de: 'Die federleichte Kanonenkugel', en: 'The Feather-Light Cannonball' }, secret: true }),
+  challenge('shanty-hum', 'Summe fünfzehn Sekunden eine frei erfundene Seemannsmelodie. Die Crew darf im Takt mit einem Finger wippen.', 'Hum an invented sailor’s tune for fifteen seconds. The crew may keep time with one finger.', { title: { de: 'Die Melodie ohne Worte', en: 'The Wordless Shanty' } }),
+  challenge('flag-signal', 'Erfinde mit beiden Händen ein einfaches Flaggensignal und erkläre der Crew anschließend, was es angeblich bedeutet.', 'Invent a simple flag signal using both hands, then tell the crew what it supposedly means.', { title: { de: 'Das Signal der unsichtbaren Flaggen', en: 'The Invisible Flag Signal' } }),
+  challenge('captain-address', 'Sprich die jeweils aktive Person bis zu deinem nächsten Zug nur mit „Käpt’n“ an. Verrate nicht, warum.', 'Until your next turn, address the active player only as “Captain.” Do not reveal why.', { coins: 3, title: { de: 'Alle heißen Käpt’n', en: 'Everyone Is Captain' }, secret: true, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
+  challenge('seated-wave', 'Startet eine kleine La-Ola-Welle einmal rund um den Tisch. Alle bleiben dabei sicher sitzen oder stehen ruhig am eigenen Platz.', 'Send a small Mexican wave once around the table. Everyone stays safely seated or stands calmly in their own place.', { title: { de: 'Die Welle rund ums Deck', en: 'The Wave Around the Deck' } }),
   challenge('five-minute-break', 'Fünf Minuten Pause: Trinkt etwas, setzt euch hin und lasst die Küche sicher ruhen. Laufende Geräte bleiben natürlich beaufsichtigt.', 'Five-minute break: have a drink, sit down, and let the kitchen rest safely. Running appliances must of course remain supervised.', { minutes: 5, coins: 0, title: { de: 'Ruhiges Fahrwasser', en: 'Calm Waters' } })
 ]);
 
@@ -933,7 +1023,7 @@ const task = (titleDe, titleEn, instructionDe, instructionEn, area, people = [1,
   people,
   timerMinutes,
   estimatedMinutes: options.estimatedMinutes ?? timerMinutes ?? 0,
-  kind: options.kind ?? (options.timingMode === 'background' ? 'background' : 'challenge'),
+  kind: options.kind ?? options.timingMode ?? 'challenge',
   timingMode: options.timingMode ?? 'challenge',
   backgroundMinutes: options.backgroundMinutes ?? (options.timingMode === 'background' ? timerMinutes : 0),
   challengeMinutes: options.challengeMinutes ?? null,
@@ -947,13 +1037,13 @@ const DEFAULT_ESTIMATED_MINUTES = Object.freeze({
   vegetables: 7, hotplate: 7, blender: 5, seasoning: 3, protein: 7,
   garnish: 3, fruit: 6, dressing: 5, assembly: 6, cold: 5,
   optional: 3, sauce: 5, mixing: 6, alcoholic: 6, 'alcohol-free': 6,
-  safety: 3, story: 2, planning: 4
+  safety: 3, story: 2, planning: 4, reset: 5
 });
 
 const BLUEPRINTS = Object.freeze({
   tapas: [
     task('Der Plan des Hafenmeisters', 'The Harbourmaster’s Plan', 'Teilt Tapas, Ofenaufgaben und Anrichten sinnvoll unter der Crew auf.', 'Divide tapas, oven work, and plating sensibly across the crew.', 'planning', [2, 3]),
-    task('Datteln in Speck rollen', 'Wrap the Dates', 'Umwickelt jede Dattel gleichmäßig mit Speck und legt die Rollen mit Abstand auf ein vorbereitetes Blech. Noch nicht backen.', 'Wrap every date evenly in bacon and space the rolls on a prepared tray. Do not bake them yet.', 'cold-prep', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7, ingredientTags: ['tapas-dates', 'bacon'] }),
+    task('Datteln in Speck rollen', 'Wrap the Dates', 'Umwickelt jede Dattel gleichmäßig mit Speck und legt die Rollen mit der Naht nach unten auf einen vorbereiteten Teller. Noch nicht braten.', 'Wrap every date evenly with bacon and place the rolls seam-side down on a prepared plate. Do not fry them yet.', 'cold-prep', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7, ingredientTags: ['tapas-dates', 'bacon'] }),
     task('Brot in den Ofen schieben', 'Put the Bread in the Oven', 'Heizt den Ofen nach Packungsangabe vor, legt die Baguettes sicher hinein und stellt den separaten Brottimer. Dieser Schritt endet, sobald die Ofentür geschlossen ist.', 'Preheat according to the packet, put the baguettes safely into the oven, and set the separate bread timer. This step ends once the oven door is closed.', 'oven', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['baguettes'], safety: 'hotOven' }),
     task('Vorräte vom Markt', 'Market Provisions', 'Ordnet Oliven, Käse, Schinken und Schafs- oder Ziegenkäse auf gut erreichbaren Platten an.', 'Arrange olives, cheese, ham, and sheep or goat cheese on easy-to-reach platters.', 'cold-prep', [2, 3], 0, { ingredientTags: ['olives', 'cheese', 'serrano', 'goat-cheese'] }),
     task('Die zwei Saucen', 'The Two Sauces', 'Füllt Aioli und Tomaten-Paprika-Dip getrennt ab, stellt passende Löffel bereit und kennzeichnet beide.', 'Decant aioli and tomato-pepper dip separately, add serving spoons, and label both.', 'cold-prep', [1, 2], 0, { ingredientTags: ['aioli', 'tomato-pepper-dip'] }),
@@ -964,9 +1054,9 @@ const BLUEPRINTS = Object.freeze({
     task('Der faire Vorrat', 'The Fair Provision', 'Schätzt Portionen für die Crew ab und ergänzt knappe Platten, bevor serviert wird.', 'Estimate portions for the crew and top up sparse platters before serving.', 'quality', [1, 2]),
     task('Freie Fläche in der Kombüse', 'Clear Space in the Galley', 'Räumt Verpackungen weg, reinigt Arbeitsflächen und stellt heiße Bleche sicher ab.', 'Remove packaging, clean worktops, and place hot trays safely.', 'cleanup', [1, 2], 0, { safety: 'hotOven' }),
     task('Gruß aus der Hafenstadt', 'Greeting from the Harbour', 'Erfindet einen kurzen Trinkspruch oder Serviersatz für den Beginn der Reise.', 'Invent a short toast or serving line to begin the voyage.', 'story', [1, 2]),
-    task('Speckdatteln in den Ofen schieben', 'Put the Bacon Dates in the Oven', 'Schiebt das vorbereitete Blech in den heißen Ofen, stellt 15 Minuten ein und bestätigt den Start. Die Garzeit läuft danach ohne Münzdruck im Hintergrund.', 'Put the prepared tray into the hot oven, set 15 minutes, and confirm the start. Cooking then continues in the background without coin pressure.', 'oven', [1, 2], 15, { timingMode: 'background', ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotOven' }),
-    task('Speckdatteln herausholen', 'Remove the Bacon Dates', 'Prüft die Speckdatteln nach Ablauf des Ofentimers auf sichere Bräunung, holt das Blech heraus und stellt es hitzefest ab.', 'When the oven timer ends, check the bacon dates for safe browning, remove the tray, and place it on a heatproof surface.', 'oven', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotOven' }),
-    task('Brot backen lassen', 'Let the Bread Bake', 'Lasst das Brot nach Packungsangabe etwa acht Minuten backen. Der Timer läuft ohne Belohnung oder Strafe im Hintergrund.', 'Let the bread bake according to the packet for about eight minutes. The timer runs in the background without reward or penalty.', 'oven', [1, 1], 8, { timingMode: 'background', ingredientTags: ['baguettes'], safety: 'hotOven' }),
+    task('Speckdatteln in der Pfanne braten', 'Fry the Bacon Dates', 'Legt die Speckdatteln mit der Naht nach unten in eine große Pfanne und bratet sie bei mittlerer Hitze ohne zusätzliches Fett. Wendet sie regelmäßig, bis der Speck rundum knusprig und durchgehend heiß ist. Dafür läuft kein Spieltimer; hakt die Aufgabe nach Gargrad ab.', 'Place the bacon dates seam-side down in a large frying pan and fry them over medium heat without extra fat. Turn them regularly until the bacon is crisp all around and piping hot throughout. No game timer runs for this step; check it off when the food is done.', 'hotplate', [1, 2], 0, { timingMode: 'manual', estimatedMinutes: 7, ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotPan' }),
+    task('Speckdatteln aus der Pfanne nehmen', 'Remove the Bacon Dates from the Pan', 'Nehmt die fertig gebratenen Speckdatteln mit einer Zange aus der Pfanne, lasst überschüssiges Fett kurz auf Küchenpapier abtropfen und haltet sie bis zum Servieren warm.', 'Lift the fried bacon dates from the pan with tongs, drain excess fat briefly on kitchen paper, and keep them warm until serving.', 'hotplate', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotPan' }),
+    task('Brot backen lassen', 'Let the Bread Bake', 'Backt das Brot nach Packungsangabe und kontrolliert Bräunung sowie Gargrad. Dafür läuft kein Spieltimer; hakt die Aufgabe ab, sobald das Brot fertig ist.', 'Let the bread bake according to the packet and check its browning and doneness. No game timer runs for this step; check it off once the bread is ready.', 'oven', [1, 1], 0, { timingMode: 'manual', estimatedMinutes: 8, ingredientTags: ['baguettes'], safety: 'hotOven' }),
     task('Brot aus dem Ofen holen', 'Remove the Bread from the Oven', 'Holt die Baguettes nach dem Timer sicher heraus und lasst sie kurz auf einer hitzefesten Fläche ruhen. Geschnitten wird erst im nächsten Questschritt.', 'Remove the baguettes safely after the timer and rest them briefly on a heatproof surface. Slicing is a later quest step.', 'oven', [1, 2], 0, { estimatedMinutes: 2, challengeMinutes: 3, ingredientTags: ['baguettes'], safety: 'hotOven' })
   ],
   soup: [
@@ -984,7 +1074,8 @@ const BLUEPRINTS = Object.freeze({
     task('Kesselwache aufräumen', 'Clear the Cauldron Watch', 'Stellt verwendete Geräte sicher ab, weicht den Topf nach dem Servieren ein und reinigt Spritzer sofort.', 'Secure used equipment, soak the pot after serving, and wipe splashes immediately.', 'cleanup', [1, 2]),
     task('Zweite Kesselwache', 'Second Cauldron Watch', 'Übernehmt den Kessel für weitere fünf Minuten. Prüft nach dem Hintergrundtimer Hitze, Flüssigkeit und Gargrad; rührt nur bei Bedarf.', 'Take over the cauldron for another five minutes. After the background timer, check heat, liquid, and doneness; stir only if needed.', 'hotplate', [1, 1], 5, { timingMode: 'background', safety: 'hotPan' }),
     task('Dritte Kesselwache', 'Third Cauldron Watch', 'Übernehmt die letzte fünfminütige Kesselwache. Prüft danach, ob alle harten Zutaten weich genug für den gewählten Suppenstil sind.', 'Take the final five-minute cauldron watch. Then check that all firm ingredients are tender enough for the chosen soup style.', 'hotplate', [1, 1], 5, { timingMode: 'background', safety: 'hotPan' }),
-    task('Klare Suppe vollenden', 'Finish the Clear Soup', 'Nur bei klarer Suppe: Lasst die Einlagen sichtbar, schöpft bei Bedarf Schaum ab und balanciert Flüssigkeit, Salz und Säure ohne zu pürieren.', 'Clear soup only: keep the pieces visible, skim if needed, and balance liquid, salt, and acidity without blending.', 'quality', [1, 2], 0, { estimatedMinutes: 5, challengeMinutes: 6, courseStyles: ['clear'] })
+    task('Klare Suppe vollenden', 'Finish the Clear Soup', 'Nur bei klarer Suppe: Lasst die Einlagen sichtbar, schöpft bei Bedarf Schaum ab und balanciert Flüssigkeit, Salz und Säure ohne zu pürieren.', 'Clear soup only: keep the pieces visible, skim if needed, and balance liquid, salt, and acidity without blending.', 'quality', [1, 2], 0, { estimatedMinutes: 5, challengeMinutes: 6, courseStyles: ['clear'] }),
+    task('Tapastafel abräumen', 'Clear the Tapas Table', 'Sammelt Teller, Schalen, Besteck und leere Tapasplatten ein, bringt Reste sicher in die Küche und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für die Suppe.', 'Collect plates, bowls, cutlery, and empty tapas platters, take leftovers safely to the kitchen, and wipe the table clear. Soup ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ],
   salad: [
     task('Der Plan des grünen Altars', 'Plan of the Green Altar', 'Bestimmt das Verhältnis aus Blattsalat, Gemüse, Obst, Nüssen und Kernen.', 'Decide the balance of leaves, vegetables, fruit, nuts, and seeds.', 'planning', [2, 3]),
@@ -998,7 +1089,8 @@ const BLUEPRINTS = Object.freeze({
     task('Die erste Gartenprobe', 'The First Garden Tasting', 'Prüft das Dressing einzeln und anschließend an einem kleinen Probebissen.', 'Taste the dressing alone and then on a small sample bite.', 'quality', [2, 2]),
     task('Frische Kräuter', 'Fresh Herbs', 'Zupft oder schneidet Kräuter erst kurz vor dem Mischen und verwendet auch geeignete Stiele.', 'Pick or cut herbs shortly before mixing and use suitable stems too.', 'seasoning', [1, 2]),
     task('Schalen des Tempels', 'Bowls of the Temple', 'Stellt Teller, Besteck und Servierlöffel bereit, ohne den Arbeitsweg zu blockieren.', 'Set out plates, cutlery, and serving spoons without blocking the work area.', 'serving', [1, 2]),
-    task('Der saubere Pfad', 'The Clear Path', 'Räumt Messer und Bretter weg, wischt feuchte Flächen und lagert übrige Zutaten kühl.', 'Put away knives and boards, wipe damp surfaces, and refrigerate remaining ingredients.', 'cleanup', [1, 2])
+    task('Der saubere Pfad', 'The Clear Path', 'Räumt Messer und Bretter weg, wischt feuchte Flächen und lagert übrige Zutaten kühl.', 'Put away knives and boards, wipe damp surfaces, and refrigerate remaining ingredients.', 'cleanup', [1, 2]),
+    task('Suppenschalen abräumen', 'Clear the Soup Bowls', 'Sammelt Suppenschalen, Löffel und Serviergefäße ein, sichert heiße oder volle Schalen und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für den Salat.', 'Collect soup bowls, spoons, and serving dishes, handle hot or full bowls safely, and wipe the table clear. Salad ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ],
   main: [
     task('Kriegsrat der Festung', 'Fortress Council', 'Legt fest, welche erspielten Fleischstücke, Gemüse, Früchte, Nüsse oder Kerne gemeinsam in den Bratschlauch kommen.', 'Decide which won cuts of meat, vegetables, fruit, nuts, or seeds will share the roasting bag.', 'planning', [2, 3]),
@@ -1013,8 +1105,9 @@ const BLUEPRINTS = Object.freeze({
     task('Sauce aus dem Schatzsaft', 'Sauce from the Treasure Juices', 'Fangt austretenden Saft sicher auf und entscheidet, ob er direkt oder kurz reduziert serviert wird.', 'Collect the cooking juices safely and decide whether to serve directly or reduce briefly.', 'sauce', [1, 2], 0, { safety: 'hotPan' }),
     task('Platten der Feuerwache', 'Platters of the Fire Watch', 'Richtet Fleisch, Gemüse und Früchte übersichtlich an und haltet rohe Kontaktflächen fern.', 'Arrange meat, vegetables, and fruit clearly and keep raw-contact surfaces away.', 'serving', [2, 3]),
     task('Die gereinigte Schmiede', 'The Clean Forge', 'Reinigt alle Flächen und Werkzeuge mit Rohfleischkontakt gründlich und räumt heiße Geräte sicher weg.', 'Clean every surface and tool that touched raw meat thoroughly and put hot equipment away safely.', 'cleanup', [2, 3], 0, { safety: 'rawMeat' }),
-    task('Bratschlauch im Ofen', 'Roasting Bag in the Oven', 'Schiebt das verschlossene Feuerpaket in den Ofen und lasst es 35 Minuten nach Geräte- und Packungshinweisen garen. Diese Ofenzeit läuft ohne Münzbelohnung oder Strafe im Hintergrund.', 'Put the sealed fire parcel in the oven and cook it for 35 minutes according to appliance and packaging guidance. This oven time runs in the background without coin reward or penalty.', 'oven', [1, 2], 35, { timingMode: 'background', safety: 'hotOven' }),
-    task('Letzte Ofenetappe', 'Final Oven Stage', 'Gart das Gericht nach der Zwischenkontrolle weitere zehn Minuten oder so lange, wie Packung und Gargrad es verlangen. Der Timer ist nur eine Erinnerung, keine Deadline.', 'After the progress check, cook for another ten minutes or as long as packaging and doneness require. The timer is a reminder, not a deadline.', 'oven', [1, 2], 10, { timingMode: 'background', safety: 'hotOven' })
+    task('Bratschlauch im Ofen', 'Roasting Bag in the Oven', 'Schiebt das verschlossene Feuerpaket in den Ofen und gart es nach Geräte- und Packungshinweisen. Dafür läuft kein Spieltimer; kontrolliert den Garfortschritt selbst und hakt die Aufgabe anschließend ab.', 'Put the sealed fire parcel in the oven and cook it according to appliance and packaging guidance. No game timer runs for this step; monitor the cooking progress yourselves and check it off afterwards.', 'oven', [1, 2], 0, { timingMode: 'manual', estimatedMinutes: 35, safety: 'hotOven' }),
+    task('Letzte Ofenetappe', 'Final Oven Stage', 'Gart das Gericht nach der Zwischenkontrolle so lange weiter, wie Packung und tatsächlicher Gargrad es verlangen. Dafür läuft kein Spieltimer; hakt die Aufgabe erst nach der Garprüfung ab.', 'After the progress check, continue cooking for as long as the packaging and actual doneness require. No game timer runs for this step; check it off only after checking doneness.', 'oven', [1, 2], 0, { timingMode: 'manual', estimatedMinutes: 10, safety: 'hotOven' }),
+    task('Salatteller abräumen', 'Clear the Salad Plates', 'Sammelt Salatschalen, Teller, Besteck und Servierlöffel ein, stellt Reste kühl und wischt den Tisch vollständig frei. Erst danach beginnt die Zutatenwahl für den Hauptgang.', 'Collect salad bowls, plates, cutlery, and serving spoons, refrigerate leftovers, and wipe the table completely clear. Main-course ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ],
   dessert: [
     task('Zwei Crews an der Lagune', 'Two Crews at the Lagoon', 'Teilt euch in zwei möglichst gleich große Teams und gebt jeder Gruppe einen eigenen Arbeitsbereich.', 'Split into two similar-sized teams and give each one its own work area.', 'planning', [2, 3]),
@@ -1028,13 +1121,14 @@ const BLUEPRINTS = Object.freeze({
     task('Die erste Lagunenprobe', 'The First Lagoon Tasting', 'Prüft Süße, Temperatur und Textur beider Kreationen und ändert nur einen Punkt gleichzeitig.', 'Check sweetness, temperature, and texture of both creations and change only one point at a time.', 'quality', [2, 2]),
     task('Optionale Geisterbeute', 'Optional Spirit Treasure', 'Falls gewünscht, gebt Likör oder Spirituose nur in klar gekennzeichnete Erwachsenenportionen.', 'If desired, add liqueur or spirit only to clearly marked adult portions.', 'optional', [1, 2]),
     task('Zwei Reihen am Sonnenpavillon', 'Two Rows at the Sun Pavilion', 'Richtet beide Dessertvarianten erkennbar getrennt und mit gleichmäßigen Portionen an.', 'Plate both dessert variations separately and in even portions.', 'serving', [2, 3]),
-    task('Die kalte Kombüse', 'The Cold Galley', 'Stellt Eis sofort zurück, lagert Obst kühl und wischt klebrige Arbeitsflächen.', 'Return ice cream immediately, refrigerate fruit, and wipe sticky worktops.', 'cleanup', [1, 2])
+    task('Die kalte Kombüse', 'The Cold Galley', 'Stellt Eis sofort zurück, lagert Obst kühl und wischt klebrige Arbeitsflächen.', 'Return ice cream immediately, refrigerate fruit, and wipe sticky worktops.', 'cleanup', [1, 2]),
+    task('Hauptgang abräumen', 'Clear the Main Course', 'Sammelt Teller, Besteck, Platten und Saucengefäße ein, bringt Reste sicher in die Küche und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für das Dessert.', 'Collect plates, cutlery, platters, and sauce dishes, take leftovers safely to the kitchen, and wipe the table clear. Dessert ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7 })
   ],
   cocktails: [
-    task('Der Plan des Barkeepers', 'The Bartender’s Plan', 'Teilt die Crew in ein alkoholisches und ein alkoholfreies Team und kennzeichnet die Arbeitsbereiche.', 'Split the crew into an alcoholic and an alcohol-free team and label the work areas.', 'planning', [2, 3]),
+    task('Der Plan des Barkeepers', 'The Bartender’s Plan', 'Die beim Spielstart gewählten Cocktail-Teams übernehmen ihre jeweilige Mischung; gemeinsame Grundlagen bereitet die ganze Crew vor.', 'The cocktail teams chosen at setup take charge of their respective mixes; the whole crew prepares shared bases.', 'planning', [2, 3]),
     task('Früchte aus der Piratenkiste', 'Fruit from the Pirate Crate', 'Wascht und schneidet übrige Früchte; reserviert schöne Stücke für die Garnitur.', 'Wash and cut remaining fruit; reserve attractive pieces for garnish.', 'fruit', [2, 3], 0, { safety: 'knife' }),
     task('Saft aus dem Schiffswrack', 'Juice from the Shipwreck', 'Presst oder zerdrückt geeignete Früchte und verteilt den Grundsaft auf beide Teams.', 'Press or crush suitable fruit and divide the base juice between both teams.', 'mixing', [2, 2]),
-    task('Mischung der Freibeuter', 'The Freebooter Mix', 'Falls eine Spirituose zugeordnet ist, baut die alkoholische Mischung schrittweise mit Saft, Säure und Wasser auf. Andernfalls kennzeichnet diese Mischung ebenfalls als alkoholfrei.', 'If a spirit was assigned, build the alcoholic mix gradually with juice, acidity, and water. Otherwise mark this mix as alcohol-free as well.', 'alcoholic', [2, 3]),
+    task('Mischung der Freibeuter', 'The Freebooter Mix', 'Das alkoholische Team baut seine Mischung mit der zugeordneten Spirituose schrittweise aus Saft, Säure und Wasser auf und probiert die Balance selbst.', 'The alcoholic team gradually builds its mix with the assigned spirit, juice, acidity, and water and tastes the balance themselves.', 'alcoholic', [2, 3]),
     task('Mischung der Steuermänner', 'The Helmsman Mix', 'Baut die alkoholfreie Mischung mit Saft, Frucht, Säure und Mineralwasser eigenständig auf.', 'Build the alcohol-free mix independently with juice, fruit, acidity, and mineral water.', 'alcohol-free', [2, 3]),
     task('Das letzte Glas', 'The Final Glass', 'Kennzeichnet beide Varianten eindeutig, verteilt Eis und serviert alle Gläser gemeinsam.', 'Label both versions unmistakably, distribute ice, and serve every glass together.', 'serving', [2, 3]),
     task('Vorrat aus der Eishöhle', 'Supply from the Ice Cave', 'Stellt ausreichend Eis bereit, ohne den Arbeitsbereich mit Schmelzwasser zu überfluten.', 'Set out enough ice without flooding the workspace with meltwater.', 'cold', [1, 2], 0, { ingredientTags: ['ice-cubes'] }),
@@ -1042,7 +1136,8 @@ const BLUEPRINTS = Object.freeze({
     task('Säure der Brandung', 'Acidity of the Surf', 'Balanciert beide Varianten getrennt mit Zitrone, Limette oder anderer Fruchtsäure.', 'Balance both versions separately with lemon, lime, or another fruit acidity.', 'quality', [1, 2]),
     task('Der Shaker des Smutjes', 'The Cook’s Shaker', 'Entscheidet je Mischung zwischen Rühren, Schütteln oder Mixen und arbeitet portionsweise.', 'Choose stirring, shaking, or blending for each mix and work in batches.', 'mixing', [2, 2]),
     task('Flaggen der beiden Crews', 'Flags of the Two Crews', 'Kennzeichnet alkoholische und alkoholfreie Gläser dauerhaft und verwechslungssicher.', 'Mark alcoholic and alcohol-free glasses permanently and unmistakably.', 'safety', [1, 2]),
-    task('Freie Fläche hinter der Bar', 'Clear Space behind the Bar', 'Verschließt Flaschen, räumt Messer weg und wischt klebrige oder nasse Flächen.', 'Close bottles, put away knives, and wipe sticky or wet surfaces.', 'cleanup', [1, 2])
+    task('Freie Fläche hinter der Bar', 'Clear Space behind the Bar', 'Verschließt Flaschen, räumt Messer weg und wischt klebrige oder nasse Flächen.', 'Close bottles, put away knives, and wipe sticky or wet surfaces.', 'cleanup', [1, 2]),
+    task('Desserttisch abräumen', 'Clear the Dessert Table', 'Sammelt Dessertschalen, Löffel und Garniturschälchen ein, stellt Eis und empfindliche Reste sofort kalt und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für die Cocktails.', 'Collect dessert bowls, spoons, and garnish dishes, return ice cream and delicate leftovers to the cold immediately, and wipe the table clear. Cocktail ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ]
 });
 
@@ -1055,37 +1150,39 @@ const QUEST_NAMES = Object.freeze({
   soup: {
     plan: { de: 'Suppenplan', en: 'Soup Plan' }, vegetables: { de: 'Gemüse vorbereiten', en: 'Prepare Vegetables' },
     cauldron: { de: 'Kesselreise', en: 'Cauldron Voyage' }, finish: { de: 'Suppe vollenden', en: 'Finish the Soup' },
-    extras: { de: 'Einlage & Garnitur', en: 'Extras & Garnish' }, serve: { de: 'Kessel servieren', en: 'Serve the Cauldron' }, cleanup: { de: 'Kessel klar machen', en: 'Clear the Cauldron' }
+    extras: { de: 'Einlage & Garnitur', en: 'Extras & Garnish' }, serve: { de: 'Kessel servieren', en: 'Serve the Cauldron' }, cleanup: { de: 'Kessel klar machen', en: 'Clear the Cauldron' }, reset: { de: 'Tapastafel klarmachen', en: 'Clear the Tapas Table' }
   },
   salad: {
     plan: { de: 'Salatplan', en: 'Salad Plan' }, prep: { de: 'Frische vorbereiten', en: 'Prepare Fresh Ingredients' },
     dressing: { de: 'Dressingroute', en: 'Dressing Route' }, assemble: { de: 'Dschungelschale', en: 'Jungle Bowl' },
-    serve: { de: 'Grüner Pfad', en: 'Green Path' }, cleanup: { de: 'Sauberer Pfad', en: 'Clear Path' }
+    serve: { de: 'Grüner Pfad', en: 'Green Path' }, cleanup: { de: 'Sauberer Pfad', en: 'Clear Path' }, reset: { de: 'Suppentafel klarmachen', en: 'Clear the Soup Table' }
   },
   main: {
     plan: { de: 'Festungsplan', en: 'Fortress Plan' }, prep: { de: 'Feuerpaket vorbereiten', en: 'Prepare the Fire Parcel' },
     oven: { de: 'Ofenreise', en: 'Oven Voyage' }, finish: { de: 'Festmahl vollenden', en: 'Finish the Feast' },
-    serve: { de: 'Festungstafel', en: 'Fortress Table' }, cleanup: { de: 'Schmiede reinigen', en: 'Clean the Forge' }
+    serve: { de: 'Festungstafel', en: 'Fortress Table' }, cleanup: { de: 'Schmiede reinigen', en: 'Clean the Forge' }, reset: { de: 'Salattafel klarmachen', en: 'Clear the Salad Table' }
   },
   dessert: {
     plan: { de: 'Lagunenplan', en: 'Lagoon Plan' }, fruit: { de: 'Fruchtbeute', en: 'Fruit Treasure' },
     cold: { de: 'Kühle Kreationen', en: 'Chilled Creations' }, finish: { de: 'Süße Garnitur', en: 'Sweet Garnish' },
-    serve: { de: 'Sonnenpavillon', en: 'Sun Pavilion' }, cleanup: { de: 'Kalte Kombüse', en: 'Cold Galley' }
+    serve: { de: 'Sonnenpavillon', en: 'Sun Pavilion' }, cleanup: { de: 'Kalte Kombüse', en: 'Cold Galley' }, reset: { de: 'Festtafel klarmachen', en: 'Clear the Feast Table' }
   },
   cocktails: {
     plan: { de: 'Barplan', en: 'Bar Plan' }, fruit: { de: 'Fruchtbasis', en: 'Fruit Base' },
-    mixes: { de: 'Zwei Mischungen', en: 'Two Mixes' }, finish: { de: 'Balance & Sicherheit', en: 'Balance & Safety' },
-    serve: { de: 'Letzte Gläser', en: 'Final Glasses' }, cleanup: { de: 'Bar klar machen', en: 'Clear the Bar' }
+    alcoholic: { de: 'Alkoholische Crew-Mischung', en: 'Alcoholic Crew Mix' },
+    'alcohol-free': { de: 'Alkoholfreie Crew-Mischung', en: 'Alcohol-free Crew Mix' },
+    mixes: { de: 'Gemeinsame Mischtechnik', en: 'Shared Mixing Technique' }, finish: { de: 'Balance & Sicherheit', en: 'Balance & Safety' },
+    serve: { de: 'Letzte Gläser', en: 'Final Glasses' }, cleanup: { de: 'Bar klar machen', en: 'Clear the Bar' }, reset: { de: 'Desserttisch klarmachen', en: 'Clear the Dessert Table' }
   }
 });
 
 const QUEST_ASSIGNMENTS = Object.freeze({
   tapas: ['plan', 'dates', 'bread', 'cold', 'cold', 'serve', 'serve', 'dates', 'bread', 'serve', 'cleanup', 'story', 'dates', 'dates', 'bread', 'bread'],
-  soup: ['plan', 'vegetables', 'vegetables', 'cauldron', 'cauldron', 'finish', 'finish', 'extras', 'finish', 'extras', 'serve', 'cleanup', 'cauldron', 'cauldron', 'finish'],
-  salad: ['plan', 'prep', 'prep', 'dressing', 'assemble', 'serve', 'prep', 'prep', 'dressing', 'prep', 'serve', 'cleanup'],
-  main: ['plan', 'prep', 'prep', 'prep', 'oven', 'oven', 'prep', 'prep', 'finish', 'finish', 'serve', 'cleanup', 'oven', 'oven'],
-  dessert: ['plan', 'fruit', 'fruit', 'cold', 'cold', 'cold', 'cold', 'finish', 'finish', 'finish', 'serve', 'cleanup'],
-  cocktails: ['plan', 'fruit', 'fruit', 'mixes', 'mixes', 'serve', 'finish', 'finish', 'finish', 'mixes', 'finish', 'cleanup']
+  soup: ['plan', 'vegetables', 'vegetables', 'cauldron', 'cauldron', 'finish', 'finish', 'extras', 'finish', 'extras', 'serve', 'cleanup', 'cauldron', 'cauldron', 'finish', 'reset'],
+  salad: ['plan', 'prep', 'prep', 'dressing', 'assemble', 'serve', 'prep', 'prep', 'dressing', 'prep', 'serve', 'cleanup', 'reset'],
+  main: ['plan', 'prep', 'prep', 'prep', 'oven', 'oven', 'prep', 'prep', 'finish', 'finish', 'serve', 'cleanup', 'oven', 'oven', 'reset'],
+  dessert: ['plan', 'fruit', 'fruit', 'cold', 'cold', 'cold', 'cold', 'finish', 'finish', 'finish', 'serve', 'cleanup', 'reset'],
+  cocktails: ['plan', 'fruit', 'fruit', 'alcoholic', 'alcohol-free', 'serve', 'finish', 'finish', 'finish', 'mixes', 'finish', 'cleanup', 'reset']
 });
 
 /*
@@ -1099,7 +1196,8 @@ const WORKFLOW = Object.freeze({
     requires: {
       12: [[1, 'done']], 13: [[12, 'done']], 14: [[2, 'done']], 15: [[14, 'done']],
       8: [[15, 'done']], 9: [[3, 'done'], [4, 'done']],
-      5: [[3, 'done'], [4, 'done'], [6, 'done'], [8, 'done'], [9, 'done'], [13, 'done']],
+      5: [[3, 'done'], [4, 'done'], [8, 'done'], [9, 'done'], [13, 'done']],
+      6: [[5, 'done']],
       10: [[5, 'done']]
     }
   },
@@ -1149,7 +1247,7 @@ function buildTaskDeck(chapterIndex) {
   const chapter = CHAPTERS[chapterIndex];
   const blueprints = BLUEPRINTS[chapter.id];
   const questSteps = new Map();
-  return blueprints.map((blueprint, blueprintIndex) => {
+  const deck = blueprints.map((blueprint, blueprintIndex) => {
     const number = blueprintIndex * 2 + 1;
     const estimatedMinutes = blueprint.estimatedMinutes || blueprint.backgroundMinutes || DEFAULT_ESTIMATED_MINUTES[blueprint.area] || 4;
     const questId = QUEST_ASSIGNMENTS[chapter.id][blueprintIndex] ?? 'plan';
@@ -1158,7 +1256,7 @@ function buildTaskDeck(chapterIndex) {
     return {
       ...blueprint,
       estimatedMinutes,
-      challengeMinutes: blueprint.timingMode === 'background' ? 0 : (blueprint.challengeMinutes ?? Math.max(2, Math.min(8, estimatedMinutes))),
+      challengeMinutes: ['background', 'manual'].includes(blueprint.timingMode) ? 0 : (blueprint.challengeMinutes ?? Math.max(2, Math.min(8, estimatedMinutes))),
       id: `A${chapterIndex + 1}-${String(number).padStart(2, '0')}`,
       chapterId: chapter.id,
       questId,
@@ -1172,6 +1270,21 @@ function buildTaskDeck(chapterIndex) {
       coreLocationIndex: null
     };
   });
+  const addDoneRequirements = (card, requiredCards) => {
+    const existing = new Set(card.prerequisites.map((requirement) => requirement.requiredBlueprintIndex));
+    requiredCards.forEach((requiredCard) => {
+      if (requiredCard.id === card.id || existing.has(requiredCard.blueprintIndex)) return;
+      card.prerequisites.push({ requiredBlueprintIndex: requiredCard.blueprintIndex, state: 'done' });
+      existing.add(requiredCard.blueprintIndex);
+    });
+  };
+  const preparationCards = deck.filter((card) => card.playable && !['serve', 'cleanup', 'reset'].includes(card.questId));
+  const servingCards = deck.filter((card) => card.playable && card.questId === 'serve');
+  const cleanupCards = deck.filter((card) => card.playable && card.questId === 'cleanup');
+  const completedCourseCards = deck.filter((card) => card.playable && !['cleanup', 'reset'].includes(card.questId));
+  servingCards.forEach((card) => addDoneRequirements(card, preparationCards));
+  cleanupCards.forEach((card) => addDoneRequirements(card, completedCourseCards));
+  return deck;
 }
 
 const TASK_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildTaskDeck(index)));
@@ -1229,8 +1342,23 @@ function blueprintsTotal() {
 
 /* js/core/timers.js */
 function getRemainingSeconds(task, now = Date.now()) {
-  if (!task.endAt || task.status !== 'active') return 0;
-  return Math.max(0, Math.ceil((task.endAt - now) / 1000));
+  if (!task.endAt || task.status === 'queued') return 0;
+  const reference = task.status === 'done' && task.completedAt ? task.completedAt : now;
+  const delta = task.endAt - reference;
+  const seconds = delta >= 0 ? Math.ceil(delta / 1000) : -Math.ceil(Math.abs(delta) / 1000);
+  return task.timingMode === 'background' ? Math.max(0, seconds) : seconds;
+}
+
+function getElapsedSeconds(task, now = Date.now()) {
+  if (!task.startedAt) return 0;
+  const reference = task.status === 'done' && task.completedAt ? task.completedAt : now;
+  return Math.max(0, Math.ceil((reference - task.startedAt) / 1000));
+}
+
+function getTaskTimerProgress(task, now = Date.now()) {
+  if (!task.startedAt || !task.endAt || task.endAt <= task.startedAt) return 0;
+  const elapsed = getElapsedSeconds(task, now) * 1000;
+  return Math.max(0, Math.min(100, Math.round(elapsed / (task.endAt - task.startedAt) * 100)));
 }
 
 function updateTaskTimers(session, now = Date.now()) {
@@ -1537,6 +1665,7 @@ const clone = (value) => typeof structuredClone === 'function'
 
 const TASK_ASSIGNEE_CHOICE_INTERVAL = 3;
 const MAX_INGREDIENTS_PER_TURN = 2;
+const MAX_FUN_CARDS_PER_CHAPTER = 16;
 const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
 const CURRENT_INGREDIENT_IDS = new Set(CURRENT_INGREDIENTS_BY_ID.keys());
@@ -1559,12 +1688,13 @@ function chapterState(playerIds, chapterIndex = 0) {
     readyToServe: false,
     served: false,
     watchChallenges: 0,
-    splitTargetLocation: null,
     challengeIdsByRound: {},
     queuedChallenges: [],
     scheduledChallenges: [],
+    funCardIdsDrawn: [],
+    portionCaptainPlayerId: null,
     courseStyle: chapterIndex === 1 ? null : 'not-required',
-    stage: chapterIndex === 0 ? 'tasks' : 'ingredients'
+    stage: chapterIndex === 0 ? 'tasks' : 'clearing'
   };
 }
 
@@ -1712,10 +1842,13 @@ class GameEngine {
         task.timingMode = card.timingMode ?? 'challenge';
         task.challengeMinutes = card.challengeMinutes ?? 0;
         task.backgroundMinutes = card.backgroundMinutes ?? 0;
-        const timerMinutes = task.timingMode === 'background' ? task.backgroundMinutes : task.challengeMinutes;
+        const timerMinutes = task.timingMode === 'background'
+          ? task.backgroundMinutes
+          : task.timingMode === 'challenge' ? task.challengeMinutes : 0;
         if (task.startedAt && ['active', 'ready'].includes(task.status)) {
-          task.challengeEndsAt = task.startedAt + timerMinutes * 60_000;
+          task.challengeEndsAt = timerMinutes > 0 ? task.startedAt + timerMinutes * 60_000 : null;
           task.endAt = task.challengeEndsAt;
+          if (!task.endAt && task.status === 'ready') task.status = 'active';
         }
       }
     });
@@ -1752,18 +1885,32 @@ class GameEngine {
     this.state.chapter.challengeIdsByRound ??= {};
     this.state.chapter.queuedChallenges ??= [];
     this.state.chapter.scheduledChallenges ??= [];
+    this.state.chapter.funCardIdsDrawn ??= [];
+    this.state.chapter.portionCaptainPlayerId ??= null;
     this.state.chapter.courseStyle ??= this.state.chapterIndex === 1 ? null : 'not-required';
     for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
       this.reconcileTaskQueue(chapterIndex);
     }
     this.state.activeChallenges ??= [];
+    this.state.funCardsDrawn ??= [];
+    const knownFunCardIds = new Set(WATCH_CHALLENGES.map((challenge) => challenge.id));
+    const retainedFunCardIds = [...new Set((this.state.funCardQueue ?? []).filter((id) => knownFunCardIds.has(id)))];
+    const missingFunCardIds = WATCH_CHALLENGES.map((challenge) => challenge.id)
+      .filter((id) => !retainedFunCardIds.includes(id));
+    const shuffledMissingFunCards = shuffle(missingFunCardIds, this.state.rngState || 1);
+    this.state.rngState = shuffledMissingFunCards.state;
+    this.state.funCardQueue = [...retainedFunCardIds, ...shuffledMissingFunCards.value];
     this.state.turnsElapsed ??= this.state.players.reduce((total, player) => total + (player.turns ?? 0), 0);
     const validBusyAnchor = Number.isInteger(this.state.busyAfterPlayerIndex) &&
       this.state.busyAfterPlayerIndex >= 0 && this.state.busyAfterPlayerIndex < this.state.players.length;
     this.state.busyAfterPlayerIndex = this.state.turn.phase === 'crewBusy'
       ? (validBusyAnchor ? this.state.busyAfterPlayerIndex : this.state.activePlayerIndex)
       : null;
-    this.state.players.forEach((player) => { player.ingredientBonuses ??= freshBonuses(); });
+    this.state.busyReason ??= this.state.turn.phase === 'crewBusy' ? 'allPlayersBusy' : null;
+    this.state.players.forEach((player, index) => {
+      player.ingredientBonuses ??= freshBonuses();
+      player.cocktailTeam ??= index % 2 === 0 ? 'alcoholic' : 'alcohol-free';
+    });
     if (this.state.bonuses && Object.values(this.state.bonuses).some((value) => Number(value) > 0)) {
       Object.entries(this.state.bonuses).forEach(([key, value]) => {
         if (key in this.activePlayer.ingredientBonuses) this.activePlayer.ingredientBonuses[key] += Number(value) || 0;
@@ -1775,6 +1922,10 @@ class GameEngine {
 
   static create(setup, now = Date.now()) {
     const names = ensureNames(setup.names ?? []);
+    const requestedCocktailTeams = Array.isArray(setup.cocktailTeams) ? setup.cocktailTeams : [];
+    const cocktailTeams = names.map((_, index) => ['alcoholic', 'alcohol-free'].includes(requestedCocktailTeams[index])
+      ? requestedCocktailTeams[index]
+      : index % 2 === 0 ? 'alcoholic' : 'alcohol-free');
     let rngState = Number(setup.seed) || (now >>> 0) || 1;
     const roleResult = shuffle(ROLES, rngState);
     rngState = roleResult.state;
@@ -1785,6 +1936,7 @@ class GameEngine {
         id: `player-${index + 1}`,
         name,
         roleId: role.id,
+        cocktailTeam: cocktailTeams[index],
         language: setup.defaultLanguage === 'en' ? 'en' : 'de',
         turns: 0,
         taskMarkers: 0,
@@ -1809,14 +1961,23 @@ class GameEngine {
           const locationEvents = EVENT_DECKS[chapterIndex]
             .filter((event) => event.locationIndex === locationIndex && event.stage === stage);
           const ids = locationEvents
-            .filter((event) => event.archetype !== 'pantry-mischief')
+            .filter((event) => !['pantry-mischief', 'work-mischief'].includes(event.archetype))
             .map((event) => event.id);
           const shuffled = shuffle(ids, rngState);
           rngState = shuffled.state;
           const queue = [...shuffled.value];
-          locationEvents
-            .filter((event) => event.archetype === 'pantry-mischief')
-            .forEach((event) => queue.splice(Math.min(2, queue.length), 0, event.id));
+          const pantryFun = locationEvents.filter((event) => event.archetype === 'pantry-mischief');
+          pantryFun.forEach((event) => queue.splice(Math.min(2, queue.length), 0, event.id));
+          const taskFunIds = locationEvents
+            .filter((event) => event.archetype === 'work-mischief')
+            .map((event) => event.id);
+          const shuffledFun = shuffle(taskFunIds, rngState);
+          rngState = shuffledFun.state;
+          if (stage === 'tasks' && chapterIndex === 0 && locationIndex === 0) {
+            queue.unshift(...shuffledFun.value);
+          } else if (stage === 'tasks') {
+            shuffledFun.value.forEach((eventId, index) => queue.splice(Math.min(index * 2 + 1, queue.length), 0, eventId));
+          }
           stageQueues[stage].push(queue);
         }
       }
@@ -1840,6 +2001,9 @@ class GameEngine {
       ingredientQueues.push(shuffled.value);
     }
 
+    const funCardDeck = shuffle(WATCH_CHALLENGES.map((challenge) => challenge.id), rngState);
+    rngState = funCardDeck.state;
+
     const state = {
       version: STATE_VERSION,
       appVersion: APP_VERSION,
@@ -1860,6 +2024,7 @@ class GameEngine {
       players,
       activePlayerIndex: startingPlayer.value,
       busyAfterPlayerIndex: null,
+      busyReason: null,
       chapterIndex: 0,
       chapter: chapterState(players.map((player) => player.id), 0),
       groups: [{
@@ -1875,6 +2040,8 @@ class GameEngine {
       taskQueues,
       ingredientQueues,
       eventsDrawn: [],
+      funCardQueue: funCardDeck.value,
+      funCardsDrawn: [],
       discardedEvents: [],
       tasks: [],
       ingredients: ingredients.plan,
@@ -2035,9 +2202,8 @@ class GameEngine {
       this.log('ingredientLocked', { ingredientId: ingredient.id, automatic: true }, now);
     });
     this.state.chapter.stage = 'tasks';
-    const firstTask = this.assignTask({ group: this.activeGroup, now });
-    if (firstTask) this.briefTask(firstTask, true, now);
-    this.log('chapterStageChanged', { chapterIndex: 0, stage: 'tasks', automatic: true }, now);
+    this.state.turn = freshTurn();
+    this.log('chapterStageChanged', { chapterIndex: 0, stage: 'tasks', automatic: true, openingFunCards: 3 }, now);
     return true;
   }
 
@@ -2195,9 +2361,52 @@ class GameEngine {
     return lockedEssential >= this.courseRule().target && basketEmpty && noRequiredIngredientExpires && categoryMinimumsMet;
   }
 
+  defaultCocktailUseForIngredient(ingredient) {
+    if (this.currentChapter.id !== 'cocktails') return null;
+    if (ingredient.category === 'alcohol') return 'alcoholic';
+    const hasAlcoholFreeFlavour = this.courseIngredients().some((entry) =>
+      entry.id !== ingredient.id && entry.cocktailUse === 'alcohol-free' && !['alcohol', 'drinks'].includes(entry.category)
+    );
+    if (!hasAlcoholFreeFlavour && !['alcohol', 'drinks'].includes(ingredient.category)) return 'alcohol-free';
+    return 'shared';
+  }
+
+  cocktailCompositionReady() {
+    if (this.currentChapter.id !== 'cocktails') return true;
+    const fixed = this.courseIngredients().filter((ingredient) => ['locked', 'used'].includes(ingredient.status));
+    const validUses = new Set(['alcoholic', 'alcohol-free', 'shared']);
+    return fixed.length > 0 && fixed.every((ingredient) => validUses.has(ingredient.cocktailUse)) &&
+      fixed.some((ingredient) => ingredient.category === 'alcohol' && ingredient.cocktailUse === 'alcoholic') &&
+      fixed.some((ingredient) => ingredient.cocktailUse === 'alcohol-free' && !['alcohol', 'drinks'].includes(ingredient.category));
+  }
+
+  setCocktailIngredientUse(ingredientId, use, now = Date.now()) {
+    if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
+      !['alcoholic', 'alcohol-free', 'shared'].includes(use)) return false;
+    const ingredient = this.courseIngredients().find((entry) => entry.id === ingredientId && entry.status === 'locked');
+    if (!ingredient || (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
+    ingredient.cocktailUse = use;
+    this.log('cocktailIngredientAssigned', { ingredientId, use }, now);
+    this.updateChapterStage(now);
+    return true;
+  }
+
   updateChapterStage(now = Date.now()) {
+    if (this.state.chapter.stage === 'clearing') {
+      const clearingCards = TASK_DECKS[this.state.chapterIndex].filter((card) => card.playable && card.questId === 'reset');
+      const clearingComplete = clearingCards.length > 0 && clearingCards.every((card) =>
+        this.state.tasks.some((instance) => instance.chapterIndex === this.state.chapterIndex && instance.taskId === card.id && instance.status === 'done')
+      );
+      if (clearingComplete) {
+        this.state.chapter.stage = 'ingredients';
+        this.log('chapterStageChanged', { chapterIndex: this.state.chapterIndex, stage: 'ingredients', afterTableClearing: true }, now);
+        if (this.state.chapterIndex === 3) this.secureTreasurerIngredient(now);
+        return true;
+      }
+      return false;
+    }
     const ingredientChoiceInProgress = ['event', 'ingredientChoice', 'effectChoice'].includes(this.state.turn.phase);
-    if (this.state.chapter.stage === 'ingredients' && !ingredientChoiceInProgress && this.ingredientsLockedForCourse()) {
+    if (this.state.chapter.stage === 'ingredients' && !ingredientChoiceInProgress && this.ingredientsLockedForCourse() && this.cocktailCompositionReady()) {
       this.state.chapter.stage = 'tasks';
       this.log('chapterStageChanged', { chapterIndex: this.state.chapterIndex, stage: 'tasks' }, now);
       return true;
@@ -2212,6 +2421,9 @@ class GameEngine {
 
   taskPrerequisitesMet(card) {
     const requirementMet = (requirement) => {
+      const requiredCard = TASK_DECKS[this.state.chapterIndex]
+        .find((candidate) => candidate.blueprintIndex === requirement.requiredBlueprintIndex);
+      if (requiredCard && !this.taskAppliesToCourse(requiredCard)) return true;
       const prerequisite = this.state.tasks.find((instance) => {
         if (instance.chapterIndex !== this.state.chapterIndex) return false;
         const prerequisiteCard = this.getTaskCard(instance);
@@ -2309,14 +2521,31 @@ class GameEngine {
       .filter((player) => player && this.isPlayerFreeForTask(player.id));
   }
 
+  cocktailTeamForTask(card) {
+    if (card?.chapterId !== 'cocktails') return null;
+    if (card.area === 'alcoholic') return 'alcoholic';
+    if (card.area === 'alcohol-free') return 'alcohol-free';
+    return null;
+  }
+
+  cocktailTeamMembers(team) {
+    return this.state.players.filter((player) => player.cocktailTeam === team);
+  }
+
+  eligibleFreePlayersForTask(card, group = this.activeGroup) {
+    const free = this.freePlayersForTask(group);
+    const cocktailTeam = this.cocktailTeamForTask(card);
+    return cocktailTeam ? free.filter((player) => player.cocktailTeam === cocktailTeam) : free;
+  }
+
   taskAssignmentPriority(a, b) {
     return (b.turns ?? 0) - (a.turns ?? 0) ||
       (a.taskMarkers ?? 0) - (b.taskMarkers ?? 0) ||
       a.id.localeCompare(b.id);
   }
 
-  prioritizedFreePlayersForTask(group = this.activeGroup) {
-    return this.freePlayersForTask(group).sort((a, b) => {
+  prioritizedFreePlayersForTask(group = this.activeGroup, card = null) {
+    return this.eligibleFreePlayersForTask(card, group).sort((a, b) => {
       if (a.id === this.activePlayer.id) return -1;
       if (b.id === this.activePlayer.id) return 1;
       return this.taskAssignmentPriority(a, b);
@@ -2325,7 +2554,7 @@ class GameEngine {
 
   recommendedTaskPlayers(card, group = this.activeGroup, peopleMode = null) {
     const requiredPeople = this.requiredPeopleForTask(card, peopleMode);
-    const free = this.freePlayersForTask(group);
+    const free = this.eligibleFreePlayersForTask(card, group);
     const active = free.find((player) => player.id === this.activePlayer.id);
     if (!active || free.length < requiredPeople) return [];
     const helpers = free
@@ -2336,16 +2565,20 @@ class GameEngine {
 
   requiredPeopleForTask(card, peopleMode = null) {
     if (!card) return Infinity;
-    return peopleMode === 'team'
+    const requested = peopleMode === 'team'
       ? Math.min(card.people[1], card.people[0] + 1)
       : card.people[0];
+    const cocktailTeam = this.cocktailTeamForTask(card);
+    if (!cocktailTeam) return requested;
+    const teamSize = this.cocktailTeamMembers(cocktailTeam).length;
+    return teamSize ? Math.min(requested, teamSize) : Infinity;
   }
 
   shouldOfferTaskAssigneeChoice(card, group = this.activeGroup, peopleMode = null) {
     const requiredPeople = this.requiredPeopleForTask(card, peopleMode);
     const chapterTaskCount = this.state.tasks.filter((instance) => instance.chapterIndex === this.state.chapterIndex).length;
     return requiredPeople > 1 && chapterTaskCount > 0 && chapterTaskCount % TASK_ASSIGNEE_CHOICE_INTERVAL === 1 &&
-      this.freePlayersForTask(group).length > requiredPeople;
+      this.eligibleFreePlayersForTask(card, group).length > requiredPeople;
   }
 
   taskHandoffAllowed(card, group = this.activeGroup) {
@@ -2361,7 +2594,6 @@ class GameEngine {
 
   taskCardCandidates(peopleMode = null, group = this.activeGroup) {
     const queue = this.state.taskQueues[this.state.chapterIndex] ?? [];
-    const freeCount = this.freePlayersForTask(group).length;
     const usedBlueprints = new Set(this.state.tasks
       .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
       .map((instance) => this.getTaskCard(instance)?.blueprintIndex)
@@ -2369,17 +2601,19 @@ class GameEngine {
     return queue
       .map((taskId) => taskById(taskId))
       .filter((card) => card?.playable && this.taskAppliesToCourse(card) && this.taskPrerequisitesMet(card))
+      .filter((card) => this.state.chapter.stage === 'clearing' ? card.questId === 'reset' : card.questId !== 'reset')
       .filter((card) => this.taskHandoffAllowed(card, group))
       .filter((card) => !usedBlueprints.has(card.blueprintIndex))
       .filter((card) => peopleMode !== 'team' || card.people[1] > card.people[0])
       .filter((card) => peopleMode !== 'single' || card.people[0] === 1)
-      .filter((card) => this.requiredPeopleForTask(card, peopleMode) <= freeCount);
+      .filter((card) => this.requiredPeopleForTask(card, peopleMode) <= this.eligibleFreePlayersForTask(card, group).length);
   }
 
   assignableTaskCards(peopleMode = null, group = this.activeGroup) {
     if (!group.playerIds.includes(this.activePlayer.id) || !this.isPlayerFreeForTask(this.activePlayer.id) ||
       this.state.turn.tasksAssignedThisTurn >= 1) return [];
-    return this.taskCardCandidates(peopleMode, group);
+    return this.taskCardCandidates(peopleMode, group)
+      .filter((card) => this.eligibleFreePlayersForTask(card, group).some((player) => player.id === this.activePlayer.id));
   }
 
   hasUnassignedCourseTasks() {
@@ -2391,6 +2625,7 @@ class GameEngine {
   }
 
   currentEventStage() {
+    if (this.state.chapter.stage === 'clearing') return 'tasks';
     if (this.state.chapter.stage === 'ingredients') return 'ingredients';
     if (this.taskCardCandidates().length) return 'tasks';
     return 'cooking';
@@ -2418,10 +2653,11 @@ class GameEngine {
       case 'teamTask': return this.currentEventStage() === 'tasks' && this.assignableTaskCards('team').length > 0;
       case 'watchChallenge':
       case 'watchChallengeAlt':
-      case 'treasureAndWatch':
-      case 'storyMoment': return ['ingredients', 'tasks', 'cooking'].includes(this.currentEventStage());
-      case 'fiveMinuteBreak': return ['ingredients', 'cooking'].includes(this.currentEventStage()) && !this.hasOpenTasks();
-      case 'splitCrew': return this.currentEventStage() === 'cooking' && !this.hasUnassignedCourseTasks() && this.state.groups.length === 1;
+      case 'treasureAndWatch': return ['ingredients', 'tasks', 'cooking'].includes(this.currentEventStage()) &&
+        this.watchChallengeCandidates(actionCode).length > 0;
+      case 'fiveMinuteBreak': return ['ingredients', 'cooking'].includes(this.currentEventStage()) && !this.hasOpenTasks() &&
+        this.state.chapter.funCardIdsDrawn.length < MAX_FUN_CARDS_PER_CHAPTER &&
+        !this.state.funCardsDrawn.includes('five-minute-break');
       case 'treasure':
       case 'coinLoss':
       case 'chain':
@@ -2434,7 +2670,7 @@ class GameEngine {
     const candidates = stage === 'ingredients'
       ? ['discoverIngredient', 'lockIngredient', 'returnIngredient', 'swapIngredient', 'treasureAndIngredient']
       : stage === 'tasks'
-        ? ['drawTask', 'teamTask', 'singleTask', 'watchChallenge', 'storyMoment', 'coinLoss']
+        ? ['drawTask', 'teamTask', 'singleTask', 'watchChallenge', 'coinLoss', 'treasure']
         : ['watchChallenge', 'watchChallengeAlt', 'treasure', 'treasureAndWatch'];
     return candidates.filter((action) => this.actionAvailable(action));
   }
@@ -2445,7 +2681,7 @@ class GameEngine {
       const options = [...new Set((event.options ?? []).filter((action) => this.actionAvailable(action)))];
       return { ...event, options: options.length ? options : fallbacks.slice(0, 2) };
     }
-    const pool = [...new Set([...(event.outcomes ?? []), ...fallbacks, 'storyMoment', 'coinLoss', 'treasure'])]
+    const pool = [...new Set([...(event.outcomes ?? []), ...fallbacks, 'coinLoss', 'treasure'])]
       .filter((action) => this.actionAvailable(action));
     const outcomes = [];
     (event.outcomes ?? []).forEach((action) => {
@@ -2471,17 +2707,43 @@ class GameEngine {
     const candidates = this.watchChallengeCandidates(actionCode);
     if (!candidates.length) return null;
     const offset = actionCode === 'watchChallengeAlt' ? 1 : 0;
-    const base = (this.state.chapter.watchChallenges + (event?.locationIndex ?? 0) * 2 + offset) % candidates.length;
-    const challenge = candidates[base];
+    const challenge = candidates[offset % candidates.length];
     const targetPlayerId = this.state.players[(this.state.activePlayerIndex + 1) % this.state.players.length].id;
     return this.personalizeWatchChallenge(challenge, targetPlayerId);
   }
 
+  challengeRequirementsMet(challenge) {
+    if (!challenge) return false;
+    const openChapterTasks = this.state.tasks.filter((instance) =>
+      instance.chapterIndex === this.state.chapterIndex && ['queued', 'active', 'ready'].includes(instance.status)
+    );
+    return (challenge.requirements ?? []).every((requirement) => {
+      switch (requirement) {
+        case 'openTask': return openChapterTasks.length > 0;
+        case 'usedIngredientPerPlayer':
+          return this.state.ingredients.filter((ingredient) => ingredient.status === 'used').length >= this.state.players.length;
+        case 'courseWorkStarted':
+          return this.state.tasks.some((instance) => instance.chapterIndex === this.state.chapterIndex && instance.startedAt != null);
+        case 'taskTimerRunning':
+          return openChapterTasks.some((instance) => instance.endAt && ['active', 'ready'].includes(instance.status));
+        case 'hazardousTaskOpen':
+          return openChapterTasks.some((instance) => Boolean(this.getTaskCard(instance)?.safety));
+        default: return false;
+      }
+    });
+  }
+
   watchChallengeCandidates(actionCode = 'watchChallenge') {
+    if (this.state.chapter.funCardIdsDrawn.length >= MAX_FUN_CARDS_PER_CHAPTER) return [];
     const roundKey = String(this.state.chapter.round);
     const used = new Set(this.state.chapter.challengeIdsByRound[roundKey] ?? []);
     const active = new Set(this.state.activeChallenges.map((instance) => instance.challengeId));
-    const available = WATCH_CHALLENGES.filter((entry) => !entry.followUpOnly && entry.id !== 'five-minute-break' && !active.has(entry.id));
+    const drawn = new Set(this.state.funCardsDrawn);
+    const challengesById = new Map(WATCH_CHALLENGES.map((entry) => [entry.id, entry]));
+    const available = this.state.funCardQueue
+      .map((id) => challengesById.get(id))
+      .filter((entry) => entry && !entry.followUpOnly && entry.id !== 'five-minute-break' && !active.has(entry.id) &&
+        !drawn.has(entry.id) && this.challengeRequirementsMet(entry));
     const pool = available.filter((entry) => !used.has(entry.id));
     return pool.length ? pool : available;
   }
@@ -2605,8 +2867,20 @@ class GameEngine {
         this.log('fallbackTaskAssigned', { instanceId: task.instanceId }, now);
         return task;
       }
-      this.startWatchChallenge('watchChallenge', now, { fallback: true });
-      return this.currentWatchChallenge;
+      if (this.hasOpenTasks()) {
+        this.state.busyAfterPlayerIndex = this.state.activePlayerIndex;
+        this.state.busyReason = 'waitingForTask';
+        this.state.turn.phase = 'crewBusy';
+        this.log('crewWaitingForTask', { afterPlayerId: this.activePlayer.id, reason: 'noPlayableCards' }, now);
+        return { waitingForTask: true };
+      }
+      if (this.hasUnassignedCourseTasks()) {
+        this.state.turn.outcomeCode = 'quietHandover';
+        this.state.turn.phase = 'resolved';
+        this.log('quietHandover', { playerId: this.activePlayer.id, reason: 'nextTaskNeedsDifferentPlayer' }, now);
+        return { fallback: true, action: 'quietHandover' };
+      }
+      return null;
     }
     const eventId = queue.splice(eventIndex, 1)[0];
     this.state.turn.currentEventId = eventId;
@@ -2639,6 +2913,7 @@ class GameEngine {
   completeWatchChallenge(now = Date.now()) {
     if (this.state.turn.phase !== 'watch' || !this.currentWatchChallenge) return false;
     const challenge = this.currentWatchChallenge;
+    if (challenge.playerSelection && !this.state.turn.watchTargetPlayerId) return false;
     if (challenge.flow === 'ongoing' || (challenge.secret && this.state.turn.watchStartedAt == null)) return false;
     this.state.chapter.watchChallenges += 1;
     if (challenge.followUpOnly) {
@@ -2655,6 +2930,24 @@ class GameEngine {
     this.log('watchChallengeCompleted', { challengeId: challenge.id, coins: challenge.coins }, now);
     if (this.currentEvent) this.markEventResolved(this.currentEvent, now);
     return true;
+  }
+
+  selectWatchChallengePlayer(playerId) {
+    const challenge = this.currentWatchChallenge;
+    if (this.state.turn.phase !== 'watch' || !challenge?.playerSelection ||
+      !this.state.players.some((player) => player.id === playerId)) return false;
+    this.state.turn.watchTargetPlayerId = playerId;
+    return true;
+  }
+
+  confirmWatchChallengePlayer(now = Date.now()) {
+    const challenge = this.currentWatchChallenge;
+    const playerId = this.state.turn.watchTargetPlayerId;
+    if (this.state.turn.phase !== 'watch' || !challenge?.playerSelection ||
+      !this.state.players.some((player) => player.id === playerId)) return false;
+    this.state.chapter.portionCaptainPlayerId = playerId;
+    this.log('watchPlayerAssigned', { challengeId: challenge.id, playerId }, now);
+    return this.completeWatchChallenge(now);
   }
 
   activateOngoingWatchChallenge(now = Date.now()) {
@@ -2693,12 +2986,7 @@ class GameEngine {
   resolveChoice(actionCode, now = Date.now()) {
     const event = this.currentEvent;
     if (!event || event.type !== 'choice' || this.state.turn.phase !== 'event') return false;
-    if (!actionCode && event.options.length === 0) {
-      this.state.turn.outcomeCode = 'storyMoment';
-      this.state.turn.phase = 'resolved';
-      this.markEventResolved(event, now);
-      return true;
-    }
+    if (!actionCode && event.options.length === 0) return false;
     if (!event.options.includes(actionCode)) {
       throw new Error(`Choice is not available on this event: ${String(actionCode)} for ${event.id} (${event.stage}).`);
     }
@@ -2765,12 +3053,7 @@ class GameEngine {
     }
     const outcomeIndex = value <= 2 ? 0 : value <= 4 ? 1 : 2;
     const actionCode = event.outcomes[outcomeIndex] ?? this.fallbackActions(event.stage)[0];
-    if (!actionCode) {
-      this.state.turn.outcomeCode = 'storyMoment';
-      this.state.turn.phase = 'resolved';
-      this.markEventResolved(event, now);
-      return true;
-    }
+    if (!actionCode) return false;
     const needsChoice = this.applyAction(actionCode, now, 'event');
     this.state.turn.outcomeCode = actionCode;
     if (!needsChoice) {
@@ -2802,8 +3085,7 @@ class GameEngine {
       case 'lockIngredient': this.lockLastIngredient(now); break;
       case 'returnIngredient': this.returnLastIngredient(now); break;
       case 'treasure': this.addCoins(COIN_VALUES.event, 'event', now); break;
-      case 'coinLoss': this.addCoins(-15, 'event', now); break;
-      case 'storyMoment': break;
+      case 'coinLoss': this.addCoins(COIN_VALUES.coinLoss, 'event', now); break;
       case 'fiveMinuteBreak': return this.startWatchChallenge('fiveMinuteBreak', now);
       case 'treasureAndChain':
         this.addCoins(COIN_VALUES.event, 'event', now);
@@ -2822,7 +3104,6 @@ class GameEngine {
         if (this.state.turn.chainDepth < 1) this.state.turn.chainPending = true;
         else this.addCoins(COIN_VALUES.event, 'event', now);
         break;
-      case 'splitCrew': this.splitCrew(now); break;
       case 'swapIngredient': this.swapLastIngredient(now); break;
       default: throw new Error(`Unknown action: ${actionCode}`);
     }
@@ -2831,30 +3112,38 @@ class GameEngine {
 
   startWatchChallenge(actionCode = 'watchChallenge', now = Date.now(), logData = {}) {
     if (actionCode === 'fiveMinuteBreak' && this.hasOpenTasks()) return false;
+    if (actionCode === 'fiveMinuteBreak' && this.state.chapter.funCardIdsDrawn.length >= MAX_FUN_CARDS_PER_CHAPTER) return false;
     const event = this.currentEvent;
+    const drawn = new Set(this.state.funCardsDrawn);
     let challenge;
     let targetPlayerId = this.state.players[(this.state.activePlayerIndex + 1) % this.state.players.length].id;
     if (actionCode === 'fiveMinuteBreak') {
       challenge = WATCH_CHALLENGES.find((entry) => entry.id === 'five-minute-break');
-    } else if (this.state.chapter.queuedChallenges.length) {
-      const queued = this.state.chapter.queuedChallenges.shift();
-      challenge = WATCH_CHALLENGES.find((entry) => entry.id === queued.id);
-      targetPlayerId = queued.targetPlayerId;
     } else {
+      while (this.state.chapter.queuedChallenges.length && !challenge) {
+        const queued = this.state.chapter.queuedChallenges.shift();
+        if (drawn.has(queued.id)) continue;
+        challenge = WATCH_CHALLENGES.find((entry) => entry.id === queued.id);
+        targetPlayerId = queued.targetPlayerId;
+      }
+    }
+    if (!challenge && actionCode !== 'fiveMinuteBreak') {
       const roundKey = String(this.state.chapter.round);
       const used = new Set(this.state.chapter.challengeIdsByRound[roundKey] ?? []);
       const candidates = this.watchChallengeCandidates(actionCode);
+      if (!candidates.length) return false;
       const offset = actionCode === 'watchChallengeAlt' ? 1 : 0;
-      const index = (this.state.chapter.watchChallenges + (event?.locationIndex ?? 0) * 2 + offset) % candidates.length;
-      challenge = candidates[index];
+      challenge = candidates[offset % candidates.length];
       this.state.chapter.challengeIdsByRound[roundKey] = [...used, challenge.id];
     }
-    if (!challenge) return false;
+    if (!challenge || drawn.has(challenge.id)) return false;
+    this.state.funCardsDrawn.push(challenge.id);
+    this.state.chapter.funCardIdsDrawn.push(challenge.id);
     this.state.turn.watchChallengeId = challenge.id;
     this.state.turn.watchChallengeIndex = WATCH_CHALLENGES.findIndex((entry) => entry.id === challenge.id);
-    this.state.turn.watchTargetPlayerId = targetPlayerId;
-    this.state.turn.watchStartedAt = challenge.secret && !challenge.mandatory ? null : now;
-    this.state.turn.watchEndsAt = challenge.secret && !challenge.mandatory ? null : now + challenge.minutes * 60_000;
+    this.state.turn.watchTargetPlayerId = challenge.playerSelection ? null : targetPlayerId;
+    this.state.turn.watchStartedAt = challenge.playerSelection || (challenge.secret && !challenge.mandatory) ? null : now;
+    this.state.turn.watchEndsAt = challenge.playerSelection || (challenge.secret && !challenge.mandatory) ? null : now + challenge.minutes * 60_000;
     this.state.turn.phase = 'watch';
     this.log('watchChallengeStarted', { challengeId: challenge.id, playerId: this.activePlayer.id, eventId: event?.id ?? null, ...logData }, now);
     return true;
@@ -3113,17 +3402,22 @@ class GameEngine {
     return true;
   }
 
-  lockLastIngredient(now = Date.now()) {
+  lockLastIngredient(now = Date.now(), cocktailUse = null) {
     const ingredient = this.state.ingredients.find((entry) => entry.id === this.state.lastIngredientId && entry.status === 'discovered')
       ?? [...this.unlockedCourseIngredients()].sort((a, b) => (b.discoveredAt ?? 0) - (a.discoveredAt ?? 0))[0];
     if (!ingredient) return false;
+    if (this.currentChapter.id === 'cocktails') {
+      const use = cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
+      if (!['alcoholic', 'alcohol-free', 'shared'].includes(use) || (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
+      ingredient.cocktailUse = use;
+    }
     ingredient.status = 'locked';
     ingredient.basketCourseIndex = null;
     ingredient.lockedAt = now;
     ingredient.lockedBy = this.activePlayer.id;
     this.state.lastIngredientId = ingredient.id;
     this.state.turn.resolvedIngredientId = ingredient.id;
-    this.log('ingredientLocked', { ingredientId: ingredient.id, playerId: this.activePlayer.id }, now);
+    this.log('ingredientLocked', { ingredientId: ingredient.id, playerId: this.activePlayer.id, cocktailUse: ingredient.cocktailUse ?? null }, now);
     this.finalizeIngredientBasketIfReady(now);
     this.state.turn.resolvedIngredientId = ingredient.id;
     this.updateChapterStage(now);
@@ -3182,13 +3476,13 @@ class GameEngine {
     return ingredient ? this.removeIngredientFromBasket(ingredient.id, now) : false;
   }
 
-  lockIngredientFromBasket(ingredientId, now = Date.now()) {
+  lockIngredientFromBasket(ingredientId, now = Date.now(), cocktailUse = null) {
     const ingredient = this.state.ingredients.find((entry) =>
       entry.id === ingredientId && entry.chapterIndex === this.state.chapterIndex && entry.status === 'discovered'
     );
     if (!ingredient || this.state.chapter.stage !== 'ingredients') return false;
     this.state.lastIngredientId = ingredient.id;
-    return this.lockLastIngredient(now);
+    return this.lockLastIngredient(now, cocktailUse);
   }
 
   ingredientCategoriesForTask(card) {
@@ -3209,8 +3503,10 @@ class GameEngine {
     const explicit = new Set(card.ingredientTags ?? []);
     const categories = new Set(this.ingredientCategoriesForTask(card));
     const finalServing = card.area === 'serving' && (card.prerequisites?.length ?? 0) > 0;
+    const cocktailTeam = this.cocktailTeamForTask(card);
     const candidates = this.courseIngredients().filter((ingredient) => {
       if (!['locked', 'used'].includes(ingredient.status)) return false;
+      if (cocktailTeam && ![cocktailTeam, 'shared'].includes(ingredient.cocktailUse)) return false;
       return explicit.has(ingredient.id) || finalServing || (!explicit.size && categories.has(ingredient.category));
     });
     return candidates.map((ingredient) => ingredient.id);
@@ -3242,7 +3538,8 @@ class GameEngine {
     const pending = this.state.turn.pendingTaskAssignment;
     if (this.state.turn.phase !== 'taskAssigneeChoice' || !pending) return false;
     const group = this.state.groups.find((candidate) => candidate.id === pending.groupId);
-    if (!group || !this.freePlayersForTask(group).some((player) => player.id === playerId)) return false;
+    const card = taskById(pending.taskId);
+    if (!group || !card || !this.eligibleFreePlayersForTask(card, group).some((player) => player.id === playerId)) return false;
     const selected = pending.selectedPlayerIds ?? [];
     const index = selected.indexOf(playerId);
     if (index >= 0) {
@@ -3290,7 +3587,7 @@ class GameEngine {
     if (!selected) return null;
 
     const minimumPeople = this.requiredPeopleForTask(selected, peopleMode);
-    const candidates = this.freePlayersForTask(group);
+    const candidates = this.eligibleFreePlayersForTask(selected, group);
     if (candidates.length < minimumPeople) return null;
     const activeMustParticipate = group.playerIds.includes(this.activePlayer.id) && candidates.some((candidate) => candidate.id === this.activePlayer.id);
     if (!activeMustParticipate) return null;
@@ -3360,10 +3657,12 @@ class GameEngine {
       this.state.turn = freshTurn();
       if (nextIndex == null) {
         this.state.busyAfterPlayerIndex = previousIndex;
+        this.state.busyReason = 'allPlayersBusy';
         this.state.turn.phase = 'crewBusy';
         this.log('allPlayersBusy', { afterPlayerId: this.state.players[previousIndex].id, reason: 'openingTaskStarted' }, now);
       } else {
         this.state.busyAfterPlayerIndex = null;
+        this.state.busyReason = null;
         this.state.activePlayerIndex = nextIndex;
         this.log('turnPassedAfterTaskStarted', {
           playerId: this.state.players[previousIndex].id,
@@ -3383,7 +3682,9 @@ class GameEngine {
     instance.timingMode = card.timingMode ?? 'challenge';
     instance.challengeMinutes = card.challengeMinutes ?? 0;
     instance.backgroundMinutes = card.backgroundMinutes ?? 0;
-    const timerMinutes = instance.timingMode === 'background' ? instance.backgroundMinutes : instance.challengeMinutes;
+    const timerMinutes = instance.timingMode === 'background'
+      ? instance.backgroundMinutes
+      : instance.timingMode === 'challenge' ? instance.challengeMinutes : 0;
     instance.challengeEndsAt = timerMinutes > 0 ? now + timerMinutes * 60_000 : null;
     instance.endAt = instance.challengeEndsAt;
     if (instance.assignedPlayerIds.includes(this.activePlayer.id) && this.state.turn.chainPending) {
@@ -3406,7 +3707,9 @@ class GameEngine {
       instance.timingMode = card.timingMode ?? 'challenge';
       instance.challengeMinutes = card.challengeMinutes ?? 0;
       instance.backgroundMinutes = card.backgroundMinutes ?? 0;
-      const timerMinutes = instance.timingMode === 'background' ? instance.backgroundMinutes : instance.challengeMinutes;
+      const timerMinutes = instance.timingMode === 'background'
+        ? instance.backgroundMinutes
+        : instance.timingMode === 'challenge' ? instance.challengeMinutes : 0;
       instance.challengeEndsAt = timerMinutes > 0 ? instance.startedAt + timerMinutes * 60_000 : null;
       instance.endAt = instance.challengeEndsAt;
     }
@@ -3414,7 +3717,10 @@ class GameEngine {
     const elapsedMs = Math.max(0, now - (instance.startedAt ?? instance.assignedAt));
     let coinDelta;
     let challengeResult;
-    if (instance.timingMode === 'background' || !instance.challengeMinutes) {
+    if (instance.timingMode === 'manual') {
+      coinDelta = 0;
+      challengeResult = 'manual';
+    } else if (instance.timingMode === 'background' || !instance.challengeMinutes) {
       coinDelta = 0;
       challengeResult = 'background';
     } else if (elapsedMs <= targetMs / 2) {
@@ -3441,6 +3747,7 @@ class GameEngine {
     instance.coinDelta = this.addCoins(coinDelta, 'task', now);
     this.log('taskCompleted', { instanceId, taskId: card.id, assignedPlayerIds: instance.assignedPlayerIds, coinDelta: instance.coinDelta, challengeCoinValue: coinDelta, challengeResult }, now);
     this.reconcileTaskQueue(this.state.chapterIndex, true, now);
+    this.updateChapterStage(now);
     if (completesCurrentBriefing) {
       this.state.turn.resolvedTaskId = instanceId;
       this.state.turn.assignedTaskId = null;
@@ -3484,7 +3791,7 @@ class GameEngine {
       return candidateCard?.questId === card.questId && this.questStepNumber(candidateCard) > this.questStepNumber(card);
     });
     return Boolean(instance && instance.status === 'done' && instance.chapterIndex === this.state.chapterIndex && !this.state.chapter.served &&
-      !laterQuestStepExists &&
+      !laterQuestStepExists && card?.questId !== 'reset' &&
       instance.assignedPlayerIds.every((playerId) => this.isPlayerFreeForTask(playerId, instanceId)));
   }
 
@@ -3505,6 +3812,7 @@ class GameEngine {
     if (nextIndex == null) return false;
     this.state.activePlayerIndex = nextIndex;
     this.state.busyAfterPlayerIndex = null;
+    this.state.busyReason = null;
     this.state.turn = freshTurn();
     this.resolveActiveChallengesAfterTurn(null, this.activePlayer.id, now);
     this.log('crewTurnResumed', {
@@ -3512,43 +3820,6 @@ class GameEngine {
       playerId: this.activePlayer.id
     }, now);
     this.evaluateChapter(now);
-    return true;
-  }
-
-  splitCrew(now = Date.now()) {
-    if (this.state.groups.length > 1 || this.state.players.length < 6) {
-      this.addTreasure(1, now);
-      return false;
-    }
-    const current = this.state.groups[0];
-    const groups = [
-      { id: 'A', playerIds: [], locationIndex: current.locationIndex, locationProgress: current.locationProgress, completedLocations: [...current.completedLocations], finished: current.finished },
-      { id: 'B', playerIds: [], locationIndex: current.locationIndex, locationProgress: current.locationProgress, completedLocations: [...current.completedLocations], finished: current.finished }
-    ];
-    current.playerIds.forEach((playerId, index) => groups[index % 2].playerIds.push(playerId));
-    this.state.groups = groups;
-    this.state.chapter.splitTargetLocation = Math.min(5, current.locationIndex + 2);
-    this.log('crewSplit', { groups: groups.map((group) => group.playerIds), target: this.state.chapter.splitTargetLocation }, now);
-    return true;
-  }
-
-  maybeReunite(now = Date.now()) {
-    if (this.state.groups.length < 2 || this.state.chapter.splitTargetLocation == null) return false;
-    if (!this.state.groups.every((group) => group.locationIndex >= this.state.chapter.splitTargetLocation || group.finished)) return false;
-    const locationIndex = Math.min(...this.state.groups.map((group) => group.locationIndex));
-    const completedLocations = this.state.groups
-      .map((group) => new Set(group.completedLocations))
-      .reduce((common, set) => new Set([...common].filter((location) => set.has(location))));
-    this.state.groups = [{
-      id: 'A',
-      playerIds: this.state.players.map((player) => player.id),
-      locationIndex,
-      locationProgress: 0,
-      completedLocations: [...completedLocations],
-      finished: this.state.groups.every((group) => group.finished)
-    }];
-    this.state.chapter.splitTargetLocation = null;
-    this.log('crewReunited', { locationIndex }, now);
     return true;
   }
 
@@ -3567,7 +3838,6 @@ class GameEngine {
     if (group.locationIndex < this.currentChapter.locations.length - 1) group.locationIndex += 1;
     else group.finished = true;
     this.log('locationCompleted', { groupId: group.id, locationIndex: previousLocation, nextLocation: group.locationIndex }, now);
-    this.maybeReunite(now);
     return true;
   }
 
@@ -3604,6 +3874,7 @@ class GameEngine {
       }
       this.state.activePlayerIndex = nextIndex;
       this.state.busyAfterPlayerIndex = null;
+      this.state.busyReason = null;
       if (nextIndex <= previousIndex) this.state.chapter.round += 1;
       this.state.turn = freshTurn();
       this.resolveActiveChallengesAfterTurn(player.id, this.activePlayer.id, now);
@@ -3611,6 +3882,7 @@ class GameEngine {
       this.log('turnEnded', { playerId: player.id, nextPlayerId: this.activePlayer.id, skippedPlayerIds }, now);
     } else {
       this.state.busyAfterPlayerIndex = previousIndex;
+      this.state.busyReason = 'allPlayersBusy';
       this.state.turn = { ...freshTurn(), phase: 'crewBusy' };
       this.resolveActiveChallengesAfterTurn(player.id, null, now);
       this.log('allPlayersBusy', { afterPlayerId: player.id }, now);
@@ -3657,10 +3929,11 @@ class GameEngine {
       chapterId: this.currentChapter.id,
       servedAt: now,
       ingredientIds,
+      portionCaptainPlayerId: this.state.chapter.portionCaptainPlayerId,
       courseStyle: this.state.chapter.courseStyle
     };
     this.state.chapter.served = true;
-    this.log('courseServed', { chapterIndex: this.state.chapterIndex, ingredientIds }, now);
+    this.log('courseServed', { chapterIndex: this.state.chapterIndex, ingredientIds, portionCaptainPlayerId: this.state.chapter.portionCaptainPlayerId }, now);
 
     if (this.state.chapterIndex === CHAPTERS.length - 1) {
       this.expireActiveChallenges('voyageCompleted', now);
@@ -3707,11 +3980,13 @@ class GameEngine {
       finished: false
     }];
     this.state.turn = freshTurn();
+    this.state.busyReason = null;
     this.state.lastIngredientId = null;
     this.state.previousIngredientId = null;
     this.state.bonuses = freshBonuses(); // legacy field; live ingredient effects stay with each player
     this.log('chapterStarted', { chapterIndex: this.state.chapterIndex, stage: this.state.chapter.stage }, now);
-    if (this.state.chapterIndex === 3) this.secureTreasurerIngredient(now);
+    const clearingTask = this.assignTask({ group: this.activeGroup, now });
+    if (clearingTask) this.briefTask(clearingTask, true, now);
     return true;
   }
 
@@ -3996,8 +4271,15 @@ function renderSetup(language, setupDraft) {
   const playerFields = Array.from({ length: setupDraft.playerCount }, (_, index) => `
     <label class="player-input">
       <b>${index + 1}</b>
-      <span class="sr-only">${tx('playerName', language)} ${index + 1}</span>
-      <input name="player-${index}" value="${escapeHtml(setupDraft.names[index] ?? '')}" placeholder="${tx('playerName', language)} ${index + 1}" autocomplete="off" required maxlength="28">
+      <span class="player-setup-fields">
+        <span class="sr-only">${tx('playerName', language)} ${index + 1}</span>
+        <input name="player-${index}" value="${escapeHtml(setupDraft.names[index] ?? '')}" placeholder="${tx('playerName', language)} ${index + 1}" autocomplete="off" required maxlength="28">
+        <select name="cocktail-team-${index}" required aria-label="${language === 'de' ? `Cocktail-Team von Person ${index + 1}` : `Cocktail team for player ${index + 1}`}">
+          <option value="" ${setupDraft.cocktailTeams?.[index] ? '' : 'selected'} disabled>${language === 'de' ? 'Cocktail-Team wählen …' : 'Choose cocktail team …'}</option>
+          <option value="alcoholic" ${setupDraft.cocktailTeams?.[index] === 'alcoholic' ? 'selected' : ''}>${language === 'de' ? 'Alkoholische Cocktails' : 'Alcoholic cocktails'}</option>
+          <option value="alcohol-free" ${setupDraft.cocktailTeams?.[index] === 'alcohol-free' ? 'selected' : ''}>${language === 'de' ? 'Nur alkoholfrei' : 'Alcohol-free only'}</option>
+        </select>
+      </span>
     </label>`).join('');
 
   return `
@@ -4033,6 +4315,9 @@ function renderSetup(language, setupDraft) {
 
         <div class="field">
           <label>${language === 'de' ? 'Spielernamen in Zugreihenfolge' : 'Player names in turn order'}</label>
+          <p class="field-hint">${language === 'de'
+            ? 'Wählt außerdem das spätere Cocktail-Team. So bereiten die jeweiligen Konsumenten ihre eigene Variante zu.'
+            : 'Also choose the later cocktail team. This lets the people drinking each version prepare their own mix.'}</p>
           <div class="player-fields">${playerFields}</div>
         </div>
 
@@ -4054,13 +4339,17 @@ function renderSetup(language, setupDraft) {
 
 /* js/ui/game.js */
 const STAGE_COPY = Object.freeze({
+  clearing: {
+    de: { label: '0 · Vorigen Gang abräumen', title: 'Tisch klarmachen', button: 'Abräum-Aufgabe ansehen', lead: 'Der vorige Gang wird vollständig abgeräumt. Erst nach diesem Küchenauftrag beginnt die Zutatenwahl.' },
+    en: { label: '0 · Clear the previous course', title: 'Clear the table', button: 'View clearing task', lead: 'The previous course is cleared completely. Ingredient selection begins only after this kitchen job.' }
+  },
   ingredients: {
     de: { label: '1 · Zutaten bestimmen', title: 'Vorratsereignis ziehen', button: 'Vorrats-Ereigniskarte ziehen', lead: 'Entdeckt, verändert und sichert die Zutaten dieses Gangs. Erst wenn alle festgelegt sind, öffnet sich das Auftragsdeck.' },
     en: { label: '1 · Choose ingredients', title: 'Draw a provision event', button: 'Draw provision event', lead: 'Discover, change, and lock the ingredients for this course. The work-order deck opens only when all are fixed.' }
   },
   tasks: {
-    de: { label: '2 · Aufgaben verteilen', title: 'Auftragsereignis ziehen', button: 'Auftrags-Ereigniskarte ziehen', lead: 'Die Zutaten stehen fest. Jede Karte weist jetzt einen konkreten, fachlich möglichen Küchenauftrag zu.' },
-    en: { label: '2 · Assign tasks', title: 'Draw a work-order event', button: 'Draw work-order event', lead: 'The ingredients are fixed. Every card now assigns a concrete and feasible kitchen job.' }
+    de: { label: '2 · Spaß & Aufgaben', title: 'Karte aus dem Auftragsdeck ziehen', button: 'Nächste Karte ziehen', lead: 'Zieht die nächste Karte und entdeckt, was die Reise für eure Crew bereithält.' },
+    en: { label: '2 · Fun & tasks', title: 'Draw from the work deck', button: 'Draw next card', lead: 'Draw the next card and discover what the voyage has in store for your crew.' }
   },
   cooking: {
     de: { label: '3 · Parallel kochen', title: 'Freies Ereignis ziehen', button: 'Eventkarte ziehen', lead: 'Küchenarbeit läuft parallel. Freie Personen erleben Challenges, Pausen, geheime Späße und Münzereignisse.' },
@@ -4120,16 +4409,21 @@ function renderDieFace(className, value) {
 }
 
 function stageCopy(engine, language) {
-  return STAGE_COPY[engine.currentEventStage()]?.[language] ?? STAGE_COPY.cooking[language];
+  const stage = engine.state.chapter.stage === 'clearing' ? 'clearing' : engine.currentEventStage();
+  return STAGE_COPY[stage]?.[language] ?? STAGE_COPY.cooking[language];
 }
 
 function renderCourseFlow(engine, language) {
-  const current = engine.currentEventStage();
-  const order = ['ingredients', 'tasks', 'cooking'];
+  const current = engine.state.chapter.stage === 'clearing' ? 'clearing' : engine.currentEventStage();
+  const order = engine.state.chapterIndex === 0
+    ? ['ingredients', 'tasks', 'cooking']
+    : ['clearing', 'ingredients', 'tasks', 'cooking'];
+  const labelMap = language === 'de'
+    ? { clearing: 'Abräumen', ingredients: 'Zutaten', tasks: 'Aufgaben', cooking: 'Kochen' }
+    : { clearing: 'Clear table', ingredients: 'Ingredients', tasks: 'Tasks', cooking: 'Cooking' };
   return `<div class="course-flow" aria-label="${language === 'de' ? 'Ablauf des Gangs' : 'Course flow'}">${order.map((stage, index) => {
     const state = order.indexOf(current) > index ? 'done' : current === stage ? 'active' : 'future';
-    const labels = language === 'de' ? ['Zutaten', 'Aufgaben', 'Kochen'] : ['Ingredients', 'Tasks', 'Cooking'];
-    return `<span data-state="${state}"><b>${state === 'done' ? '✓' : index + 1}</b>${labels[index]}</span>`;
+    return `<span data-state="${state}"><b>${state === 'done' ? '✓' : engine.state.chapterIndex === 0 ? index + 1 : index}</b>${labelMap[stage]}</span>`;
   }).join('')}</div>`;
 }
 
@@ -4163,12 +4457,20 @@ function eventActionText(engine, actionCode, language) {
     const challengeCode = actionCode === 'watchChallengeAlt' ? 'watchChallengeAlt' : 'watchChallenge';
     const challenge = engine.state.turn.watchChallengeId ? engine.currentWatchChallenge : engine.watchChallengeForAction(challengeCode);
     const treasure = actionCode === 'treasureAndWatch' ? (language === 'de' ? '+2 Münzen + ' : '+2 coins + ') : '';
+    const challengeChoice = engine.currentEvent?.archetype === 'interlude' || engine.currentEvent?.funVariant === 'crew-ritual';
+    const accept = challengeChoice
+      ? (language === 'de' ? 'Challenge annehmen: ' : 'Accept challenge: ')
+      : '';
     if (challenge.secret) {
-      return `${treasure}${language === 'de'
+      return `${treasure}${accept}${language === 'de'
         ? `Geheime Challenge nur für ${escapeHtml(engine.activePlayer.name)} ziehen · nicht vorlesen`
         : `Draw a secret challenge for ${escapeHtml(engine.activePlayer.name)} only · do not read aloud`}`;
     }
-    return `${treasure}${t(challenge, language)}`;
+    return `${treasure}${accept}${t(challenge, language)}`;
+  }
+  if (actionCode === 'coinLoss' && (engine.currentEvent?.archetype === 'interlude' || engine.currentEvent?.funVariant === 'crew-ritual')) {
+    const loss = Math.abs(COIN_VALUES.coinLoss);
+    return language === 'de' ? `Challenge ablehnen · −${loss} Münzen` : `Decline challenge · −${loss} coins`;
   }
   if (actionCode === 'lockIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
@@ -4243,21 +4545,50 @@ function renderCourseBasket(engine, language) {
   const categoryLabels = {
     vegetable: { de: 'Gemüse', en: 'vegetables' }, pantry: { de: 'Grundlage/Extras', en: 'base/extras' },
     meat: { de: 'Fleisch', en: 'meat' }, fruit: { de: 'Obst', en: 'fruit' },
-    dessert: { de: 'Dessertbasis', en: 'dessert base' }, drinks: { de: 'Getränkebasis', en: 'drink base' }
+    dessert: { de: 'Dessertbasis', en: 'dessert base' }, drinks: { de: 'Getränkebasis', en: 'drink base' },
+    alcohol: { de: 'Spirituose', en: 'spirit' }
+  };
+  const cocktailCourse = engine.currentChapter.id === 'cocktails';
+  const cocktailUseLabel = (use) => t({
+    de: { alcoholic: 'nur alkoholische Mischung', 'alcohol-free': 'nur alkoholfreie Mischung', shared: 'für beide Mischungen' }[use],
+    en: { alcoholic: 'alcoholic mix only', 'alcohol-free': 'alcohol-free mix only', shared: 'both mixes' }[use]
+  }, language);
+  const cocktailUseButtons = (ingredient, action) => {
+    const uses = ingredient.category === 'alcohol' ? ['alcoholic'] : ['alcoholic', 'alcohol-free', 'shared'];
+    return `<div class="button-row">${uses.map((use) => `<button class="${ingredient.cocktailUse === use ? 'primary-button' : 'secondary-button'}" type="button" data-action="${action}" data-ingredient-id="${escapeHtml(ingredient.id)}" data-cocktail-use="${use}">${cocktailUseLabel(use)}</button>`).join('')}</div>`;
   };
   const profile = Object.entries(engine.courseRule().categoryMinimums ?? {}).map(([category, required]) => {
     const current = engine.courseCategoryCount(category, ['discovered', 'locked', 'used']);
     return statusTag(`${current}/${required} ${t(categoryLabels[category] ?? { de: category, en: category }, language)}`, current >= required ? 'green' : 'gold');
   }).join('');
+  const cocktailSpirit = cocktailCourse
+    ? engine.courseIngredients().some((ingredient) => ingredient.category === 'alcohol' && ['discovered', 'locked', 'used'].includes(ingredient.status))
+    : false;
   return `<section class="course-basket panel">
     <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Vorläufige Auswahl' : 'Draft selection'}</p><h3>${language === 'de' ? 'Gangkorb' : 'Course basket'}</h3></div>${statusTag(`${essentialLocked}/${target} ${language === 'de' ? 'Pflichtzutaten' : 'required'}`, essentialLocked >= target ? 'green' : 'gold')}</div>
     <p class="muted">${language === 'de' ? `Dieser Gang braucht genau ${target} Pflichtzutaten${optionalLimit ? ` und erlaubt höchstens ${optionalLimit} optionales Extra` : ''}. Vor dem Wechsel zu den Aufgaben muss der offene Korb leer sein.` : `This course needs exactly ${target} required ingredients${optionalLimit ? ` and allows at most ${optionalLimit} optional extra` : ''}. The open basket must be empty before tasks begin.`}</p>
-    ${profile ? `<div class="stat-strip">${profile}</div>` : ''}
+    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei echte Rezeptkörbe' : 'Two real recipe baskets'}</strong><span>${language === 'de' ? 'Ordnet jede Zutat der alkoholischen Mischung, der alkoholfreien Mischung oder beiden zu. Die Spirituose bleibt immer ausschließlich im alkoholischen Rezept; mindestens eine Geschmackszutat gehört ausschließlich zur alkoholfreien Variante.' : 'Assign every ingredient to the alcoholic mix, the alcohol-free mix, or both. The spirit always stays exclusively in the alcoholic recipe; at least one flavour ingredient must belong exclusively to the alcohol-free version.'}</span></div>` : ''}
+    ${profile || cocktailCourse ? `<div class="stat-strip">${profile}${cocktailCourse ? statusTag(language === 'de' ? `${cocktailSpirit ? '1/1' : '0/1'} Spirituose für die alkoholische Mischung` : `${cocktailSpirit ? '1/1' : '0/1'} spirit for the alcoholic mix`, cocktailSpirit ? 'green' : 'gold') : ''}</div>` : ''}
     ${basket.length ? `<div class="course-basket-list">${basket.map((ingredient) => `<article>
       <strong>${t(ingredient.name, language)}</strong>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : `<small>${language === 'de' ? 'Kein zusätzlicher Karteneffekt.' : 'No additional card effect.'}</small>`}
-      <div class="button-row"><button class="secondary-button" type="button" data-action="lock-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Fest zuordnen' : 'Lock into course'}</button><button class="quiet-button" type="button" data-action="remove-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Zurücklegen' : 'Return'}</button></div>
+      ${cocktailCourse ? cocktailUseButtons(ingredient, 'lock-basket-ingredient') : `<div class="button-row"><button class="secondary-button" type="button" data-action="lock-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Fest zuordnen' : 'Lock into course'}</button></div>`}
+      <div class="button-row"><button class="quiet-button" type="button" data-action="remove-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Zurücklegen' : 'Return'}</button></div>
     </article>`).join('')}</div>` : `<p class="muted">${language === 'de' ? 'Gefundene Zutaten landen zuerst hier. Ordnet sie fest zu oder legt sie zurück.' : 'Discovered ingredients land here first. Lock them in or return them.'}</p>`}
+    ${cocktailCourse && locked.length ? `<div class="cocktail-ingredient-assignments"><h4>${language === 'de' ? 'Bereits festgelegte Cocktailzutaten' : 'Locked cocktail ingredients'}</h4>${locked.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong><small>${cocktailUseLabel(ingredient.cocktailUse)}</small></div>${cocktailUseButtons(ingredient, 'assign-cocktail-ingredient')}</article>`).join('')}</div>` : ''}
+  </section>`;
+}
+
+function renderCocktailTeams(engine, language) {
+  if (engine.currentChapter.id !== 'cocktails') return '';
+  const team = (id, title, tone) => {
+    const names = engine.cocktailTeamMembers(id).map((player) => escapeHtml(player.name));
+    return `<div data-team="${id}"><strong>${title}</strong>${statusTag(names.join(', '), tone)}</div>`;
+  };
+  return `<section class="cocktail-team-board" aria-label="${language === 'de' ? 'Cocktail-Teams' : 'Cocktail teams'}">
+    ${team('alcoholic', language === 'de' ? 'Mit Alkohol' : 'Alcoholic', 'coral')}
+    ${team('alcohol-free', language === 'de' ? 'Alkoholfrei' : 'Alcohol-free', 'green')}
+    <p>${language === 'de' ? 'Nur die beiden Misch-Aufträge sind teamgebunden. Grundlagen, Eis, Sicherheit und Servieren bleiben gemeinsame Crew-Aufgaben.' : 'Only the two mixing jobs are team-specific. Bases, ice, safety, and serving remain shared crew jobs.'}</p>
   </section>`;
 }
 
@@ -4281,13 +4612,13 @@ function renderStatusPanel(engine, language) {
         ${statusTag(`${tx('group', language)} ${group.id}`, 'blue')}
       </div>
       <p class="muted">${t(engine.currentChapter.atmosphere, language)}</p>
+      ${renderCocktailTeams(engine, language)}
       <div class="stat-strip">
         ${statusTag(`${tx('round', language)} ${engine.state.chapter.round}`)}
         ${statusTag(`● ${engine.state.coins}/${engine.state.coinGoal} ${tx('treasure', language)}`, 'gold')}
         ${statusTag(`${tx('events', language)} ${engine.state.chapter.eventsResolved}`)}
         ${statusTag(stage.label, 'blue')}
         ${statusTag(language === 'de' ? `${freeCrew}/${group.playerIds.length} frei für Aufgaben` : `${freeCrew}/${group.playerIds.length} free for tasks`, freeCrew ? 'green' : 'coral')}
-        ${engine.state.groups.length > 1 ? statusTag(language === 'de' ? 'Crew geteilt' : 'Crew split', 'coral') : ''}
       </div>
       <div class="progress-track" aria-label="${language === 'de' ? 'Ortsfortschritt' : 'Location progress'}"><span style="--progress:${percent(group.locationProgress, goal)}%"></span></div>
       <p class="muted" style="font-family:system-ui,sans-serif;font-size:.72rem;margin:.45rem 0 0">
@@ -4296,7 +4627,7 @@ function renderStatusPanel(engine, language) {
       <p class="muted" style="font-family:system-ui,sans-serif;font-size:.72rem;margin:.35rem 0 0">
         ${language === 'de' ? `${fixedIngredients} Zutaten für diesen Gang festgelegt · ${chapterTasks.length} Aufgaben zugewiesen` : `${fixedIngredients} ingredients locked for this course · ${chapterTasks.length} tasks assigned`}
       </p>
-      <div class="coin-meter"><span style="--progress:${engine.coinProgress}%"></span><b>${engine.coinProgress}% ${language === 'de' ? 'der Süßigkeitenbeute' : 'of the sweet loot'}</b></div>
+      <div class="coin-meter"><span style="--progress:${engine.coinProgress}%"></span><b>${engine.state.coins}/${engine.state.coinGoal} ${language === 'de' ? 'Münzen' : 'coins'} · ${engine.coinProgress}% ${language === 'de' ? 'der Süßigkeitenbeute' : 'of the sweet loot'}</b></div>
     </section>`;
 }
 
@@ -4408,7 +4739,9 @@ function renderEventCard(engine, language) {
   const pauseBlocked = event.archetype === 'respite' && !event.options?.includes('fiveMinuteBreak');
   const choices = event.options?.map((code) => `
     <button type="button" class="choice-button" data-action="resolve-choice" data-choice="${code}">${eventActionText(engine, code, language)}</button>`).join('') ?? '';
-  const copy = STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
+  const copy = engine.state.chapter.stage === 'clearing'
+    ? STAGE_COPY.clearing[language]
+    : STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
@@ -4533,7 +4866,8 @@ function renderTaskAssigneeChoice(engine, language) {
   if (!pending || !card || !group) return renderDrawCard(engine, language);
   const selected = new Set(pending.selectedPlayerIds ?? []);
   const recommended = new Set(pending.recommendedPlayerIds ?? []);
-  const freePlayers = engine.prioritizedFreePlayersForTask(group);
+  const freePlayers = engine.prioritizedFreePlayersForTask(group, card);
+  const cocktailTeam = engine.cocktailTeamForTask(card);
   const choices = freePlayers.map((player) => {
     const role = getRole(player.roleId);
     const isSelected = selected.has(player.id);
@@ -4551,7 +4885,7 @@ function renderTaskAssigneeChoice(engine, language) {
       <p class="card-story">${t(card.instruction, language)}</p>
       <div class="card-effect"><strong>${language === 'de'
         ? `${engine.activePlayer.name} wählt genau ${pending.requiredPeople} ${pending.requiredPeople === 1 ? 'freie Person' : 'freie Personen'}. Die Crew darf beraten.`
-        : `${engine.activePlayer.name} chooses exactly ${pending.requiredPeople} free ${pending.requiredPeople === 1 ? 'person' : 'people'}. The crew may discuss.`}</strong></div>
+        : `${engine.activePlayer.name} chooses exactly ${pending.requiredPeople} free ${pending.requiredPeople === 1 ? 'person' : 'people'}. The crew may discuss.`}</strong>${cocktailTeam ? `<span>${language === 'de' ? `Für diesen Auftrag stehen nur freie Personen aus dem ${cocktailTeam === 'alcoholic' ? 'alkoholischen' : 'alkoholfreien'} Cocktail-Team zur Wahl.` : `Only free people from the ${cocktailTeam === 'alcoholic' ? 'alcoholic' : 'alcohol-free'} cocktail team can be chosen for this job.`}</span>` : ''}</div>
       <div class="choice-list task-assignee-choices">${choices}</div>
       <div class="next-action"><strong>${language === 'de' ? `${selected.size}/${pending.requiredPeople} ausgewählt` : `${selected.size}/${pending.requiredPeople} selected`}</strong><span>${language === 'de' ? 'Vorbelegt sind freie Personen mit besonders vielen bisherigen Zügen. Die Auswahl darf geändert werden.' : 'Free players with the most completed turns are preselected. You may change the choice.'}</span></div>
       <button class="primary-button" type="button" data-action="confirm-task-assignees" ${complete ? '' : 'disabled'}>${language === 'de' ? 'Besetzung bestätigen' : 'Confirm crew'}</button>
@@ -4566,8 +4900,10 @@ function renderTaskBriefing(engine, language) {
     .map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name)
     .filter(Boolean);
   const event = engine.currentEvent;
+  const cocktailTeam = engine.cocktailTeamForTask(card);
   const background = card.timingMode === 'background';
-  const timerMinutes = background ? card.backgroundMinutes : card.challengeMinutes;
+  const manual = card.timingMode === 'manual';
+  const timerMinutes = background ? card.backgroundMinutes : manual ? 0 : card.challengeMinutes;
   const after = engine.state.turn.taskBriefingEndsTurn
     ? (language === 'de' ? 'Danach wird das Tablet weitergegeben; die Aufgabe läuft unabhängig von den nächsten Zügen weiter.' : 'Then pass the tablet; the task continues independently of later turns.')
     : (language === 'de' ? 'Danach wird sichtbar an die nächste freie Person in Zugreihenfolge übergeben. Wer diese Aufgabe übernimmt, wird übersprungen.' : 'Then the tablet visibly passes to the next free player in turn order. Anyone taking this task is skipped.');
@@ -4576,21 +4912,32 @@ function renderTaskBriefing(engine, language) {
       ${renderCourseFlow(engine, language)}
       <p class="eyebrow">${t(card.questName, language)} · ${language === 'de' ? 'Questschritt' : 'quest step'} ${engine.questStepNumber(card)}</p>
       <h2>${t(card.title, language)}</h2>
-      ${event ? `<p class="card-story">${t(event.story, language)}</p>` : `<p class="card-story">${language === 'de' ? 'Die Tapas-Zutaten stehen bereits fest. Deshalb beginnt die Reise direkt mit einem echten Küchenauftrag.' : 'The tapas ingredients are already fixed, so the voyage begins with a real kitchen job.'}</p>`}
+      ${event
+        ? `<p class="card-story">${t(event.story, language)}</p>`
+        : `<p class="card-story">${card.questId === 'reset'
+          ? (language === 'de' ? 'Bevor der neue Gang geplant wird, macht die Crew den Tisch gemeinsam für die nächste Etappe frei.' : 'Before planning the new course, the crew clears the table together for the next stage.')
+          : (language === 'de' ? 'Die Spaßkarten des Auftakts sind beendet. Jetzt führt die gezogene Auftragskarte in die echte Küchenarbeit.' : 'The opening fun cards are complete. This work-order card now leads into the real kitchen work.')}</p>`}
       <div class="task-briefing">
         <strong>${language === 'de' ? 'Konkreter Auftrag' : 'Concrete job'}</strong>
         <p>${t(card.instruction, language)}</p>
         <div class="stat-strip">
           ${statusTag(`${language === 'de' ? 'Verantwortlich' : 'Responsible'}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
-          ${statusTag(`${timerMinutes} min`, background ? 'blue' : 'gold')}
-          ${statusTag(background
-            ? (language === 'de' ? 'Hintergrundtimer · keine Belohnung oder Strafe' : 'Background timer · no reward or penalty')
-            : (language === 'de' ? 'Kurze Arbeits-Challenge mit Münzwertung' : 'Short scored work challenge'), background ? 'blue' : 'coral')}
+          ${cocktailTeam ? statusTag(language === 'de' ? `Rezeptkorb: ${cocktailTeam === 'alcoholic' ? 'alkoholisch' : 'alkoholfrei'}` : `Recipe basket: ${cocktailTeam === 'alcoholic' ? 'alcoholic' : 'alcohol-free'}`, cocktailTeam === 'alcoholic' ? 'coral' : 'green') : ''}
+          ${manual
+            ? statusTag(language === 'de' ? 'Nach Gargrad · kein Spieltimer' : 'By doneness · no game timer', 'blue')
+            : statusTag(`${timerMinutes} min`, background ? 'blue' : 'gold')}
+          ${statusTag(manual
+            ? (language === 'de' ? 'Manuell abhaken · keine Zeitwertung' : 'Check off manually · no time score')
+            : background
+              ? (language === 'de' ? 'Hintergrundtimer · keine Belohnung oder Strafe' : 'Background timer · no reward or penalty')
+              : (language === 'de' ? 'Kurze Arbeits-Challenge mit Münzwertung' : 'Short scored work challenge'), (background || manual) ? 'blue' : 'coral')}
         </div>
       </div>
-      <button class="primary-button" type="button" data-action="accept-task">${background
-        ? (language === 'de' ? 'Questschritt übernehmen & Hintergrundtimer starten' : 'Take quest step & start background timer')
-        : (language === 'de' ? 'Aufgabe übernehmen & Arbeits-Challenge starten' : 'Take task & start work challenge')}</button>
+      <button class="primary-button" type="button" data-action="accept-task">${manual
+        ? (language === 'de' ? 'Aufgabe ohne Spieltimer übernehmen' : 'Take task without game timer')
+        : background
+          ? (language === 'de' ? 'Questschritt übernehmen & Hintergrundtimer starten' : 'Take quest step & start background timer')
+          : (language === 'de' ? 'Aufgabe übernehmen & Arbeits-Challenge starten' : 'Take task & start work challenge')}</button>
       ${renderIngredientBasket(engine, instance, language)}
       <div class="next-action"><strong>${language === 'de' ? `${assigned.map(escapeHtml).join(' & ')} übernehmen diese Aufgabe jetzt.` : `${assigned.map(escapeHtml).join(' & ')} take this task now.`}</strong><span>${after}</span></div>
     </article>`;
@@ -4628,6 +4975,28 @@ function renderResolvedCard(engine, language) {
 function renderWatchCard(engine, language) {
   const event = engine.currentEvent;
   const challenge = engine.currentWatchChallenge;
+  if (challenge.playerSelection) {
+    const selectedId = engine.state.turn.watchTargetPlayerId;
+    const choices = engine.state.players.map((player) => {
+      const isSelected = player.id === selectedId;
+      return `<button type="button" class="choice-button task-assignee-option" data-action="choose-watch-player" data-player-id="${escapeHtml(player.id)}" data-selected="${isSelected}" aria-pressed="${isSelected}">
+        ${avatar(player)}<span><strong>${escapeHtml(player.name)}</strong><small>${language === 'de' ? 'Als Portionswache auswählen' : 'Choose as portion lookout'}</small></span>
+      </button>`;
+    }).join('');
+    return `
+      <article class="game-card">
+        ${renderCourseFlow(engine, language)}
+        <p class="eyebrow">${language === 'de' ? 'Crewauftrag · Person bestimmen' : 'Crew duty · choose a player'}</p>
+        <h2>${t(challenge.title, language)}</h2>
+        ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
+        <p class="card-story">${t(challenge, language)}</p>
+        <div class="card-effect">${language === 'de'
+          ? 'Die ausgewählte Person wird beim nächsten Servieren als Portionswache angezeigt. Für diese Karte läuft kein Timer.'
+          : 'The selected player will be shown as portion lookout at the next serving. This card has no timer.'}</div>
+        <div class="choice-list task-assignee-choices">${choices}</div>
+        <button class="primary-button" type="button" data-action="confirm-watch-player" ${selectedId ? '' : 'disabled'}>${language === 'de' ? 'Portionswache bestätigen' : 'Confirm portion lookout'}</button>
+      </article>`;
+  }
   const ongoing = challenge.flow === 'ongoing';
   const mandatory = challenge.mandatory;
   const awaitingSecretStart = challenge.secret && !ongoing && !mandatory && engine.state.turn.watchStartedAt == null;
@@ -4690,6 +5059,7 @@ function renderPreparationSummary(engine, language) {
 
 function renderChapterReady(engine, language) {
   const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === engine.state.chapterIndex && (ingredient.essential || ['discovered', 'locked', 'used'].includes(ingredient.status)));
+  const portionCaptain = engine.state.players.find((player) => player.id === engine.state.chapter.portionCaptainPlayerId);
   return `
     <article class="game-card">
       <p class="eyebrow">${tx('chapterComplete', language)}</p>
@@ -4698,8 +5068,9 @@ function renderChapterReady(engine, language) {
       <div class="stat-strip">
         ${statusTag(`${engine.state.coins}/${engine.state.coinGoal} ${tx('treasure', language)}`, 'gold')}
         ${statusTag(`${ingredients.length} ${language === 'de' ? 'Zutaten' : 'ingredients'}`, 'green')}
+        ${portionCaptain ? statusTag(language === 'de' ? `Portionswache: ${escapeHtml(portionCaptain.name)}` : `Portion lookout: ${escapeHtml(portionCaptain.name)}`, 'blue') : ''}
       </div>
-      <p>${language === 'de' ? 'Richtet gemeinsam an. Essen hat keinen Zeitdruck – setzt die Reise fort, wenn alle bereit sind.' : 'Plate together. Eating is never timed — continue when everyone is ready.'}</p>
+      <p>${language === 'de' ? 'Der Gang ist fertig zubereitet und serviert. Essen hat keinen Zeitdruck – setzt die Reise fort, wenn alle bereit sind.' : 'The course is prepared and served. Eating is never timed — continue when everyone is ready.'}</p>
       ${renderPreparationSummary(engine, language)}
       <button class="primary-button" type="button" data-action="serve-course">${tx('serveCourse', language)}</button>
     </article>`;
@@ -4720,37 +5091,13 @@ function renderCurrentCard(engine, language) {
     case 'chapterReady': return renderChapterReady(engine, language);
     case 'crewBusy': {
       const anchor = engine.state.players[engine.state.busyAfterPlayerIndex ?? engine.state.activePlayerIndex];
+      if (engine.state.busyReason === 'waitingForTask') {
+        return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Kurze Ruhe auf See' : 'A quiet moment at sea'}</p><h2>${language === 'de' ? 'Die Zugfolge wartet auf eine laufende Aufgabe' : 'Turn order is waiting for a running task'}</h2><p class="card-story">${language === 'de' ? `Gerade ist keine weitere Aktion offen. Die Reihenfolge ist hinter ${escapeHtml(anchor.name)} gespeichert. Sobald eine Aufgabe erledigt wird, erhält die nächste freie Person eine sichtbare Übergabe.` : `No further action is currently open. The order is saved after ${escapeHtml(anchor.name)}. As soon as a task is completed, the next free player receives a visible handover.`}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
+      }
       return `<article class="game-card"><p class="eyebrow">${language === 'de' ? 'Alle Hände in der Kombüse' : 'All hands in the galley'}</p><h2>${language === 'de' ? 'Alle Personen haben gerade eine laufende Aufgabe' : 'Every player currently has a running task'}</h2><p class="card-story">${language === 'de' ? `Es wird kein Zug vergeben. Die Reihenfolge ist hinter ${escapeHtml(anchor.name)} gespeichert. Sobald eine Aufgabe erledigt wird, erhält die nächste freie Person in dieser Reihenfolge eine sichtbare Übergabe.` : `No turn is assigned. The order is saved after ${escapeHtml(anchor.name)}. As soon as a task is completed, the next free player in that order receives a visible handover.`}</p><button class="primary-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Aufgabenliste öffnen' : 'Open task list'}</button></article>`;
     }
     default: return renderDrawCard(engine, language);
   }
-}
-
-function renderAssignedTasks(engine, language) {
-  const tasks = engine.state.tasks.filter((instance) =>
-    instance.chapterIndex === engine.state.chapterIndex &&
-    instance.assignedPlayerIds.includes(engine.activePlayer.id) &&
-    instance.status !== 'done'
-  );
-  if (!tasks.length) return '';
-  return `
-    <section class="panel" style="box-shadow:none">
-      <div class="panel-header"><h3>${language === 'de' ? 'Deine Küchenaufgaben' : 'Your galley tasks'}</h3>${statusTag(tasks.length, 'coral')}</div>
-      <ul class="task-list">
-        ${tasks.slice(0, 3).map((instance) => {
-          const card = engine.getTaskCard(instance);
-          const remaining = getRemainingSeconds(instance);
-          return `<li class="task-item" data-status="${instance.status}">
-            <div class="card-row"><strong>${t(card.title, language)}</strong>${instance.endAt ? `<span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span>` : ''}</div>
-            <p class="muted">${t(card.instruction, language)}</p>
-            ${renderIngredientBasket(engine, instance, language)}
-            ${instance.status === 'queued' && instance.instanceId !== engine.state.turn.assignedTaskId ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${card.timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
-            ${['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${tx('completeTask', language)}</button>` : ''}
-          </li>`;
-        }).join('')}
-      </ul>
-      ${tasks.length > 3 ? `<button class="quiet-button" type="button" data-action="navigate" data-view="tasks">${language === 'de' ? 'Alle Aufgaben öffnen' : 'Open all tasks'}</button>` : ''}
-    </section>`;
 }
 
 function renderGame(engine, language) {
@@ -4758,6 +5105,11 @@ function renderGame(engine, language) {
   if (engine.state.turn.phase === 'complete' || engine.state.status === 'completed') return renderComplete(engine, language);
   const player = engine.activePlayer;
   const role = getRole(player.roleId);
+  const activeAssignment = engine.currentChapter.id === 'cocktails'
+    ? player.cocktailTeam === 'alcoholic'
+      ? (language === 'de' ? 'Cocktail-Team alkoholisch' : 'alcoholic cocktail team')
+      : (language === 'de' ? 'Cocktail-Team alkoholfrei' : 'alcohol-free cocktail team')
+    : `${tx('group', language)} ${engine.activeGroup.id}`;
   return `
     <h1 class="sr-only">Adventure Dinner · ${t(engine.currentChapter.name, language)} · ${t(engine.currentChapter.locations[engine.activeGroup.locationIndex], language)}</h1>
     <div class="game-grid">
@@ -4769,14 +5121,13 @@ function renderGame(engine, language) {
         <section class="turn-banner">
           ${avatar(player)}
           <div>
-            <p>${tx('activePlayer', language)} · ${t(role.name, language)} · ${tx('group', language)} ${engine.activeGroup.id}</p>
+            <p>${tx('activePlayer', language)} · ${t(role.name, language)} · ${activeAssignment}</p>
             <h2>${escapeHtml(player.name)}</h2>
           </div>
         </section>
         ${renderAbility(engine, language)}
         ${renderCurrentCard(engine, language)}
         ${renderCourseBasket(engine, language)}
-        ${renderAssignedTasks(engine, language)}
       </div>
     </div>`;
 }
@@ -4847,6 +5198,27 @@ function renderTaskBasket(engine, instance, language) {
     : `<p>${language === 'de' ? 'Für diesen Schritt sind keine bestimmten Gangzutaten nötig.' : 'This step does not need specific course ingredients.'}</p>`}</div>`;
 }
 
+function taskTimerCaption(instance, timingMode, remaining, language) {
+  if (timingMode === 'background') {
+    return language === 'de' ? 'Erinnerung bis zum nächsten Questschritt' : 'reminder until the next quest step';
+  }
+  if (remaining < 0) {
+    return instance.status === 'done'
+      ? (language === 'de' ? 'Überlänge beim Abschluss' : 'overtime at completion')
+      : (language === 'de' ? 'Überlänge' : 'overtime');
+  }
+  return instance.status === 'done'
+    ? (language === 'de' ? 'Restzeit beim Abschluss' : 'time remaining at completion')
+    : tx('remaining', language);
+}
+
+function taskCoinTag(instance, language) {
+  if (instance.status !== 'done' || !Number.isFinite(instance.challengeCoinValue)) return '';
+  const coins = instance.challengeCoinValue;
+  const value = `${coins > 0 ? '+' : coins < 0 ? '−' : '±'}${Math.abs(coins)}`;
+  return statusTag(`${language === 'de' ? 'Münzwertung' : 'Coin score'}: ${value} ${language === 'de' ? 'Münzen' : 'coins'}`, coins > 0 ? 'green' : coins < 0 ? 'coral' : 'blue');
+}
+
 function renderTasks(engine, language) {
   const order = { ready: 0, active: 1, queued: 2, done: 3 };
   const tasks = [...engine.state.tasks].sort((a, b) =>
@@ -4865,11 +5237,12 @@ function renderTasks(engine, language) {
         const card = engine.getTaskCard(instance);
         const assigned = instance.assignedPlayerIds.map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name).filter(Boolean);
         const remaining = getRemainingSeconds(instance);
+        const elapsed = getElapsedSeconds(instance);
         const timingMode = instance.timingMode ?? card.timingMode ?? 'challenge';
-        const timerMinutes = timingMode === 'background' ? (instance.backgroundMinutes || card.backgroundMinutes) : (instance.challengeMinutes || card.challengeMinutes);
-        const timerProgress = timerMinutes && instance.startedAt
-          ? percent(Math.max(0, Date.now() - instance.startedAt), timerMinutes * 60_000)
-          : 0;
+        const timerMinutes = timingMode === 'background'
+          ? (instance.backgroundMinutes || card.backgroundMinutes)
+          : timingMode === 'manual' ? 0 : (instance.challengeMinutes || card.challengeMinutes);
+        const timerProgress = getTaskTimerProgress(instance);
         return `<li class="task-item" data-status="${instance.status}">
           <div class="card-row">
             <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${engine.questStepNumber(card)}</p><h3>${t(card.title, language)}</h3></div>
@@ -4880,14 +5253,18 @@ function renderTasks(engine, language) {
           <div class="stat-strip">
             ${statusTag(`${tx('assignedTo', language)}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
             ${statusTag(card.people[0] === card.people[1] ? `${card.people[0]} ♙` : `${card.people[0]}–${card.people[1]} ♙`)}
-            ${timingMode === 'background'
-              ? statusTag(`${timerMinutes} min ${language === 'de' ? 'Hintergrundzeit · ohne Münzdruck' : 'background time · no coin pressure'}`, 'blue')
-              : statusTag(`${timerMinutes} min ${language === 'de' ? 'Arbeits-Challenge' : 'work challenge'}`, 'gold')}
-            ${instance.challengeResult && instance.challengeResult !== 'background' ? statusTag(t({ de: { veryFast: 'Blitzschnell · +2', onTime: 'Rechtzeitig · +1', late: 'Verspätet · −2', veryLate: 'Stark verspätet · −5' }[instance.challengeResult], en: { veryFast: 'Lightning fast · +2', onTime: 'On time · +1', late: 'Late · −2', veryLate: 'Very late · −5' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
+            ${timingMode === 'manual'
+              ? statusTag(language === 'de' ? 'Nach Gargrad · kein Spieltimer' : 'By doneness · no game timer', 'blue')
+              : timingMode === 'background'
+                ? statusTag(`${timerMinutes} min ${language === 'de' ? 'Hintergrundzeit · ohne Münzdruck' : 'background time · no coin pressure'}`, 'blue')
+                : statusTag(`${timerMinutes} min ${language === 'de' ? 'Arbeits-Challenge' : 'work challenge'}`, 'gold')}
+            ${instance.challengeResult && !['background', 'manual'].includes(instance.challengeResult) ? statusTag(t({ de: { veryFast: 'Blitzschnell · +2', onTime: 'Rechtzeitig · +1', late: 'Verspätet · −2', veryLate: 'Stark verspätet · −5' }[instance.challengeResult], en: { veryFast: 'Lightning fast · +2', onTime: 'On time · +1', late: 'Late · −2', veryLate: 'Very late · −5' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
+            ${instance.status === 'done' && instance.startedAt ? statusTag(`${language === 'de' ? 'Dauer' : 'Duration'}: ${formatDuration(elapsed)}`, 'blue') : ''}
+            ${taskCoinTag(instance, language)}
           </div>
-          ${instance.endAt ? `<div class="card-row"><span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}">${formatDuration(remaining)}</span><span class="muted">${timingMode === 'background' ? (language === 'de' ? 'Erinnerung bis zum nächsten Questschritt' : 'reminder until the next quest step') : tx('remaining', language)}</span></div><div class="progress-track"><span data-task-progress="${escapeHtml(instance.instanceId)}" style="--progress:${timerProgress}%"></span></div>` : ''}
+          ${instance.endAt ? `<div class="card-row"><span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}" data-overdue="${remaining < 0}">${formatDuration(remaining)}</span><span class="muted" data-task-timer-caption="${escapeHtml(instance.instanceId)}">${taskTimerCaption(instance, timingMode, remaining, language)}</span></div><div class="progress-track"><span data-task-progress="${escapeHtml(instance.instanceId)}" style="--progress:${timerProgress}%"></span></div>` : ''}
           <div class="button-row" style="margin-top:.8rem">
-            ${instance.status === 'queued' ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
+            ${instance.status === 'queued' ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${timingMode === 'manual' ? (language === 'de' ? 'Aufgabe beginnen' : 'Start task') : timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
             ${['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${tx('completeTask', language)}</button>` : ''}
             ${engine.canUndoTaskCompletion(instance.instanceId) ? `<button class="quiet-button" type="button" data-action="undo-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Haken zurücknehmen' : 'Undo completion'}</button>` : ''}
           </div>
@@ -5000,11 +5377,14 @@ function renderCrew(engine, language) {
           const isActive = index === engine.state.activePlayerIndex;
           const passiveDisabled = !engine.isPassiveEnabled(player);
           const openTasks = engine.openTasksForPlayer(player.id);
+          const cocktailTeam = player.cocktailTeam === 'alcoholic'
+            ? (language === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
+            : (language === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free');
           const taskAvailability = openTasks.length
             ? statusTag(language === 'de' ? 'Aufgabe läuft' : 'task in progress', 'coral')
             : statusTag(language === 'de' ? 'frei für neue Aufgabe' : 'free for a new task', 'green');
           return `<article class="role-card" data-active="${isActive}">
-            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : ''} ${statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability}</span></div>
+            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : ''} ${statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability} ${statusTag(cocktailTeam, player.cocktailTeam === 'alcoholic' ? 'coral' : 'green')}</span></div>
             <p class="eyebrow" style="margin-top:1rem">${role.icon} ${t(role.name, language)}</p>
             <h2>${escapeHtml(player.name)}</h2>
             <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p><b>${t(role.passive, language)}</b></p><p class="muted">${t(role.passiveUsage, language)}</p></div>
@@ -5035,8 +5415,8 @@ function historyLabel(entry, language) {
     eventChainContinued: 'Ereigniskette fortgesetzt', eventChainStoppedForTask: 'Ereigniskette wegen Küchenauftrag beendet', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
     treasureFound: 'Münzen gefunden', coinsChanged: 'Münzstand verändert', ingredientDiscovered: 'Zutat in den Gangkorb gelegt', ingredientLocked: 'Zutat festgelegt', ingredientReturned: 'Zutat zurückgelegt', bonusIngredientDiscovered: 'Bonuszutat entdeckt',
     ingredientSwapped: 'Zutat getauscht', taskAssigneeChoiceStarted: 'Aufgabenbesetzung geöffnet', taskAssigneesChosen: 'Aufgabenbesetzung gewählt', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
-    taskCompleted: 'Aufgabe erledigt', questTaskUnlocked: 'Nächster Questschritt eingemischt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt', crewSplit: 'Crew aufgeteilt',
-    crewReunited: 'Crew wieder vereint', locationCompleted: 'Ort abgeschlossen', turnEnded: 'Zug beendet',
+    taskCompleted: 'Aufgabe erledigt', questTaskUnlocked: 'Nächster Questschritt eingemischt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt',
+    locationCompleted: 'Ort abgeschlossen', turnEnded: 'Zug beendet',
     chapterReady: 'Gang bereit', courseServed: 'Gang serviert', chapterStarted: 'Neuer Gang gestartet',
     voyageCompleted: 'Reise abgeschlossen', activeAbilityUsed: 'Rollenfähigkeit eingesetzt',
     playerLanguageChanged: 'Spielersprache geändert', optionalIngredientChanged: 'Optionale Zutat geändert',
@@ -5051,8 +5431,8 @@ function historyLabel(entry, language) {
     eventChainContinued: 'Event chain continued', eventChainStoppedForTask: 'Event chain ended for kitchen task', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
     treasureFound: 'Coins found', coinsChanged: 'Coin balance changed', ingredientDiscovered: 'Ingredient put in course basket', ingredientLocked: 'Ingredient locked', ingredientReturned: 'Ingredient returned', bonusIngredientDiscovered: 'Bonus ingredient discovered',
     ingredientSwapped: 'Ingredient swapped', taskAssigneeChoiceStarted: 'Task crew selection opened', taskAssigneesChosen: 'Task crew selected', taskAssigned: 'Task assigned', taskStarted: 'Task started',
-    taskCompleted: 'Task completed', questTaskUnlocked: 'Next quest step shuffled in', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins', crewSplit: 'Crew split',
-    crewReunited: 'Crew reunited', locationCompleted: 'Location completed', turnEnded: 'Turn ended',
+    taskCompleted: 'Task completed', questTaskUnlocked: 'Next quest step shuffled in', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins',
+    locationCompleted: 'Location completed', turnEnded: 'Turn ended',
     chapterReady: 'Course ready', courseServed: 'Course served', chapterStarted: 'New course started',
     voyageCompleted: 'Voyage completed', activeAbilityUsed: 'Role ability used',
     playerLanguageChanged: 'Player language changed', optionalIngredientChanged: 'Optional ingredient changed',
@@ -5103,21 +5483,21 @@ function renderSessions(sessions, currentSessionId, language) {
 function renderRules(language) {
   const sections = language === 'de' ? [
     ['1. Zufällig beginnen, dann reihum spielen', 'Zu Reisebeginn wird die erste Person zufällig bestimmt. Danach führt die hervorgehobene freie Person den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde. Die Crewansicht zählt alle Züge pro Person.'],
-    ['2. Drei Decks plus Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Harmlose Spaßkarten können schon in Zutaten- und Auftragsrunden erscheinen. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
+    ['2. Drei Decks plus frühe Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Die ersten drei gezogenen Ereigniskarten des Spiels sind unterschiedliche Spaßkarten. Danach liegen während der Besetzung der Crew regelmäßig weitere Spaßkarten zwischen den Aufträgen. Challenges mit Voraussetzungen bleiben außerhalb des Ziehstapels, bis etwa genügend Zutaten verwendet wurden oder ein passender Timer beziehungsweise Küchenauftrag läuft. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
     ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Für weitere Plätze werden freie Personen mit den meisten bisherigen Zügen bevorzugt; bei manchen Karten darf die aktive Person den fairen Vorschlag ändern.'],
-    ['4. Gemischte Questlinien', 'Im Auftragsstapel liegen anfangs nur die Startkarten aller fachlichen Questlinien. Wird ein Schritt erledigt, wird sein Nachfolger zufällig auf einer der drei obersten Positionen eingemischt. So können etwa Brot und Speckdatteln in wechselnder Reihenfolge laufen; ihre Schritte bleiben trotzdem praktisch korrekt. Spaßkarten bleiben zwischen den Auftragsereignissen erhalten.'],
-    ['5. Arbeits-Challenge oder Hintergrundzeit', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Backen, Garen, Ruhen und Kühlen laufen als unbewertete Hintergrundtimer. Jede offene Aufgabe kann jederzeit in der Aufgabenliste abgehakt werden.'],
-    ['6. Orte automatisch bereisen', 'Jede abgeschlossene Ortsaktion bewegt die Gruppe sichtbar voran. Nach genug Aktionen zieht sie automatisch zum nächsten Ort; aufgeteilte Gruppen werden am gemeinsamen Ziel wieder vereint.'],
+    ['4. Gemischte, aber fachlich abhängige Questlinien', 'Jeder Gang nach den Tapas beginnt mit einem Abräumauftrag für den vorigen Tisch; erst danach öffnet sich die Zutatenwahl. Im Auftragsstapel liegen zunächst nur die Startkarten der Questlinien. Ein erledigter Schritt mischt seinen Nachfolger in die obersten drei Positionen. Servieraufträge werden erst freigegeben, wenn sämtliche Zubereitungsreihen fertig sind; Aufräumarbeiten folgen erst nach dem vollständigen Servieren. Spaßkarten bleiben dazwischen erhalten.'],
+    ['5. Challenge, Hintergrundzeit oder Gargrad', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Feste Ruhe-, Koch- und Kühlzeiten können als unbewertete Hintergrundtimer laufen. Back- und Bratschritte mit unklarem Garzeitpunkt haben keinen Spieltimer und werden nach dem tatsächlichen Gargrad abgehakt. Jede offene Aufgabe kann jederzeit in der Aufgabenliste erledigt werden.'],
+    ['6. Orte automatisch bereisen', 'Jede abgeschlossene Ortsaktion bewegt die gesamte Crew sichtbar voran. Nach genug Aktionen zieht sie automatisch gemeinsam zum nächsten Ort.'],
     ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Die Suppe wird zuerst als klar oder cremig festgelegt; Brühe und Sahne sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
     ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
     ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
   ] : [
     ['1. Random start, then round robin', 'The first player is chosen randomly when the voyage begins. After that, the highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off. The crew view counts every player’s turns.'],
-    ['2. Three decks plus fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. Harmless fun cards can appear during ingredient and task rounds. A real break appears only when no kitchen task is open.'],
+    ['2. Three decks plus early fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. The first three event cards drawn in the game are different fun cards. More fun cards then appear regularly between work orders while the crew is being staffed. Conditional challenges stay out of the draw pool until enough ingredients have been used or a relevant timer or kitchen job is running. A real break appears only when no kitchen task is open.'],
     ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Free players with the most completed turns are preferred for extra places; on some cards the active player may change that fair suggestion.'],
-    ['4. Shuffled quest lines', 'At first, the work-order stack contains only the starting card of each practical quest line. Completing a step shuffles its successor into one of the top three positions. Bread and bacon dates can therefore unfold in different orders while each sequence remains practical. Fun cards stay mixed between work-order events.'],
-    ['5. Work challenge or background time', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Baking, cooking, resting, and chilling use unscored background timers. Every open job can be checked off from the task list at any time.'],
-    ['6. Travel automatically', 'Every resolved location action advances the group. After enough actions it moves automatically; split groups reunite at their shared target.'],
+    ['4. Shuffled but practical quest dependencies', 'Every course after Tapas starts with a job clearing the previous table; ingredient selection opens only afterwards. The work stack initially contains only quest-line starts, and each completed step shuffles its successor into the top three positions. Serving unlocks only after every preparation line is complete; cleanup follows only after serving is finished. Fun cards remain between work events.'],
+    ['5. Challenge, background time, or doneness', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Fixed resting, cooking, and chilling periods may use unscored background timers. Baking and frying steps with uncertain timing have no game timer and are checked off by actual doneness. Every open job can be completed from the task list at any time.'],
+    ['6. Travel automatically', 'Every resolved location action visibly advances the whole crew. After enough actions, everyone moves to the next location together.'],
     ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. Soup is first chosen as clear or cream; stock and cream are pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
     ['8. Work safely', 'Follow packaging and appliance instructions. Separate raw meat from ready-to-eat food, then clean hands, equipment, and surfaces. Cook meat thoroughly and evenly; if in doubt, verify at least 70 °C for two minutes throughout. Safety overrides every card.'],
     ['9. Coins, effects, and secret follow-ups', '500 coins equal the complete sweet reward; 250 coins mean half is shared. Losses can reduce the balance to zero. Ingredient effects are stored for the player who drew them. Active abilities are once per turn. Counter-cards to secret curses appear randomly three to five turns later and must resolve before the course ends.']
@@ -5156,7 +5536,8 @@ let setupDraft = {
   title: '',
   playerCount: 6,
   defaultLanguage: preferences.language,
-  names: Array(10).fill('')
+  names: Array(10).fill(''),
+  cocktailTeams: Array(10).fill('')
 };
 
 const currentSnapshot = repository.getCurrentSession();
@@ -5261,12 +5642,16 @@ function readSetupForm() {
   const names = Array.from({ length: Math.max(playerCount, setupDraft.names.length) }, (_, index) =>
     String(data.get(`player-${index}`) ?? setupDraft.names[index] ?? '').trim()
   );
+  const cocktailTeams = Array.from({ length: Math.max(playerCount, setupDraft.cocktailTeams.length) }, (_, index) =>
+    String(data.get(`cocktail-team-${index}`) ?? setupDraft.cocktailTeams[index] ?? '')
+  );
   setupDraft = {
     ...setupDraft,
     title: String(data.get('title') ?? setupDraft.title),
     playerCount,
     defaultLanguage: String(data.get('defaultLanguage') ?? setupDraft.defaultLanguage),
-    names
+    names,
+    cocktailTeams
   };
   return setupDraft;
 }
@@ -5308,7 +5693,10 @@ function showCrewReveal() {
     title: currentLanguage === 'de' ? 'Willkommen an Bord' : 'Welcome aboard',
     content: `<div class="crew-list">${engine.state.players.map((player) => {
       const role = getRole(player.roleId);
-      return `<div class="crew-item"><div class="card-row"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(player.name))}</span><div style="flex:1"><strong>${escapeHtml(player.name)}</strong><br><span class="muted">${escapeHtml(localize(role.name, currentLanguage))} · ${escapeHtml(localize(role.passive, currentLanguage))}</span></div></div></div>`;
+      const cocktailTeam = player.cocktailTeam === 'alcoholic'
+        ? (currentLanguage === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
+        : (currentLanguage === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free');
+      return `<div class="crew-item"><div class="card-row"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(player.name))}</span><div style="flex:1"><strong>${escapeHtml(player.name)}</strong><br><span class="muted">${escapeHtml(localize(role.name, currentLanguage))} · ${escapeHtml(localize(role.passive, currentLanguage))}<br>${escapeHtml(cocktailTeam)}</span></div></div></div>`;
     }).join('')}</div>`,
     actions: `<button type="button" class="primary-button" data-action="close-dialog">${ui('confirmHandover', currentLanguage)}</button>`
   });
@@ -5318,10 +5706,15 @@ function showHandover() {
   const next = engine.activePlayer;
   const nextLanguage = next.language;
   const role = getRole(next.roleId);
+  const assignment = engine.currentChapter.id === 'cocktails'
+    ? next.cocktailTeam === 'alcoholic'
+      ? (nextLanguage === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
+      : (nextLanguage === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free')
+    : `${ui('group', nextLanguage)} ${engine.activeGroup.id}`;
   dialog.show({
     kicker: ui('handTablet', nextLanguage),
     title: next.name,
-    content: `<div class="turn-banner"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(next.name))}</span><div><p>${escapeHtml(localize(role.name, nextLanguage))} · ${ui('group', nextLanguage)} ${engine.activeGroup.id}</p><h2>${escapeHtml(localize(engine.currentChapter.locations[engine.activeGroup.locationIndex], nextLanguage))}</h2></div></div>`,
+    content: `<div class="turn-banner"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(next.name))}</span><div><p>${escapeHtml(localize(role.name, nextLanguage))} · ${escapeHtml(assignment)}</p><h2>${escapeHtml(localize(engine.currentChapter.locations[engine.activeGroup.locationIndex], nextLanguage))}</h2></div></div>`,
     actions: `<button type="button" class="primary-button" data-action="close-dialog">${ui('confirmHandover', nextLanguage)}</button>`
   });
 }
@@ -5370,17 +5763,26 @@ function updateVisibleTimers() {
   if (!engine) return;
   document.querySelectorAll('[data-task-timer]').forEach((element) => {
     const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskTimer);
-    if (task) element.textContent = formatDuration(getRemainingSeconds(task));
+    if (task) {
+      const remaining = getRemainingSeconds(task);
+      element.textContent = formatDuration(remaining);
+      element.dataset.overdue = String(remaining < 0);
+      const caption = document.querySelector(`[data-task-timer-caption="${task.instanceId}"]`);
+      if (caption && task.timingMode !== 'background') {
+        caption.textContent = remaining < 0
+          ? task.status === 'done'
+            ? (language() === 'de' ? 'Überlänge beim Abschluss' : 'overtime at completion')
+            : (language() === 'de' ? 'Überlänge' : 'overtime')
+          : task.status === 'done'
+            ? (language() === 'de' ? 'Restzeit beim Abschluss' : 'time remaining at completion')
+            : ui('remaining', language());
+      }
+    }
   });
   document.querySelectorAll('[data-task-progress]').forEach((element) => {
     const task = engine.state.tasks.find((candidate) => candidate.instanceId === element.dataset.taskProgress);
     if (!task?.startedAt) return;
-    const card = engine.getTaskCard(task);
-    const minutes = task.timingMode === 'background'
-      ? (task.backgroundMinutes || card.backgroundMinutes)
-      : (task.challengeMinutes || card.challengeMinutes);
-    const elapsed = Math.max(0, Date.now() - task.startedAt);
-    element.style.setProperty('--progress', `${Math.min(100, Math.round((elapsed / Math.max(1, minutes * 60_000)) * 100))}%`);
+    element.style.setProperty('--progress', `${getTaskTimerProgress(task)}%`);
   });
   document.querySelectorAll('[data-watch-timer]').forEach((element) => {
     const remaining = Math.max(0, Math.ceil(((engine.state.turn.watchEndsAt ?? Date.now()) - Date.now()) / 1000));
@@ -5422,7 +5824,7 @@ async function handleAction(target) {
   await audio.unlock();
   switch (action) {
     case 'open-setup':
-      setupDraft = { title: '', playerCount: 6, defaultLanguage: preferences.language, names: Array(10).fill('') };
+      setupDraft = { title: '', playerCount: 6, defaultLanguage: preferences.language, names: Array(10).fill(''), cocktailTeams: Array(10).fill('') };
       publicHomeView = 'setup';
       navigate('setup');
       break;
@@ -5459,6 +5861,12 @@ async function handleAction(target) {
       break;
     }
     case 'complete-watch': engine.completeWatchChallenge(); audio.play('complete'); persist(); render(); break;
+    case 'choose-watch-player':
+      if (engine.selectWatchChallengePlayer(target.dataset.playerId)) { audio.play('move'); persist(); render(); }
+      break;
+    case 'confirm-watch-player':
+      if (engine.confirmWatchChallengePlayer()) { audio.play('complete'); persist(); render(); }
+      break;
     case 'start-watch':
       if (engine.startWatchChallengeAction()) { audio.play('move'); persist(); render(); }
       break;
@@ -5516,7 +5924,9 @@ async function handleAction(target) {
         const score = task?.challengeCoinValue ?? 0;
         showToast(task?.challengeResult === 'background'
           ? (language() === 'de' ? 'Hintergrundzeit beendet · keine Münzwertung' : 'Background time complete · no coin score')
-          : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
+          : task?.challengeResult === 'manual'
+            ? (language() === 'de' ? 'Nach Gargrad erledigt · keine Zeitwertung' : 'Completed by doneness · no time score')
+            : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
         audio.play('complete'); persist(); render();
         if (wasCrewBusy && engine.state.turn.phase !== 'crewBusy') showHandover();
       }
@@ -5526,7 +5936,10 @@ async function handleAction(target) {
       if (engine.undoTaskCompletion(target.dataset.taskId)) { audio.play('move'); persist(); render(); }
       break;
     case 'lock-basket-ingredient':
-      if (engine.lockIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
+      if (engine.lockIngredientFromBasket(target.dataset.ingredientId, Date.now(), target.dataset.cocktailUse ?? null)) { audio.play('move'); persist(); render(); }
+      break;
+    case 'assign-cocktail-ingredient':
+      if (engine.setCocktailIngredientUse(target.dataset.ingredientId, target.dataset.cocktailUse)) { audio.play('move'); persist(); render(); }
       break;
     case 'remove-basket-ingredient':
       if (engine.removeIngredientFromBasket(target.dataset.ingredientId)) { audio.play('move'); persist(); render(); }
@@ -5585,11 +5998,20 @@ document.addEventListener('submit', (event) => {
   event.preventDefault();
   const draft = readSetupForm();
   const names = draft.names.slice(0, draft.playerCount).map((name) => name.trim());
+  const cocktailTeams = draft.cocktailTeams.slice(0, draft.playerCount);
   if (names.some((name) => !name)) {
     showToast(language() === 'de' ? 'Bitte gebt für jede Person einen Namen ein.' : 'Please enter a name for every player.');
     return;
   }
-  engine = GameEngine.create({ ...draft, names, audio: preferences.audio });
+  if (cocktailTeams.some((team) => !['alcoholic', 'alcohol-free'].includes(team))) {
+    showToast(language() === 'de' ? 'Bitte wählt für jede Person ein Cocktail-Team.' : 'Please choose a cocktail team for every player.');
+    return;
+  }
+  if (!cocktailTeams.includes('alcoholic') || !cocktailTeams.includes('alcohol-free')) {
+    showToast(language() === 'de' ? 'Für die zwei Cocktailvarianten braucht jedes Team mindestens eine Person.' : 'Each cocktail version needs at least one person on its team.');
+    return;
+  }
+  engine = GameEngine.create({ ...draft, names, cocktailTeams, audio: preferences.audio });
   preferences = repository.savePreferences({ language: draft.defaultLanguage });
   audio.setEnabled(preferences.audio);
   view = 'game';

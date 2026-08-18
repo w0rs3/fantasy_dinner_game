@@ -7,7 +7,7 @@ const task = (titleDe, titleEn, instructionDe, instructionEn, area, people = [1,
   people,
   timerMinutes,
   estimatedMinutes: options.estimatedMinutes ?? timerMinutes ?? 0,
-  kind: options.kind ?? (options.timingMode === 'background' ? 'background' : 'challenge'),
+  kind: options.kind ?? options.timingMode ?? 'challenge',
   timingMode: options.timingMode ?? 'challenge',
   backgroundMinutes: options.backgroundMinutes ?? (options.timingMode === 'background' ? timerMinutes : 0),
   challengeMinutes: options.challengeMinutes ?? null,
@@ -21,13 +21,13 @@ const DEFAULT_ESTIMATED_MINUTES = Object.freeze({
   vegetables: 7, hotplate: 7, blender: 5, seasoning: 3, protein: 7,
   garnish: 3, fruit: 6, dressing: 5, assembly: 6, cold: 5,
   optional: 3, sauce: 5, mixing: 6, alcoholic: 6, 'alcohol-free': 6,
-  safety: 3, story: 2, planning: 4
+  safety: 3, story: 2, planning: 4, reset: 5
 });
 
 const BLUEPRINTS = Object.freeze({
   tapas: [
     task('Der Plan des Hafenmeisters', 'The Harbourmaster’s Plan', 'Teilt Tapas, Ofenaufgaben und Anrichten sinnvoll unter der Crew auf.', 'Divide tapas, oven work, and plating sensibly across the crew.', 'planning', [2, 3]),
-    task('Datteln in Speck rollen', 'Wrap the Dates', 'Umwickelt jede Dattel gleichmäßig mit Speck und legt die Rollen mit Abstand auf ein vorbereitetes Blech. Noch nicht backen.', 'Wrap every date evenly in bacon and space the rolls on a prepared tray. Do not bake them yet.', 'cold-prep', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7, ingredientTags: ['tapas-dates', 'bacon'] }),
+    task('Datteln in Speck rollen', 'Wrap the Dates', 'Umwickelt jede Dattel gleichmäßig mit Speck und legt die Rollen mit der Naht nach unten auf einen vorbereiteten Teller. Noch nicht braten.', 'Wrap every date evenly with bacon and place the rolls seam-side down on a prepared plate. Do not fry them yet.', 'cold-prep', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7, ingredientTags: ['tapas-dates', 'bacon'] }),
     task('Brot in den Ofen schieben', 'Put the Bread in the Oven', 'Heizt den Ofen nach Packungsangabe vor, legt die Baguettes sicher hinein und stellt den separaten Brottimer. Dieser Schritt endet, sobald die Ofentür geschlossen ist.', 'Preheat according to the packet, put the baguettes safely into the oven, and set the separate bread timer. This step ends once the oven door is closed.', 'oven', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['baguettes'], safety: 'hotOven' }),
     task('Vorräte vom Markt', 'Market Provisions', 'Ordnet Oliven, Käse, Schinken und Schafs- oder Ziegenkäse auf gut erreichbaren Platten an.', 'Arrange olives, cheese, ham, and sheep or goat cheese on easy-to-reach platters.', 'cold-prep', [2, 3], 0, { ingredientTags: ['olives', 'cheese', 'serrano', 'goat-cheese'] }),
     task('Die zwei Saucen', 'The Two Sauces', 'Füllt Aioli und Tomaten-Paprika-Dip getrennt ab, stellt passende Löffel bereit und kennzeichnet beide.', 'Decant aioli and tomato-pepper dip separately, add serving spoons, and label both.', 'cold-prep', [1, 2], 0, { ingredientTags: ['aioli', 'tomato-pepper-dip'] }),
@@ -38,9 +38,9 @@ const BLUEPRINTS = Object.freeze({
     task('Der faire Vorrat', 'The Fair Provision', 'Schätzt Portionen für die Crew ab und ergänzt knappe Platten, bevor serviert wird.', 'Estimate portions for the crew and top up sparse platters before serving.', 'quality', [1, 2]),
     task('Freie Fläche in der Kombüse', 'Clear Space in the Galley', 'Räumt Verpackungen weg, reinigt Arbeitsflächen und stellt heiße Bleche sicher ab.', 'Remove packaging, clean worktops, and place hot trays safely.', 'cleanup', [1, 2], 0, { safety: 'hotOven' }),
     task('Gruß aus der Hafenstadt', 'Greeting from the Harbour', 'Erfindet einen kurzen Trinkspruch oder Serviersatz für den Beginn der Reise.', 'Invent a short toast or serving line to begin the voyage.', 'story', [1, 2]),
-    task('Speckdatteln in den Ofen schieben', 'Put the Bacon Dates in the Oven', 'Schiebt das vorbereitete Blech in den heißen Ofen, stellt 15 Minuten ein und bestätigt den Start. Die Garzeit läuft danach ohne Münzdruck im Hintergrund.', 'Put the prepared tray into the hot oven, set 15 minutes, and confirm the start. Cooking then continues in the background without coin pressure.', 'oven', [1, 2], 15, { timingMode: 'background', ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotOven' }),
-    task('Speckdatteln herausholen', 'Remove the Bacon Dates', 'Prüft die Speckdatteln nach Ablauf des Ofentimers auf sichere Bräunung, holt das Blech heraus und stellt es hitzefest ab.', 'When the oven timer ends, check the bacon dates for safe browning, remove the tray, and place it on a heatproof surface.', 'oven', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotOven' }),
-    task('Brot backen lassen', 'Let the Bread Bake', 'Lasst das Brot nach Packungsangabe etwa acht Minuten backen. Der Timer läuft ohne Belohnung oder Strafe im Hintergrund.', 'Let the bread bake according to the packet for about eight minutes. The timer runs in the background without reward or penalty.', 'oven', [1, 1], 8, { timingMode: 'background', ingredientTags: ['baguettes'], safety: 'hotOven' }),
+    task('Speckdatteln in der Pfanne braten', 'Fry the Bacon Dates', 'Legt die Speckdatteln mit der Naht nach unten in eine große Pfanne und bratet sie bei mittlerer Hitze ohne zusätzliches Fett. Wendet sie regelmäßig, bis der Speck rundum knusprig und durchgehend heiß ist. Dafür läuft kein Spieltimer; hakt die Aufgabe nach Gargrad ab.', 'Place the bacon dates seam-side down in a large frying pan and fry them over medium heat without extra fat. Turn them regularly until the bacon is crisp all around and piping hot throughout. No game timer runs for this step; check it off when the food is done.', 'hotplate', [1, 2], 0, { timingMode: 'manual', estimatedMinutes: 7, ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotPan' }),
+    task('Speckdatteln aus der Pfanne nehmen', 'Remove the Bacon Dates from the Pan', 'Nehmt die fertig gebratenen Speckdatteln mit einer Zange aus der Pfanne, lasst überschüssiges Fett kurz auf Küchenpapier abtropfen und haltet sie bis zum Servieren warm.', 'Lift the fried bacon dates from the pan with tongs, drain excess fat briefly on kitchen paper, and keep them warm until serving.', 'hotplate', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, ingredientTags: ['tapas-dates', 'bacon'], safety: 'hotPan' }),
+    task('Brot backen lassen', 'Let the Bread Bake', 'Backt das Brot nach Packungsangabe und kontrolliert Bräunung sowie Gargrad. Dafür läuft kein Spieltimer; hakt die Aufgabe ab, sobald das Brot fertig ist.', 'Let the bread bake according to the packet and check its browning and doneness. No game timer runs for this step; check it off once the bread is ready.', 'oven', [1, 1], 0, { timingMode: 'manual', estimatedMinutes: 8, ingredientTags: ['baguettes'], safety: 'hotOven' }),
     task('Brot aus dem Ofen holen', 'Remove the Bread from the Oven', 'Holt die Baguettes nach dem Timer sicher heraus und lasst sie kurz auf einer hitzefesten Fläche ruhen. Geschnitten wird erst im nächsten Questschritt.', 'Remove the baguettes safely after the timer and rest them briefly on a heatproof surface. Slicing is a later quest step.', 'oven', [1, 2], 0, { estimatedMinutes: 2, challengeMinutes: 3, ingredientTags: ['baguettes'], safety: 'hotOven' })
   ],
   soup: [
@@ -58,7 +58,8 @@ const BLUEPRINTS = Object.freeze({
     task('Kesselwache aufräumen', 'Clear the Cauldron Watch', 'Stellt verwendete Geräte sicher ab, weicht den Topf nach dem Servieren ein und reinigt Spritzer sofort.', 'Secure used equipment, soak the pot after serving, and wipe splashes immediately.', 'cleanup', [1, 2]),
     task('Zweite Kesselwache', 'Second Cauldron Watch', 'Übernehmt den Kessel für weitere fünf Minuten. Prüft nach dem Hintergrundtimer Hitze, Flüssigkeit und Gargrad; rührt nur bei Bedarf.', 'Take over the cauldron for another five minutes. After the background timer, check heat, liquid, and doneness; stir only if needed.', 'hotplate', [1, 1], 5, { timingMode: 'background', safety: 'hotPan' }),
     task('Dritte Kesselwache', 'Third Cauldron Watch', 'Übernehmt die letzte fünfminütige Kesselwache. Prüft danach, ob alle harten Zutaten weich genug für den gewählten Suppenstil sind.', 'Take the final five-minute cauldron watch. Then check that all firm ingredients are tender enough for the chosen soup style.', 'hotplate', [1, 1], 5, { timingMode: 'background', safety: 'hotPan' }),
-    task('Klare Suppe vollenden', 'Finish the Clear Soup', 'Nur bei klarer Suppe: Lasst die Einlagen sichtbar, schöpft bei Bedarf Schaum ab und balanciert Flüssigkeit, Salz und Säure ohne zu pürieren.', 'Clear soup only: keep the pieces visible, skim if needed, and balance liquid, salt, and acidity without blending.', 'quality', [1, 2], 0, { estimatedMinutes: 5, challengeMinutes: 6, courseStyles: ['clear'] })
+    task('Klare Suppe vollenden', 'Finish the Clear Soup', 'Nur bei klarer Suppe: Lasst die Einlagen sichtbar, schöpft bei Bedarf Schaum ab und balanciert Flüssigkeit, Salz und Säure ohne zu pürieren.', 'Clear soup only: keep the pieces visible, skim if needed, and balance liquid, salt, and acidity without blending.', 'quality', [1, 2], 0, { estimatedMinutes: 5, challengeMinutes: 6, courseStyles: ['clear'] }),
+    task('Tapastafel abräumen', 'Clear the Tapas Table', 'Sammelt Teller, Schalen, Besteck und leere Tapasplatten ein, bringt Reste sicher in die Küche und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für die Suppe.', 'Collect plates, bowls, cutlery, and empty tapas platters, take leftovers safely to the kitchen, and wipe the table clear. Soup ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ],
   salad: [
     task('Der Plan des grünen Altars', 'Plan of the Green Altar', 'Bestimmt das Verhältnis aus Blattsalat, Gemüse, Obst, Nüssen und Kernen.', 'Decide the balance of leaves, vegetables, fruit, nuts, and seeds.', 'planning', [2, 3]),
@@ -72,7 +73,8 @@ const BLUEPRINTS = Object.freeze({
     task('Die erste Gartenprobe', 'The First Garden Tasting', 'Prüft das Dressing einzeln und anschließend an einem kleinen Probebissen.', 'Taste the dressing alone and then on a small sample bite.', 'quality', [2, 2]),
     task('Frische Kräuter', 'Fresh Herbs', 'Zupft oder schneidet Kräuter erst kurz vor dem Mischen und verwendet auch geeignete Stiele.', 'Pick or cut herbs shortly before mixing and use suitable stems too.', 'seasoning', [1, 2]),
     task('Schalen des Tempels', 'Bowls of the Temple', 'Stellt Teller, Besteck und Servierlöffel bereit, ohne den Arbeitsweg zu blockieren.', 'Set out plates, cutlery, and serving spoons without blocking the work area.', 'serving', [1, 2]),
-    task('Der saubere Pfad', 'The Clear Path', 'Räumt Messer und Bretter weg, wischt feuchte Flächen und lagert übrige Zutaten kühl.', 'Put away knives and boards, wipe damp surfaces, and refrigerate remaining ingredients.', 'cleanup', [1, 2])
+    task('Der saubere Pfad', 'The Clear Path', 'Räumt Messer und Bretter weg, wischt feuchte Flächen und lagert übrige Zutaten kühl.', 'Put away knives and boards, wipe damp surfaces, and refrigerate remaining ingredients.', 'cleanup', [1, 2]),
+    task('Suppenschalen abräumen', 'Clear the Soup Bowls', 'Sammelt Suppenschalen, Löffel und Serviergefäße ein, sichert heiße oder volle Schalen und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für den Salat.', 'Collect soup bowls, spoons, and serving dishes, handle hot or full bowls safely, and wipe the table clear. Salad ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ],
   main: [
     task('Kriegsrat der Festung', 'Fortress Council', 'Legt fest, welche erspielten Fleischstücke, Gemüse, Früchte, Nüsse oder Kerne gemeinsam in den Bratschlauch kommen.', 'Decide which won cuts of meat, vegetables, fruit, nuts, or seeds will share the roasting bag.', 'planning', [2, 3]),
@@ -87,8 +89,9 @@ const BLUEPRINTS = Object.freeze({
     task('Sauce aus dem Schatzsaft', 'Sauce from the Treasure Juices', 'Fangt austretenden Saft sicher auf und entscheidet, ob er direkt oder kurz reduziert serviert wird.', 'Collect the cooking juices safely and decide whether to serve directly or reduce briefly.', 'sauce', [1, 2], 0, { safety: 'hotPan' }),
     task('Platten der Feuerwache', 'Platters of the Fire Watch', 'Richtet Fleisch, Gemüse und Früchte übersichtlich an und haltet rohe Kontaktflächen fern.', 'Arrange meat, vegetables, and fruit clearly and keep raw-contact surfaces away.', 'serving', [2, 3]),
     task('Die gereinigte Schmiede', 'The Clean Forge', 'Reinigt alle Flächen und Werkzeuge mit Rohfleischkontakt gründlich und räumt heiße Geräte sicher weg.', 'Clean every surface and tool that touched raw meat thoroughly and put hot equipment away safely.', 'cleanup', [2, 3], 0, { safety: 'rawMeat' }),
-    task('Bratschlauch im Ofen', 'Roasting Bag in the Oven', 'Schiebt das verschlossene Feuerpaket in den Ofen und lasst es 35 Minuten nach Geräte- und Packungshinweisen garen. Diese Ofenzeit läuft ohne Münzbelohnung oder Strafe im Hintergrund.', 'Put the sealed fire parcel in the oven and cook it for 35 minutes according to appliance and packaging guidance. This oven time runs in the background without coin reward or penalty.', 'oven', [1, 2], 35, { timingMode: 'background', safety: 'hotOven' }),
-    task('Letzte Ofenetappe', 'Final Oven Stage', 'Gart das Gericht nach der Zwischenkontrolle weitere zehn Minuten oder so lange, wie Packung und Gargrad es verlangen. Der Timer ist nur eine Erinnerung, keine Deadline.', 'After the progress check, cook for another ten minutes or as long as packaging and doneness require. The timer is a reminder, not a deadline.', 'oven', [1, 2], 10, { timingMode: 'background', safety: 'hotOven' })
+    task('Bratschlauch im Ofen', 'Roasting Bag in the Oven', 'Schiebt das verschlossene Feuerpaket in den Ofen und gart es nach Geräte- und Packungshinweisen. Dafür läuft kein Spieltimer; kontrolliert den Garfortschritt selbst und hakt die Aufgabe anschließend ab.', 'Put the sealed fire parcel in the oven and cook it according to appliance and packaging guidance. No game timer runs for this step; monitor the cooking progress yourselves and check it off afterwards.', 'oven', [1, 2], 0, { timingMode: 'manual', estimatedMinutes: 35, safety: 'hotOven' }),
+    task('Letzte Ofenetappe', 'Final Oven Stage', 'Gart das Gericht nach der Zwischenkontrolle so lange weiter, wie Packung und tatsächlicher Gargrad es verlangen. Dafür läuft kein Spieltimer; hakt die Aufgabe erst nach der Garprüfung ab.', 'After the progress check, continue cooking for as long as the packaging and actual doneness require. No game timer runs for this step; check it off only after checking doneness.', 'oven', [1, 2], 0, { timingMode: 'manual', estimatedMinutes: 10, safety: 'hotOven' }),
+    task('Salatteller abräumen', 'Clear the Salad Plates', 'Sammelt Salatschalen, Teller, Besteck und Servierlöffel ein, stellt Reste kühl und wischt den Tisch vollständig frei. Erst danach beginnt die Zutatenwahl für den Hauptgang.', 'Collect salad bowls, plates, cutlery, and serving spoons, refrigerate leftovers, and wipe the table completely clear. Main-course ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ],
   dessert: [
     task('Zwei Crews an der Lagune', 'Two Crews at the Lagoon', 'Teilt euch in zwei möglichst gleich große Teams und gebt jeder Gruppe einen eigenen Arbeitsbereich.', 'Split into two similar-sized teams and give each one its own work area.', 'planning', [2, 3]),
@@ -102,13 +105,14 @@ const BLUEPRINTS = Object.freeze({
     task('Die erste Lagunenprobe', 'The First Lagoon Tasting', 'Prüft Süße, Temperatur und Textur beider Kreationen und ändert nur einen Punkt gleichzeitig.', 'Check sweetness, temperature, and texture of both creations and change only one point at a time.', 'quality', [2, 2]),
     task('Optionale Geisterbeute', 'Optional Spirit Treasure', 'Falls gewünscht, gebt Likör oder Spirituose nur in klar gekennzeichnete Erwachsenenportionen.', 'If desired, add liqueur or spirit only to clearly marked adult portions.', 'optional', [1, 2]),
     task('Zwei Reihen am Sonnenpavillon', 'Two Rows at the Sun Pavilion', 'Richtet beide Dessertvarianten erkennbar getrennt und mit gleichmäßigen Portionen an.', 'Plate both dessert variations separately and in even portions.', 'serving', [2, 3]),
-    task('Die kalte Kombüse', 'The Cold Galley', 'Stellt Eis sofort zurück, lagert Obst kühl und wischt klebrige Arbeitsflächen.', 'Return ice cream immediately, refrigerate fruit, and wipe sticky worktops.', 'cleanup', [1, 2])
+    task('Die kalte Kombüse', 'The Cold Galley', 'Stellt Eis sofort zurück, lagert Obst kühl und wischt klebrige Arbeitsflächen.', 'Return ice cream immediately, refrigerate fruit, and wipe sticky worktops.', 'cleanup', [1, 2]),
+    task('Hauptgang abräumen', 'Clear the Main Course', 'Sammelt Teller, Besteck, Platten und Saucengefäße ein, bringt Reste sicher in die Küche und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für das Dessert.', 'Collect plates, cutlery, platters, and sauce dishes, take leftovers safely to the kitchen, and wipe the table clear. Dessert ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7 })
   ],
   cocktails: [
-    task('Der Plan des Barkeepers', 'The Bartender’s Plan', 'Teilt die Crew in ein alkoholisches und ein alkoholfreies Team und kennzeichnet die Arbeitsbereiche.', 'Split the crew into an alcoholic and an alcohol-free team and label the work areas.', 'planning', [2, 3]),
+    task('Der Plan des Barkeepers', 'The Bartender’s Plan', 'Die beim Spielstart gewählten Cocktail-Teams übernehmen ihre jeweilige Mischung; gemeinsame Grundlagen bereitet die ganze Crew vor.', 'The cocktail teams chosen at setup take charge of their respective mixes; the whole crew prepares shared bases.', 'planning', [2, 3]),
     task('Früchte aus der Piratenkiste', 'Fruit from the Pirate Crate', 'Wascht und schneidet übrige Früchte; reserviert schöne Stücke für die Garnitur.', 'Wash and cut remaining fruit; reserve attractive pieces for garnish.', 'fruit', [2, 3], 0, { safety: 'knife' }),
     task('Saft aus dem Schiffswrack', 'Juice from the Shipwreck', 'Presst oder zerdrückt geeignete Früchte und verteilt den Grundsaft auf beide Teams.', 'Press or crush suitable fruit and divide the base juice between both teams.', 'mixing', [2, 2]),
-    task('Mischung der Freibeuter', 'The Freebooter Mix', 'Falls eine Spirituose zugeordnet ist, baut die alkoholische Mischung schrittweise mit Saft, Säure und Wasser auf. Andernfalls kennzeichnet diese Mischung ebenfalls als alkoholfrei.', 'If a spirit was assigned, build the alcoholic mix gradually with juice, acidity, and water. Otherwise mark this mix as alcohol-free as well.', 'alcoholic', [2, 3]),
+    task('Mischung der Freibeuter', 'The Freebooter Mix', 'Das alkoholische Team baut seine Mischung mit der zugeordneten Spirituose schrittweise aus Saft, Säure und Wasser auf und probiert die Balance selbst.', 'The alcoholic team gradually builds its mix with the assigned spirit, juice, acidity, and water and tastes the balance themselves.', 'alcoholic', [2, 3]),
     task('Mischung der Steuermänner', 'The Helmsman Mix', 'Baut die alkoholfreie Mischung mit Saft, Frucht, Säure und Mineralwasser eigenständig auf.', 'Build the alcohol-free mix independently with juice, fruit, acidity, and mineral water.', 'alcohol-free', [2, 3]),
     task('Das letzte Glas', 'The Final Glass', 'Kennzeichnet beide Varianten eindeutig, verteilt Eis und serviert alle Gläser gemeinsam.', 'Label both versions unmistakably, distribute ice, and serve every glass together.', 'serving', [2, 3]),
     task('Vorrat aus der Eishöhle', 'Supply from the Ice Cave', 'Stellt ausreichend Eis bereit, ohne den Arbeitsbereich mit Schmelzwasser zu überfluten.', 'Set out enough ice without flooding the workspace with meltwater.', 'cold', [1, 2], 0, { ingredientTags: ['ice-cubes'] }),
@@ -116,7 +120,8 @@ const BLUEPRINTS = Object.freeze({
     task('Säure der Brandung', 'Acidity of the Surf', 'Balanciert beide Varianten getrennt mit Zitrone, Limette oder anderer Fruchtsäure.', 'Balance both versions separately with lemon, lime, or another fruit acidity.', 'quality', [1, 2]),
     task('Der Shaker des Smutjes', 'The Cook’s Shaker', 'Entscheidet je Mischung zwischen Rühren, Schütteln oder Mixen und arbeitet portionsweise.', 'Choose stirring, shaking, or blending for each mix and work in batches.', 'mixing', [2, 2]),
     task('Flaggen der beiden Crews', 'Flags of the Two Crews', 'Kennzeichnet alkoholische und alkoholfreie Gläser dauerhaft und verwechslungssicher.', 'Mark alcoholic and alcohol-free glasses permanently and unmistakably.', 'safety', [1, 2]),
-    task('Freie Fläche hinter der Bar', 'Clear Space behind the Bar', 'Verschließt Flaschen, räumt Messer weg und wischt klebrige oder nasse Flächen.', 'Close bottles, put away knives, and wipe sticky or wet surfaces.', 'cleanup', [1, 2])
+    task('Freie Fläche hinter der Bar', 'Clear Space behind the Bar', 'Verschließt Flaschen, räumt Messer weg und wischt klebrige oder nasse Flächen.', 'Close bottles, put away knives, and wipe sticky or wet surfaces.', 'cleanup', [1, 2]),
+    task('Desserttisch abräumen', 'Clear the Dessert Table', 'Sammelt Dessertschalen, Löffel und Garniturschälchen ein, stellt Eis und empfindliche Reste sofort kalt und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für die Cocktails.', 'Collect dessert bowls, spoons, and garnish dishes, return ice cream and delicate leftovers to the cold immediately, and wipe the table clear. Cocktail ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ]
 });
 
@@ -129,37 +134,39 @@ const QUEST_NAMES = Object.freeze({
   soup: {
     plan: { de: 'Suppenplan', en: 'Soup Plan' }, vegetables: { de: 'Gemüse vorbereiten', en: 'Prepare Vegetables' },
     cauldron: { de: 'Kesselreise', en: 'Cauldron Voyage' }, finish: { de: 'Suppe vollenden', en: 'Finish the Soup' },
-    extras: { de: 'Einlage & Garnitur', en: 'Extras & Garnish' }, serve: { de: 'Kessel servieren', en: 'Serve the Cauldron' }, cleanup: { de: 'Kessel klar machen', en: 'Clear the Cauldron' }
+    extras: { de: 'Einlage & Garnitur', en: 'Extras & Garnish' }, serve: { de: 'Kessel servieren', en: 'Serve the Cauldron' }, cleanup: { de: 'Kessel klar machen', en: 'Clear the Cauldron' }, reset: { de: 'Tapastafel klarmachen', en: 'Clear the Tapas Table' }
   },
   salad: {
     plan: { de: 'Salatplan', en: 'Salad Plan' }, prep: { de: 'Frische vorbereiten', en: 'Prepare Fresh Ingredients' },
     dressing: { de: 'Dressingroute', en: 'Dressing Route' }, assemble: { de: 'Dschungelschale', en: 'Jungle Bowl' },
-    serve: { de: 'Grüner Pfad', en: 'Green Path' }, cleanup: { de: 'Sauberer Pfad', en: 'Clear Path' }
+    serve: { de: 'Grüner Pfad', en: 'Green Path' }, cleanup: { de: 'Sauberer Pfad', en: 'Clear Path' }, reset: { de: 'Suppentafel klarmachen', en: 'Clear the Soup Table' }
   },
   main: {
     plan: { de: 'Festungsplan', en: 'Fortress Plan' }, prep: { de: 'Feuerpaket vorbereiten', en: 'Prepare the Fire Parcel' },
     oven: { de: 'Ofenreise', en: 'Oven Voyage' }, finish: { de: 'Festmahl vollenden', en: 'Finish the Feast' },
-    serve: { de: 'Festungstafel', en: 'Fortress Table' }, cleanup: { de: 'Schmiede reinigen', en: 'Clean the Forge' }
+    serve: { de: 'Festungstafel', en: 'Fortress Table' }, cleanup: { de: 'Schmiede reinigen', en: 'Clean the Forge' }, reset: { de: 'Salattafel klarmachen', en: 'Clear the Salad Table' }
   },
   dessert: {
     plan: { de: 'Lagunenplan', en: 'Lagoon Plan' }, fruit: { de: 'Fruchtbeute', en: 'Fruit Treasure' },
     cold: { de: 'Kühle Kreationen', en: 'Chilled Creations' }, finish: { de: 'Süße Garnitur', en: 'Sweet Garnish' },
-    serve: { de: 'Sonnenpavillon', en: 'Sun Pavilion' }, cleanup: { de: 'Kalte Kombüse', en: 'Cold Galley' }
+    serve: { de: 'Sonnenpavillon', en: 'Sun Pavilion' }, cleanup: { de: 'Kalte Kombüse', en: 'Cold Galley' }, reset: { de: 'Festtafel klarmachen', en: 'Clear the Feast Table' }
   },
   cocktails: {
     plan: { de: 'Barplan', en: 'Bar Plan' }, fruit: { de: 'Fruchtbasis', en: 'Fruit Base' },
-    mixes: { de: 'Zwei Mischungen', en: 'Two Mixes' }, finish: { de: 'Balance & Sicherheit', en: 'Balance & Safety' },
-    serve: { de: 'Letzte Gläser', en: 'Final Glasses' }, cleanup: { de: 'Bar klar machen', en: 'Clear the Bar' }
+    alcoholic: { de: 'Alkoholische Crew-Mischung', en: 'Alcoholic Crew Mix' },
+    'alcohol-free': { de: 'Alkoholfreie Crew-Mischung', en: 'Alcohol-free Crew Mix' },
+    mixes: { de: 'Gemeinsame Mischtechnik', en: 'Shared Mixing Technique' }, finish: { de: 'Balance & Sicherheit', en: 'Balance & Safety' },
+    serve: { de: 'Letzte Gläser', en: 'Final Glasses' }, cleanup: { de: 'Bar klar machen', en: 'Clear the Bar' }, reset: { de: 'Desserttisch klarmachen', en: 'Clear the Dessert Table' }
   }
 });
 
 const QUEST_ASSIGNMENTS = Object.freeze({
   tapas: ['plan', 'dates', 'bread', 'cold', 'cold', 'serve', 'serve', 'dates', 'bread', 'serve', 'cleanup', 'story', 'dates', 'dates', 'bread', 'bread'],
-  soup: ['plan', 'vegetables', 'vegetables', 'cauldron', 'cauldron', 'finish', 'finish', 'extras', 'finish', 'extras', 'serve', 'cleanup', 'cauldron', 'cauldron', 'finish'],
-  salad: ['plan', 'prep', 'prep', 'dressing', 'assemble', 'serve', 'prep', 'prep', 'dressing', 'prep', 'serve', 'cleanup'],
-  main: ['plan', 'prep', 'prep', 'prep', 'oven', 'oven', 'prep', 'prep', 'finish', 'finish', 'serve', 'cleanup', 'oven', 'oven'],
-  dessert: ['plan', 'fruit', 'fruit', 'cold', 'cold', 'cold', 'cold', 'finish', 'finish', 'finish', 'serve', 'cleanup'],
-  cocktails: ['plan', 'fruit', 'fruit', 'mixes', 'mixes', 'serve', 'finish', 'finish', 'finish', 'mixes', 'finish', 'cleanup']
+  soup: ['plan', 'vegetables', 'vegetables', 'cauldron', 'cauldron', 'finish', 'finish', 'extras', 'finish', 'extras', 'serve', 'cleanup', 'cauldron', 'cauldron', 'finish', 'reset'],
+  salad: ['plan', 'prep', 'prep', 'dressing', 'assemble', 'serve', 'prep', 'prep', 'dressing', 'prep', 'serve', 'cleanup', 'reset'],
+  main: ['plan', 'prep', 'prep', 'prep', 'oven', 'oven', 'prep', 'prep', 'finish', 'finish', 'serve', 'cleanup', 'oven', 'oven', 'reset'],
+  dessert: ['plan', 'fruit', 'fruit', 'cold', 'cold', 'cold', 'cold', 'finish', 'finish', 'finish', 'serve', 'cleanup', 'reset'],
+  cocktails: ['plan', 'fruit', 'fruit', 'alcoholic', 'alcohol-free', 'serve', 'finish', 'finish', 'finish', 'mixes', 'finish', 'cleanup', 'reset']
 });
 
 /*
@@ -173,7 +180,8 @@ const WORKFLOW = Object.freeze({
     requires: {
       12: [[1, 'done']], 13: [[12, 'done']], 14: [[2, 'done']], 15: [[14, 'done']],
       8: [[15, 'done']], 9: [[3, 'done'], [4, 'done']],
-      5: [[3, 'done'], [4, 'done'], [6, 'done'], [8, 'done'], [9, 'done'], [13, 'done']],
+      5: [[3, 'done'], [4, 'done'], [8, 'done'], [9, 'done'], [13, 'done']],
+      6: [[5, 'done']],
       10: [[5, 'done']]
     }
   },
@@ -223,7 +231,7 @@ export function buildTaskDeck(chapterIndex) {
   const chapter = CHAPTERS[chapterIndex];
   const blueprints = BLUEPRINTS[chapter.id];
   const questSteps = new Map();
-  return blueprints.map((blueprint, blueprintIndex) => {
+  const deck = blueprints.map((blueprint, blueprintIndex) => {
     const number = blueprintIndex * 2 + 1;
     const estimatedMinutes = blueprint.estimatedMinutes || blueprint.backgroundMinutes || DEFAULT_ESTIMATED_MINUTES[blueprint.area] || 4;
     const questId = QUEST_ASSIGNMENTS[chapter.id][blueprintIndex] ?? 'plan';
@@ -232,7 +240,7 @@ export function buildTaskDeck(chapterIndex) {
     return {
       ...blueprint,
       estimatedMinutes,
-      challengeMinutes: blueprint.timingMode === 'background' ? 0 : (blueprint.challengeMinutes ?? Math.max(2, Math.min(8, estimatedMinutes))),
+      challengeMinutes: ['background', 'manual'].includes(blueprint.timingMode) ? 0 : (blueprint.challengeMinutes ?? Math.max(2, Math.min(8, estimatedMinutes))),
       id: `A${chapterIndex + 1}-${String(number).padStart(2, '0')}`,
       chapterId: chapter.id,
       questId,
@@ -246,6 +254,21 @@ export function buildTaskDeck(chapterIndex) {
       coreLocationIndex: null
     };
   });
+  const addDoneRequirements = (card, requiredCards) => {
+    const existing = new Set(card.prerequisites.map((requirement) => requirement.requiredBlueprintIndex));
+    requiredCards.forEach((requiredCard) => {
+      if (requiredCard.id === card.id || existing.has(requiredCard.blueprintIndex)) return;
+      card.prerequisites.push({ requiredBlueprintIndex: requiredCard.blueprintIndex, state: 'done' });
+      existing.add(requiredCard.blueprintIndex);
+    });
+  };
+  const preparationCards = deck.filter((card) => card.playable && !['serve', 'cleanup', 'reset'].includes(card.questId));
+  const servingCards = deck.filter((card) => card.playable && card.questId === 'serve');
+  const cleanupCards = deck.filter((card) => card.playable && card.questId === 'cleanup');
+  const completedCourseCards = deck.filter((card) => card.playable && !['cleanup', 'reset'].includes(card.questId));
+  servingCards.forEach((card) => addDoneRequirements(card, preparationCards));
+  cleanupCards.forEach((card) => addDoneRequirements(card, completedCourseCards));
+  return deck;
 }
 
 export const TASK_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildTaskDeck(index)));

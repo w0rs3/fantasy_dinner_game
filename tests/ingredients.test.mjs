@@ -3,13 +3,26 @@ import assert from 'node:assert/strict';
 import { GameEngine } from '../js/core/game-engine.js';
 import { EVENT_DECKS } from '../js/data/events.js';
 import { INGREDIENTS, INGREDIENT_EFFECT_TEXT } from '../js/data/ingredients.js';
+import { addOpeningTask } from './test-helpers.mjs';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Eva', 'Finn'];
+function finishClearingPhase(engine, timestamp = 1_800_000_000_105) {
+  const clearingTask = engine.state.tasks.find((instance) =>
+    instance.chapterIndex === engine.state.chapterIndex && engine.getTaskCard(instance)?.questId === 'reset' && instance.status !== 'done'
+  );
+  assert.ok(clearingTask);
+  assert.equal(engine.completeTask(clearingTask.instanceId, timestamp), true);
+  assert.equal(engine.state.chapter.stage, 'ingredients');
+  assert.equal(engine.endTurn(timestamp + 1), true);
+}
+
 const createEngine = (seed = 801) => {
   const engine = GameEngine.create({ names, title: 'Ingredient effects', defaultLanguage: 'de', seed }, 1_800_000_000_000);
+  addOpeningTask(engine, 1_800_000_000_010);
   engine.completeTask(engine.state.tasks[0].instanceId, 1_800_000_000_050);
   engine.state.turn.phase = 'eating';
   engine.startNextChapter(1_800_000_000_100);
+  finishClearingPhase(engine);
   engine.beginEvent(1_800_000_000_110);
   engine.chooseSoupStyle('cream', 1_800_000_000_120);
   return engine;
@@ -189,6 +202,8 @@ test('category-role and Treasurer passives follow the character-card wording', (
       completeSoupCompositionForTest(engine);
       engine.state.turn.phase = 'eating';
       assert.equal(engine.startNextChapter(), true);
+      finishClearingPhase(engine);
+      engine.activePlayer.roleId = roleId;
     }
     assert.equal(engine.useCategoryRolePassive(), true, roleId);
     const offered = engine.state.turn.pendingIngredientIds[0];
@@ -208,11 +223,14 @@ test('category-role and Treasurer passives follow the character-card wording', (
   treasurer.state.turn.phase = 'eating';
   assert.equal(treasurer.startNextChapter(), true);
   assert.equal(treasurer.state.chapterIndex, 2);
+  finishClearingPhase(treasurer);
   completeSaladCompositionForTest(treasurer);
   treasurer.state.turn.phase = 'eating';
   const before = treasurer.state.ingredients.filter((ingredient) => ingredient.chapterIndex === 3 && ingredient.status === 'discovered').length;
   assert.equal(treasurer.startNextChapter(), true);
   assert.equal(treasurer.state.chapterIndex, 3);
+  assert.equal(treasurer.state.ingredients.filter((ingredient) => ingredient.chapterIndex === 3 && ingredient.status === 'discovered').length, before);
+  finishClearingPhase(treasurer);
   assert.equal(treasurer.state.ingredients.filter((ingredient) => ingredient.chapterIndex === 3 && ingredient.status === 'discovered').length, before + 1);
   assert.equal(treasurer.secureTreasurerIngredient(), false);
 });
@@ -223,6 +241,8 @@ test('cocktail spirits remain independent optional choices in the global pool', 
   engine.state.turn.phase = 'eating';
   assert.equal(engine.startNextChapter(), true);
   assert.equal(engine.state.chapterIndex, 5);
+  assert.equal(engine.state.turn.phase, 'taskBriefing');
+  finishClearingPhase(engine);
   assert.equal(engine.state.turn.phase, 'draw');
   assert.equal(engine.currentEventStage(), 'ingredients');
   assert.equal(engine.prepareIngredientChoice('alcohol', 'event', { all: true }), true);

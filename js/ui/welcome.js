@@ -27,8 +27,15 @@ export function renderSetup(language, setupDraft) {
   const playerFields = Array.from({ length: setupDraft.playerCount }, (_, index) => `
     <label class="player-input">
       <b>${index + 1}</b>
-      <span class="sr-only">${tx('playerName', language)} ${index + 1}</span>
-      <input name="player-${index}" value="${escapeHtml(setupDraft.names[index] ?? '')}" placeholder="${tx('playerName', language)} ${index + 1}" autocomplete="off" required maxlength="28">
+      <span class="player-setup-fields">
+        <span class="sr-only">${tx('playerName', language)} ${index + 1}</span>
+        <input name="player-${index}" value="${escapeHtml(setupDraft.names[index] ?? '')}" placeholder="${tx('playerName', language)} ${index + 1}" autocomplete="off" required maxlength="28">
+        <select name="cocktail-team-${index}" required aria-label="${language === 'de' ? `Cocktail-Team von Person ${index + 1}` : `Cocktail team for player ${index + 1}`}">
+          <option value="" ${setupDraft.cocktailTeams?.[index] ? '' : 'selected'} disabled>${language === 'de' ? 'Cocktail-Team wählen …' : 'Choose cocktail team …'}</option>
+          <option value="alcoholic" ${setupDraft.cocktailTeams?.[index] === 'alcoholic' ? 'selected' : ''}>${language === 'de' ? 'Alkoholische Cocktails' : 'Alcoholic cocktails'}</option>
+          <option value="alcohol-free" ${setupDraft.cocktailTeams?.[index] === 'alcohol-free' ? 'selected' : ''}>${language === 'de' ? 'Nur alkoholfrei' : 'Alcohol-free only'}</option>
+        </select>
+      </span>
     </label>`).join('');
 
   return `
@@ -64,6 +71,9 @@ export function renderSetup(language, setupDraft) {
 
         <div class="field">
           <label>${language === 'de' ? 'Spielernamen in Zugreihenfolge' : 'Player names in turn order'}</label>
+          <p class="field-hint">${language === 'de'
+            ? 'Wählt außerdem das spätere Cocktail-Team. So bereiten die jeweiligen Konsumenten ihre eigene Variante zu.'
+            : 'Also choose the later cocktail team. This lets the people drinking each version prepare their own mix.'}</p>
           <div class="player-fields">${playerFields}</div>
         </div>
 

@@ -1,8 +1,23 @@
 import { TIMER_ALERT_SECONDS } from '../config.js';
 
 export function getRemainingSeconds(task, now = Date.now()) {
-  if (!task.endAt || task.status !== 'active') return 0;
-  return Math.max(0, Math.ceil((task.endAt - now) / 1000));
+  if (!task.endAt || task.status === 'queued') return 0;
+  const reference = task.status === 'done' && task.completedAt ? task.completedAt : now;
+  const delta = task.endAt - reference;
+  const seconds = delta >= 0 ? Math.ceil(delta / 1000) : -Math.ceil(Math.abs(delta) / 1000);
+  return task.timingMode === 'background' ? Math.max(0, seconds) : seconds;
+}
+
+export function getElapsedSeconds(task, now = Date.now()) {
+  if (!task.startedAt) return 0;
+  const reference = task.status === 'done' && task.completedAt ? task.completedAt : now;
+  return Math.max(0, Math.ceil((reference - task.startedAt) / 1000));
+}
+
+export function getTaskTimerProgress(task, now = Date.now()) {
+  if (!task.startedAt || !task.endAt || task.endAt <= task.startedAt) return 0;
+  const elapsed = getElapsedSeconds(task, now) * 1000;
+  return Math.max(0, Math.min(100, Math.round(elapsed / (task.endAt - task.startedAt) * 100)));
 }
 
 export function updateTaskTimers(session, now = Date.now()) {

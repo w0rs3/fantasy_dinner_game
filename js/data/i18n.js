@@ -59,8 +59,8 @@ export const UI_TEXT = Object.freeze({
   usesLeft: { de: 'Einsätze übrig', en: 'uses left' },
   useAbility: { de: 'Fähigkeit einsetzen', en: 'Use ability' },
   locationComplete: { de: 'Ort abgeschlossen – die Crew zieht automatisch weiter.', en: 'Location complete — the crew moves on automatically.' },
-  chapterComplete: { de: 'Gang bereit zum Servieren', en: 'Course ready to serve' },
-  serveCourse: { de: 'Servieren & gemeinsam essen', en: 'Serve & eat together' },
+  chapterComplete: { de: 'Gang fertig', en: 'Course complete' },
+  serveCourse: { de: 'Gemeinsam essen', en: 'Eat together' },
   nextCourse: { de: 'Nächsten Gang beginnen', en: 'Begin next course' },
   treasure: { de: 'Münzen', en: 'Coins' },
   events: { de: 'Ereignisse', en: 'Events' },
@@ -87,7 +87,7 @@ export const UI_TEXT = Object.freeze({
   basket: { de: 'im Gangkorb', en: 'in course basket' },
   skipped: { de: 'nicht gewählt', en: 'not chosen' },
   quantitySuggestion: { de: 'Mengenvorschlag', en: 'Quantity suggestion' },
-  noWaiting: { de: 'Jede offene Aufgabe kann hier jederzeit erledigt markiert werden. Die Challenge-Zeit bestimmt nur Münzen.', en: 'Every open task can be completed here at any time. Challenge time only determines coins.' },
+  noWaiting: { de: 'Jede offene Aufgabe kann hier jederzeit erledigt markiert werden. Challenge-Zeit bestimmt nur Münzen; Back- und Bratschritte nach Gargrad haben keinen Spieltimer.', en: 'Every open task can be completed here at any time. Challenge time only determines coins; baking and frying steps judged by doneness have no game timer.' },
   handTablet: { de: 'Tablet weitergeben an', en: 'Pass the tablet to' },
   confirmHandover: { de: 'Ich bin bereit', en: 'I am ready' },
   group: { de: 'Gruppe', en: 'Group' },
@@ -117,8 +117,10 @@ export function formatDate(timestamp, language = 'de') {
 }
 
 export function formatDuration(seconds) {
-  const safe = Math.max(0, Math.ceil(seconds));
+  const numeric = Number.isFinite(Number(seconds)) ? Number(seconds) : 0;
+  const sign = numeric < 0 ? '−' : '';
+  const safe = Math.ceil(Math.abs(numeric));
   const minutes = Math.floor(safe / 60);
   const rest = safe % 60;
-  return `${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
+  return `${sign}${String(minutes).padStart(2, '0')}:${String(rest).padStart(2, '0')}`;
 }

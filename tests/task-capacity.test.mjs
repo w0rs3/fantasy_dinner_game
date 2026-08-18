@@ -3,12 +3,13 @@ import assert from 'node:assert/strict';
 import { GameEngine } from '../js/core/game-engine.js';
 import { renderGame } from '../js/ui/game.js';
 import { renderCrew } from '../js/ui/overlays.js';
+import { createEngineWithTask } from './test-helpers.mjs';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Ella', 'Finn', 'Greta', 'Hugo'];
 const now = 1_800_100_000_000;
 
 function create(seed = 501) {
-  return GameEngine.create({ names, title: 'Crew capacity', defaultLanguage: 'de', seed }, now);
+  return createEngineWithTask({ names, title: 'Crew capacity', defaultLanguage: 'de', seed }, now);
 }
 
 test('new tasks are assigned only to crew members without an open task', () => {
@@ -87,6 +88,7 @@ test('crew and game views make free and occupied task capacity visible', () => {
   assert.match(crewHtml, /Aufgabe läuft/);
   assert.match(crewHtml, /frei für neue Aufgabe/);
   assert.match(gameHtml, new RegExp(`${names.length - assignedCount}/${names.length} frei für Aufgaben`));
+  assert.doesNotMatch(gameHtml, /Deine Küchenaufgaben/);
 });
 
 test('the active player sometimes chooses the exact free crew for a task', () => {

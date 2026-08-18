@@ -22,7 +22,7 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.equal(validateSessionState(state).valid, true, label);
     assert.equal(result.completed, true, label);
     assert.equal(result.phase, 'complete', label);
-    assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 350, `${label} duration=${result.durationMinutes}`);
+    assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 400, `${label} duration=${result.durationMinutes}`);
     assert.equal(state.menu.length, 6, label);
     assert.ok(state.menu.every((course) => course?.ingredientIds.length > 0), label);
     assert.ok(state.menu.every((course, index) => index === 0 || course.servedAt > state.menu[index - 1].servedAt), label);
@@ -30,16 +30,17 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.equal(state.history.filter((entry) => entry.type === 'chapterStarted').length, 5, label);
     assert.equal(state.history.at(-1)?.type, 'voyageCompleted', label);
 
-    assert.equal(result.tasks, 71, label);
-    assert.equal(result.completedTasks, 71, label);
-    assert.deepEqual(taskCounts, [13, 13, 11, 13, 10, 11], label);
-    assert.equal(new Set(state.tasks.map((task) => task.taskId)).size, 71, label);
+    assert.equal(result.tasks, 76, label);
+    assert.equal(result.completedTasks, 76, label);
+    assert.deepEqual(taskCounts, [13, 14, 12, 14, 11, 12], label);
+    assert.equal(new Set(state.tasks.map((task) => task.taskId)).size, 76, label);
     assert.ok(state.tasks.every((task) => Array.isArray(task.basketIngredientIds)), label);
     assert.ok(state.tasks.every((task) => task.assignedAt <= task.startedAt && task.startedAt <= task.completedAt), label);
-    assert.ok(state.tasks.every((task) => task.challengeEndsAt > task.startedAt && Number.isInteger(task.challengeCoinValue)), label);
+    assert.ok(state.tasks.every((task) => (task.timingMode === 'manual' ? task.challengeEndsAt == null : task.challengeEndsAt > task.startedAt) && Number.isInteger(task.challengeCoinValue)), label);
     assert.equal(result.backgroundCoinViolations, 0, label);
-    assert.ok(result.backgroundTasks >= 8, label);
-    assert.ok(result.timerTasks >= 6, label);
+    assert.ok(result.backgroundTasks >= 5, label);
+    assert.ok(result.manualTasks >= 4, label);
+    assert.ok(result.timerTasks >= 5, label);
     assert.ok(result.maxConcurrentTasks >= 2, label);
     assert.ok(result.productiveWaitingTurns > 0, label);
     assert.equal(result.pureWaitingSteps, 0, label);
@@ -87,9 +88,10 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.ok(state.coins <= 500 && state.coins >= 0, label);
 
     assert.equal(result.events, result.uniqueEvents, label);
+    assert.equal(result.funCards, result.uniqueFunCards, `${label} fun cards must be unique`);
+    assert.ok(result.funCards <= 100, `${label} finite fun-card deck`);
     assert.equal(result.cauldronHandoffViolations, 0, `${label} cauldron watches must change hands`);
     assert.ok(result.events >= 150 && result.events <= 540, `${label} events=${result.events}`);
-    assert.ok(result.splitCount >= 1, label);
     assert.ok(result.turnSpread <= 20, `${label} turnSpread=${result.turnSpread}`);
     assert.equal(new Set(state.players.map((player) => player.roleId)).size, state.players.length, label);
     assert.ok(state.history.every((entry, index) => index === 0 || entry.timestamp >= state.history[index - 1].timestamp), `${label} history order`);

@@ -27,14 +27,17 @@ test('complete games finish for every supported crew size without pure waiting',
       assert.equal(result.backgroundCoinViolations, 0);
       assert.equal(result.basketResidue.length, 0);
       assert.equal(result.events, result.uniqueEvents, 'a voyage must not repeat event cards');
+      assert.equal(result.funCards, result.uniqueFunCards, 'a voyage must not repeat fun cards');
+      assert.ok(result.funCards <= 100, 'the finite fun-card deck must never be exceeded');
       assert.ok(result.productiveWaitingTurns > 0, 'timer windows should contain playable turns');
       assert.equal(result.essentialUnused.length, 0);
       assert.ok(result.snapshot.coins <= 500 && result.snapshot.coins >= 0, 'coin score stays within the reward scale');
       assert.equal(result.tasks, result.completedTasks);
-      assert.equal(result.tasks, 71);
-      assert.ok(result.backgroundTasks >= 8);
-      assert.ok(result.turnSpread <= 20, `turn spread was ${result.turnSpread}`);
-      assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 350, `duration was ${result.durationMinutes}`);
+      assert.equal(result.tasks, 76);
+      assert.ok(result.backgroundTasks >= 5);
+      assert.ok(result.manualTasks >= 4);
+      assert.ok(result.turnSpread <= 25, `turn spread was ${result.turnSpread}`);
+      assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 400, `duration was ${result.durationMinutes}`);
       assert.equal(result.soupStyle, seed % 2 ? 'clear' : 'cream');
       assert.ok(result.maxConcurrentTasks >= 2, 'parallel tasks should occur');
     }
