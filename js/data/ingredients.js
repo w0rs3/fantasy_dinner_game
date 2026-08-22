@@ -65,6 +65,24 @@ export const SHOPPING_STAPLES = Object.freeze([
     'main-seasonings', 'Gewürze für den Hauptgang', 'Main-course seasonings', q(1, 1, 'Grundausstattung', 'basic selection'),
     'Mindestens Salz, Pfeffer und Paprika; weitere passende Gewürze können nach Geschmack ergänzt werden.',
     'At minimum salt, pepper, and paprika; add other suitable seasonings to taste.'
+  ),
+  shoppingStaple(
+    'coconut-milk', 'Kokosmilch', 'Coconut milk', q(400, 800, 'ml'),
+    'Als cremige, pflanzliche Grundlage für passende Suppen, Saucen, Desserts oder Cocktails nach Bedarf verwenden.',
+    'Use as a creamy plant-based base for suitable soups, sauces, desserts, or cocktails when needed.',
+    ['soup', 'main', 'dessert', 'cocktails']
+  ),
+  shoppingStaple(
+    'milk', 'Milch', 'Milk', q(1, 2, 'l'),
+    'Für passende Cremesuppen, Desserts und Cocktails nach Bedarf; nicht automatisch in jedem Gang verwenden.',
+    'Use when suitable for cream soups, desserts, and cocktails; it is not automatically used in every course.',
+    ['soup', 'dessert', 'cocktails']
+  ),
+  shoppingStaple(
+    'cream', 'Sahne', 'Cream', q(400, 800, 'ml'),
+    'Zum Abrunden passender Cremesuppen, Saucen, Desserts und Cocktails nach Bedarf bereitstellen.',
+    'Keep available to finish suitable cream soups, sauces, desserts, and cocktails when needed.',
+    ['soup', 'main', 'dessert', 'cocktails']
   )
 ]);
 

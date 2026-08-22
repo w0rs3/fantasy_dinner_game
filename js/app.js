@@ -4,12 +4,13 @@ import { GameEngine, validateSessionState } from './core/game-engine.js';
 import { SessionRepository } from './core/storage.js';
 import { getRemainingSeconds, getTaskTimerProgress, updateTaskTimers } from './core/timers.js';
 import { formatDuration, localize, ui } from './data/i18n.js';
+import { INGREDIENTS, SHOPPING_STAPLES } from './data/ingredients.js';
 import { getRole } from './data/roles.js';
 import { AppDialog } from './ui/dialog.js';
 import { renderCardCatalog } from './ui/card-catalog.js';
 import { renderGame } from './ui/game.js';
 import { escapeHtml, playerInitials } from './ui/helpers.js';
-import { renderCrew, renderIngredientGuide, renderPantry, renderRules, renderSessions, renderTasks } from './ui/overlays.js';
+import { renderCrew, renderFaq, renderIngredientGuide, renderPantry, renderRules, renderSessions, renderTasks } from './ui/overlays.js';
 import { renderSetup, renderWelcome } from './ui/welcome.js';
 
 const root = document.querySelector('#screen-root');
@@ -29,6 +30,7 @@ let engine = null;
 let view = 'welcome';
 let publicHomeView = 'welcome';
 let deleteCandidateId = null;
+let ingredientRenameTarget = null;
 let wakeLock = null;
 let setupDraft = {
   title: '',
@@ -81,10 +83,11 @@ function render() {
   else if (view === 'setup') root.innerHTML = renderSetup(currentLanguage, setupDraft);
   else if (view === 'pantry') root.innerHTML = engine
     ? renderPantry(engine, currentLanguage)
-    : renderIngredientGuide(setupDraft.playerCount, currentLanguage);
+    : renderIngredientGuide(setupDraft.playerCount, currentLanguage, preferences.ingredientNames, preferences.shoppingStapleNames);
   else if (view === 'cards') root.innerHTML = renderCardCatalog(engine, currentLanguage);
   else if (view === 'sessions') root.innerHTML = renderSessions(repository.listSessions(), engine?.state.id, currentLanguage);
   else if (view === 'rules') root.innerHTML = renderRules(currentLanguage);
+  else if (view === 'faq') root.innerHTML = renderFaq(currentLanguage);
   else if (!engine) {
     view = publicHomeView;
     root.innerHTML = view === 'setup'
@@ -195,6 +198,71 @@ function showDeleteConfirmation(sessionId) {
   });
 }
 
+function normalizedIngredientName(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+function normalizedIngredientNames() {
+  return {
+    de: normalizedIngredientName(document.querySelector('#ingredient-name-de-input')?.value),
+    en: normalizedIngredientName(document.querySelector('#ingredient-name-en-input')?.value)
+  };
+}
+
+function showIngredientNameEditor(target) {
+  const currentLanguage = language();
+  ingredientRenameTarget = {
+    kind: target.dataset.ingredientKind,
+    id: target.dataset.ingredientId,
+    currentNames: { de: target.dataset.currentNameDe, en: target.dataset.currentNameEn },
+    defaultNames: { de: target.dataset.defaultNameDe, en: target.dataset.defaultNameEn },
+    customized: target.dataset.customized === 'true'
+  };
+  const label = ingredientRenameTarget.kind === 'staple'
+    ? (currentLanguage === 'de' ? 'Grundvorrat umbenennen' : 'Rename shopping staple')
+    : (currentLanguage === 'de' ? 'Zutat umbenennen' : 'Rename ingredient');
+  dialog.show({
+    kicker: currentLanguage === 'de' ? 'Zutatenliste anpassen' : 'Customize ingredient list',
+    title: label,
+    content: `<div class="field"><label for="ingredient-name-de-input">Deutsch</label><input id="ingredient-name-de-input" name="ingredientNameDe" maxlength="80" value="${escapeHtml(ingredientRenameTarget.currentNames.de)}" autocomplete="off" autofocus></div><div class="field"><label for="ingredient-name-en-input">English</label><input id="ingredient-name-en-input" name="ingredientNameEn" maxlength="80" value="${escapeHtml(ingredientRenameTarget.currentNames.en)}" autocomplete="off"></div><p class="muted">${currentLanguage === 'de' ? 'Beide Namen werden passend zur Sprache der aktuellen Person angezeigt. Gang-Tags, Karteneffekt, Mengenempfehlung und Spiellogik bleiben unverändert.' : 'Each name is shown according to the current player’s language. Course tags, card effect, quantity suggestion, and game logic remain unchanged.'}</p>`,
+    actions: `${ingredientRenameTarget.customized ? `<button type="button" class="quiet-button" data-action="reset-ingredient-name">${currentLanguage === 'de' ? 'Originalnamen wiederherstellen' : 'Restore original name'}</button>` : ''}<button type="button" class="secondary-button" data-action="close-dialog">${ui('back', currentLanguage)}</button><button type="button" class="primary-button" data-action="save-ingredient-name">${currentLanguage === 'de' ? 'Namen speichern' : 'Save name'}</button>`
+  });
+  window.setTimeout(() => document.querySelector('#ingredient-name-de-input')?.select(), 0);
+}
+
+function updateDefaultIngredientName(kind, id, name = null) {
+  const key = kind === 'staple' ? 'shoppingStapleNames' : 'ingredientNames';
+  const catalog = kind === 'staple' ? SHOPPING_STAPLES : INGREDIENTS;
+  if (!catalog.some((entry) => entry.id === id)) return false;
+  const names = { ...(preferences[key] ?? {}) };
+  if (name == null) delete names[id];
+  else names[id] = name;
+  preferences = repository.savePreferences({ [key]: names });
+  return true;
+}
+
+function saveIngredientName(reset = false) {
+  if (!ingredientRenameTarget) return false;
+  const { kind, id } = ingredientRenameTarget;
+  const customName = reset ? null : normalizedIngredientNames();
+  if (!reset && (!customName.de || !customName.en)) {
+    showToast(language() === 'de' ? 'Bitte tragt den deutschen und den englischen Zutatennamen ein.' : 'Please enter both the German and English ingredient name.');
+    return false;
+  }
+  const changed = engine
+    ? kind === 'staple'
+      ? reset ? engine.resetShoppingStapleName(id) : engine.renameShoppingStaple(id, customName)
+      : reset ? engine.resetIngredientName(id) : engine.renameIngredient(id, customName)
+    : updateDefaultIngredientName(kind, id, customName);
+  if (!changed) return false;
+  if (engine) persist();
+  ingredientRenameTarget = null;
+  dialog.close();
+  render();
+  showToast(language() === 'de' ? (reset ? 'Originalname wiederhergestellt.' : 'Zutatenname gespeichert.') : (reset ? 'Original name restored.' : 'Ingredient name saved.'));
+  return true;
+}
+
 function resumeSession(sessionId) {
   const snapshot = repository.getSession(sessionId);
   if (!snapshot || !validateSessionState(snapshot).valid) {
@@ -214,7 +282,7 @@ function resumeSession(sessionId) {
 function navigate(nextView) {
   if (view === 'setup') readSetupForm();
   if (!engine && nextView === 'game') nextView = publicHomeView;
-  if (!engine && !['welcome', 'setup', 'pantry', 'cards', 'sessions', 'rules'].includes(nextView)) nextView = publicHomeView;
+  if (!engine && !['welcome', 'setup', 'pantry', 'cards', 'sessions', 'rules', 'faq'].includes(nextView)) nextView = publicHomeView;
   if (!engine && ['welcome', 'setup'].includes(nextView)) publicHomeView = nextView;
   view = nextView;
   render();
@@ -277,7 +345,6 @@ function processTimers() {
     audio.play('timer');
   });
   persist();
-  if (result.notices.some((notice) => notice.threshold === 0)) render();
 }
 
 async function handleAction(target) {
@@ -293,6 +360,9 @@ async function handleAction(target) {
     case 'continue-session':
     case 'resume-session': resumeSession(target.dataset.sessionId); break;
     case 'navigate': navigate(target.dataset.view); break;
+    case 'edit-ingredient-name': showIngredientNameEditor(target); break;
+    case 'save-ingredient-name': saveIngredientName(false); break;
+    case 'reset-ingredient-name': saveIngredientName(true); break;
     case 'draw-event': engine.beginEvent(); audio.play('card'); persist(); render(); break;
     case 'complete-story-card':
       if (engine.completeStoryCard()) { audio.play('complete'); persist(); render(); }
@@ -305,7 +375,7 @@ async function handleAction(target) {
     }
     case 'resolve-choice': {
       const choice = target.dataset.choice;
-      const resolved = engine.resolveChoice(choice);
+      const resolved = engine.resolveChoice(choice, Date.now(), target.dataset.ingredientId ?? null);
       const gamblerRolled = resolved && Number.isInteger(engine.state.turn.gamblerLossRoll);
       if (resolved) audio.play(gamblerRolled ? 'dice' : cueForAction(choice));
       persist(); render();
@@ -348,6 +418,9 @@ async function handleAction(target) {
       break;
     case 'confirm-watch-player':
       if (engine.confirmWatchChallengePlayer()) { audio.play('complete'); persist(); render(); }
+      break;
+    case 'reveal-secret-watch':
+      if (engine.revealSecretWatchChallenge()) { audio.play('card'); persist(); render(); }
       break;
     case 'start-watch':
       if (engine.startWatchChallengeAction()) { audio.play('move'); persist(); render(); }
@@ -476,7 +549,7 @@ async function handleAction(target) {
       navigate('sessions');
       break;
     }
-    case 'close-dialog': dialog.close(); break;
+    case 'close-dialog': ingredientRenameTarget = null; dialog.close(); break;
     default: break;
   }
 }
@@ -507,6 +580,11 @@ document.addEventListener('change', (event) => {
 });
 
 document.addEventListener('submit', (event) => {
+  if (event.target.matches('#app-dialog .dialog-frame') && ingredientRenameTarget) {
+    event.preventDefault();
+    saveIngredientName(false);
+    return;
+  }
   if (event.target.id !== 'setup-form') return;
   event.preventDefault();
   const draft = readSetupForm();
@@ -515,7 +593,13 @@ document.addEventListener('submit', (event) => {
     showToast(language() === 'de' ? 'Bitte gebt für jede Person einen Namen ein.' : 'Please enter a name for every player.');
     return;
   }
-  engine = GameEngine.create({ ...draft, names, audio: preferences.audio });
+  engine = GameEngine.create({
+    ...draft,
+    names,
+    audio: preferences.audio,
+    ingredientNames: preferences.ingredientNames,
+    shoppingStapleNames: preferences.shoppingStapleNames
+  });
   preferences = repository.savePreferences({ language: draft.defaultLanguage });
   audio.setEnabled(preferences.audio);
   view = 'game';

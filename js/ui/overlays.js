@@ -1,6 +1,6 @@
 import { CHAPTERS } from '../data/chapters.js';
 import { INGREDIENTS, INGREDIENT_EFFECT_TEXT, SHOPPING_STAPLES, suggestQuantity } from '../data/ingredients.js';
-import { formatDate, formatDuration } from '../data/i18n.js';
+import { formatDate, formatDuration, localize } from '../data/i18n.js';
 import { getElapsedSeconds, getRemainingSeconds, getTaskTimerProgress } from '../core/timers.js';
 import { avatar, escapeHtml, statusTag, t, tx } from './helpers.js';
 import { getRole } from '../data/roles.js';
@@ -126,6 +126,13 @@ export function renderPantry(engine, language) {
     const chapter = CHAPTERS.find((entry) => entry.id === courseId);
     return chapter ? t(chapter.course, language) : courseId;
   }).join(' · ');
+  const renameControl = (ingredient) => ingredientRenameControl({
+    id: ingredient.id,
+    kind: 'ingredient',
+    currentNames: ingredient.name,
+    defaultNames: INGREDIENTS.find((entry) => entry.id === ingredient.id)?.name ?? ingredient.name,
+    customized: Boolean(ingredient.customName)
+  }, language);
   const ingredientRow = (ingredient) => {
     const isBasket = ingredient.status === 'discovered';
     const tone = ingredient.status === 'used' ? 'green' : isBasket ? 'gold' : ingredient.status === 'locked' ? 'blue' : '';
@@ -137,7 +144,7 @@ export function renderPantry(engine, language) {
           ? (language === 'de' ? 'fest zugeordnet' : 'locked into course')
           : tx(ingredient.status, language);
     return `<li class="ingredient-item">
-      <strong>${t(ingredient.name, language)}</strong>${statusTag(label, tone)}
+      <div class="ingredient-name-line"><strong>${t(ingredient.name, language)}</strong>${renameControl(ingredient)}</div>${statusTag(label, tone)}
       <small>${tx('quantitySuggestion', language)}: ${t(ingredient.suggestedQuantity, language)} · ${ingredient.essential ? tx('required', language) : tx('optional', language)}</small>
       <small>${language === 'de' ? 'Mögliche Gänge' : 'Possible courses'}: ${escapeHtml(courseTagNames(ingredient))}</small>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : ''}
@@ -150,7 +157,7 @@ export function renderPantry(engine, language) {
         <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
       </div>
       <div class="content-grid">
-        ${renderShoppingStaples(engine.state.players.length, language)}
+        ${renderShoppingStaples(engine.state.players.length, language, engine.state.shoppingStapleNames, true)}
         ${CHAPTERS.map((chapter, chapterIndex) => {
           const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === chapterIndex);
           return `<section class="panel">
@@ -178,21 +185,42 @@ const INGREDIENT_GROUPS = Object.freeze([
   { id: 'drinks', de: 'Cocktails & Getränke', en: 'Cocktails & drinks' }
 ]);
 
-function renderShoppingStaples(playerCount, language) {
-  const mainCourse = CHAPTERS.find((chapter) => chapter.id === 'main');
+function localizedRenameNames(customNames, defaultNames) {
+  if (typeof customNames === 'string') return { de: customNames, en: customNames };
+  return {
+    de: customNames?.de || defaultNames.de,
+    en: customNames?.en || defaultNames.en
+  };
+}
+
+function ingredientRenameControl({ id, kind, currentNames, defaultNames, customized = false }, language) {
+  const editLabel = language === 'de' ? 'Name ändern' : 'Rename';
+  const currentName = localize(currentNames, language);
+  return `<button type="button" class="quiet-button ingredient-rename-button" data-action="edit-ingredient-name" data-ingredient-kind="${escapeHtml(kind)}" data-ingredient-id="${escapeHtml(id)}" data-current-name-de="${escapeHtml(currentNames.de)}" data-current-name-en="${escapeHtml(currentNames.en)}" data-default-name-de="${escapeHtml(defaultNames.de)}" data-default-name-en="${escapeHtml(defaultNames.en)}" data-customized="${customized}" aria-label="${escapeHtml(language === 'de' ? `${currentName} umbenennen` : `Rename ${currentName}`)}">✎ ${editLabel}</button>`;
+}
+
+function renderShoppingStaples(playerCount, language, customNames = {}, editable = false) {
   return `<section class="panel ingredient-global" data-shopping-staples>
-    <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Einkaufsrelevanter Grundvorrat' : 'Shopping staples'}</p><h2>${language === 'de' ? 'Hauptgang · Backschlauch' : 'Main course · roasting bag'}</h2></div>${statusTag(String(SHOPPING_STAPLES.length), 'gold')}</div>
-    <p class="muted">${language === 'de' ? 'Diese Dinge werden nicht erspielt, müssen aber vor dem Spiel eingekauft beziehungsweise geprüft werden.' : 'These items are not played as ingredient cards, but must be bought or checked before the game.'}</p>
-    <ul class="ingredient-list">${SHOPPING_STAPLES.map((staple) => `<li class="ingredient-item">
-      <strong>${t(staple.name, language)}</strong>${statusTag(language === 'de' ? 'Grundvorrat · verbindlich' : 'staple · required', 'blue')}
+    <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Einkaufsrelevanter Grundvorrat' : 'Shopping staples'}</p><h2>${language === 'de' ? 'Allgemeiner Küchenvorrat' : 'Shared kitchen pantry'}</h2></div>${statusTag(String(SHOPPING_STAPLES.length), 'gold')}</div>
+    <p class="muted">${language === 'de' ? 'Diese Dinge werden nicht erspielt, müssen aber vor dem Spiel eingekauft beziehungsweise geprüft werden. Verwendet sie nur, wenn sie zur gemeinsam komponierten Speise passen.' : 'These items are not played as ingredient cards, but must be bought or checked before the game. Use them only when they suit the dish composed by the crew.'}</p>
+    <ul class="ingredient-list">${SHOPPING_STAPLES.map((staple) => {
+      const currentNames = localizedRenameNames(customNames?.[staple.id], staple.name);
+      const currentName = localize(currentNames, language);
+      const courseNames = staple.courseTags.map((courseId) => {
+        const chapter = CHAPTERS.find((entry) => entry.id === courseId);
+        return chapter ? localize(chapter.course, language) : courseId;
+      }).join(' · ');
+      return `<li class="ingredient-item">
+      <div class="ingredient-name-line"><strong>${escapeHtml(currentName)}</strong>${editable ? ingredientRenameControl({ id: staple.id, kind: 'staple', currentNames, defaultNames: staple.name, customized: Boolean(customNames?.[staple.id]) }, language) : ''}</div>${statusTag(language === 'de' ? 'Grundvorrat · Einkaufsliste' : 'staple · shopping list', 'blue')}
       <small>${tx('quantitySuggestion', language)}: ${escapeHtml(suggestQuantity(staple, playerCount, language))}</small>
-      <small>${language === 'de' ? 'Verwendung' : 'Used for'}: ${t(mainCourse.course, language)}</small>
+      <small>${language === 'de' ? 'Mögliche Verwendung' : 'Possible use'}: ${escapeHtml(courseNames)}</small>
       <small class="ingredient-effect">${t(staple.note, language)}</small>
-    </li>`).join('')}</ul>
+    </li>`;
+    }).join('')}</ul>
   </section>`;
 }
 
-export function renderIngredientGuide(playerCount, language) {
+export function renderIngredientGuide(playerCount, language, ingredientNames = {}, shoppingStapleNames = {}) {
   const crewSize = Math.min(10, Math.max(6, Number(playerCount) || 6));
   return `
     <section class="screen-padding">
@@ -207,18 +235,22 @@ export function renderIngredientGuide(playerCount, language) {
         ${statusTag(`${crewSize} ${language === 'de' ? 'Personen' : 'players'}`, 'gold')}
       </div>
       <div class="content-grid">
-        ${renderShoppingStaples(crewSize, language)}
+        ${renderShoppingStaples(crewSize, language, shoppingStapleNames, true)}
         ${INGREDIENT_GROUPS.map((group) => {
           const ingredients = INGREDIENTS.filter((ingredient) => ingredient.category === group.id);
           return `<section class="panel">
             <div class="panel-header"><h2>${escapeHtml(group[language])}</h2>${statusTag(String(ingredients.length))}</div>
-            <ul class="ingredient-list">${ingredients.map((ingredient) => `<li class="ingredient-item">
-              <strong>${t(ingredient.name, language)}</strong>
+            <ul class="ingredient-list">${ingredients.map((ingredient) => {
+              const currentNames = localizedRenameNames(ingredientNames?.[ingredient.id], ingredient.name);
+              const currentName = localize(currentNames, language);
+              return `<li class="ingredient-item">
+              <div class="ingredient-name-line"><strong>${escapeHtml(currentName)}</strong>${ingredientRenameControl({ id: ingredient.id, kind: 'ingredient', currentNames, defaultNames: ingredient.name, customized: Boolean(ingredientNames?.[ingredient.id]) }, language)}</div>
               ${statusTag(ingredient.essential ? tx('required', language) : tx('optional', language), ingredient.essential ? '' : 'gold')}
               <small>${tx('quantitySuggestion', language)}: ${escapeHtml(suggestQuantity(ingredient, crewSize, language))}</small>
               <small>${language === 'de' ? 'Mögliche Gänge' : 'Possible courses'}: ${ingredient.courseTags.map((courseId) => t(CHAPTERS.find((chapter) => chapter.id === courseId)?.course ?? courseId, language)).join(' · ')}</small>
               ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : ''}
-            </li>`).join('')}</ul>
+            </li>`;
+            }).join('')}</ul>
           </section>`;
         }).join('')}
       </div>
@@ -344,30 +376,49 @@ export function renderSessions(sessions, currentSessionId, language) {
 
 export function renderRules(language) {
   const sections = language === 'de' ? [
-    ['1. Zufällig beginnen, dann reihum spielen', 'Zu Reisebeginn wird die erste Person zufällig bestimmt. Danach führt die hervorgehobene freie Person den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde. Die Crewansicht zählt alle Züge pro Person.'],
-    ['2. Drei Decks plus frühe Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Die ersten drei gezogenen Ereigniskarten des Spiels sind unterschiedliche Spaßkarten. Danach liegen während der Besetzung der Crew regelmäßig weitere Spaßkarten zwischen den Aufträgen. Challenges mit Voraussetzungen bleiben außerhalb des Ziehstapels, bis etwa genügend Zutaten verwendet wurden oder ein passender Timer beziehungsweise Küchenauftrag läuft. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
-    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Für weitere Plätze werden freie Personen mit den meisten bisherigen Zügen bevorzugt; bei manchen Karten darf die aktive Person den fairen Vorschlag ändern.'],
-    ['4. Gemischte, aber fachlich abhängige Questlinien', 'Jeder Gang nach den Tapas beginnt mit einem Abräumauftrag für den vorigen Tisch; erst danach öffnet sich die Zutatenwahl. Im Auftragsstapel liegen zunächst nur die Startkarten der Questlinien. Ein erledigter Schritt mischt seinen Nachfolger in die obersten drei Positionen. Servieraufträge werden erst freigegeben, wenn sämtliche Zubereitungsreihen fertig sind; Aufräumarbeiten folgen erst nach dem vollständigen Servieren. Spaßkarten bleiben dazwischen erhalten.'],
-    ['5. Challenge, Hintergrundzeit oder Gargrad', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Feste Ruhe-, Koch- und Kühlzeiten können als unbewertete Hintergrundtimer laufen. Back- und Bratschritte mit unklarem Garzeitpunkt haben keinen Spieltimer und werden nach dem tatsächlichen Gargrad abgehakt. Jede offene Aufgabe kann jederzeit in der Aufgabenliste erledigt werden.'],
-    ['6. Orte nach Gangfortschritt bereisen', 'Abräumen, verbindlich festgelegte Zutaten und tatsächlich abgeschlossene Gangaufgaben bestimmen gemeinsam den Fortschritt. Die sechs Locations wechseln an festen Fortschrittsschwellen; die letzte beginnt erst bei ungefähr 83 Prozent. Spaßkarten und bloße Übergaben bewegen die Route nicht.'],
-    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Beginnt der letzte mögliche Gang einer noch verfügbaren Pflichtzutat, wird sie sofort automatisch für diesen Gang festgelegt; optionale Zutaten bleiben frei. Die Suppe wird zuerst als klar oder cremig festgelegt. Zu Beginn der Cocktail-Zutatenrunde legt die aktive Person verbindlich eine, zwei oder drei Spirituosensorten für den alkoholischen Cocktail fest. Brühe, Sahne, Essig, frische Kräuter und andere Mittel zum Abschmecken sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
-    ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
-    ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
+    ['1. Das Ziel', 'Bereitet als Crew sechs Gänge zu und folgt dabei den Karten auf dem Tablet. Ihr sammelt gemeinsam Münzen: 500 Münzen entsprechen der vollständigen Süßigkeitenbeute, ein kleinerer Stand dem gleichen Anteil der Belohnung.'],
+    ['2. Ein Zug', 'Die markierte Person zieht eine Karte und führt sie aus. Die Crew darf beraten, die aktive Person entscheidet. Eine aktive Spezialfähigkeit darf höchstens einmal pro Zug verwendet werden. Danach wird das Tablet an die angezeigte nächste freie Person weitergegeben.'],
+    ['3. Zutaten', 'Tapas sind fest vorgegeben. Für alle späteren Gänge bringen Karten Zutaten in den Gangkorb, legen sie verbindlich fest oder legen sie zurück. Vor den Küchenaufgaben muss der Gangkorb leer sein. Jede Pflichtzutat wird im Spiel genau einmal verwendet.'],
+    ['4. Küchenaufgaben und Zeit', 'Neue Aufgaben gehen nur an freie Personen; die aktive Person ist an einer in ihrem Zug verteilten Aufgabe beteiligt. Jede offene Aufgabe kann jederzeit über die Aufgabenliste erledigt werden. Challenge-Zeit beeinflusst Münzen, echte Garzeit und Sicherheit haben immer Vorrang.'],
+    ['5. Ein Gang', 'Nach dem ersten Gang wird zuerst der Tisch abgeräumt. Danach bestimmt ihr Zutaten, erledigt die freigeschalteten Küchenaufgaben und esst gemeinsam. Geschichten, Spaßkarten und Ortswechsel führt die App automatisch zum passenden Zeitpunkt ein.'],
+    ['6. Sicher kochen', 'Befolgt Packungs- und Gerätehinweise, trennt rohe von verzehrfertigen Lebensmitteln und reinigt Hände, Geräte sowie Flächen. Gart Fleisch und Ersatzprodukte entsprechend ihren Vorgaben vollständig. Bei Unsicherheit gilt: Sicherheit vor Karte.']
   ] : [
-    ['1. Random start, then round robin', 'The first player is chosen randomly when the voyage begins. After that, the highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off. The crew view counts every player’s turns.'],
-    ['2. Three decks plus early fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. The first three event cards drawn in the game are different fun cards. More fun cards then appear regularly between work orders while the crew is being staffed. Conditional challenges stay out of the draw pool until enough ingredients have been used or a relevant timer or kitchen job is running. A real break appears only when no kitchen task is open.'],
-    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Free players with the most completed turns are preferred for extra places; on some cards the active player may change that fair suggestion.'],
-    ['4. Shuffled but practical quest dependencies', 'Every course after Tapas starts with a job clearing the previous table; ingredient selection opens only afterwards. The work stack initially contains only quest-line starts, and each completed step shuffles its successor into the top three positions. Serving unlocks only after every preparation line is complete; cleanup follows only after serving is finished. Fun cards remain between work events.'],
-    ['5. Challenge, background time, or doneness', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Fixed resting, cooking, and chilling periods may use unscored background timers. Baking and frying steps with uncertain timing have no game timer and are checked off by actual doneness. Every open job can be completed from the task list at any time.'],
-    ['6. Travel by course progress', 'Clearing, locked ingredients, and actually completed course jobs determine progress together. The six locations change at fixed progress thresholds, with the final one starting around 83 percent. Fun cards and handovers alone do not move the route.'],
-    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. When an available required ingredient enters its final eligible course, it is immediately locked into that course; optional ingredients remain free. Soup is first chosen as clear or cream. At the start of the cocktail ingredient round, the active player locks in whether the alcoholic cocktail will use one, two, or three spirit varieties. Stock, cream, vinegar, fresh herbs, and other final-seasoning supplies are shared pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
-    ['8. Work safely', 'Follow packaging and appliance instructions. Separate raw meat from ready-to-eat food, then clean hands, equipment, and surfaces. Cook meat thoroughly and evenly; if in doubt, verify at least 70 °C for two minutes throughout. Safety overrides every card.'],
-    ['9. Coins, effects, and secret follow-ups', '500 coins equal the complete sweet reward; 250 coins mean half is shared. Losses can reduce the balance to zero. Ingredient effects are stored for the player who drew them. Active abilities are once per turn. Counter-cards to secret curses appear randomly three to five turns later and must resolve before the course ends.']
+    ['1. The goal', 'Prepare six courses as one crew and follow the cards shown on the tablet. You collect coins together: 500 coins equal the complete sweet reward, and a lower total awards the same share of it.'],
+    ['2. A turn', 'The highlighted player draws and resolves one card. The crew may discuss, but the active player decides. An active special ability may be used at most once per turn. Then pass the tablet to the next free player shown.'],
+    ['3. Ingredients', 'Tapas are fixed. In every later course, cards add ingredients to the course basket, lock them in, or return them. The basket must be empty before kitchen tasks begin. Every essential ingredient is used exactly once during the game.'],
+    ['4. Kitchen tasks and time', 'New tasks are assigned only to free players, and the active player participates in any task dealt during their turn. Every open task can be completed from the task list at any time. Challenge time affects coins; real doneness and safety always take priority.'],
+    ['5. A course', 'After the first course, clear the table first. Then choose ingredients, complete the unlocked kitchen tasks, and eat together. The app introduces stories, fun cards, and location changes at the appropriate time.'],
+    ['6. Cook safely', 'Follow packaging and appliance instructions, separate raw food from ready-to-eat food, and clean hands, equipment, and surfaces. Cook meat and substitutes fully according to their instructions. When in doubt, safety overrides the card.']
   ];
   return `
     <section class="screen-padding">
       <div class="section-header"><div><p class="eyebrow">Adventure Dinner</p><h1>${tx('rulesTitle', language)}</h1></div></div>
       <div class="content-grid">${sections.map(([title, body]) => `<article class="panel"><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(body)}</p></article>`).join('')}</div>
       <section class="panel" style="margin-top:1rem"><p class="eyebrow">Copyright © 2026 Jonas Lummerzheim</p><p class="muted">${language === 'de' ? 'Die offizielle Website darf frei gespielt werden. Quellcode und Inhalte dürfen angesehen und heruntergeladen, aber nicht wiederverwendet, verändert oder neu gehostet werden.' : 'The official website may be played freely. Source and content may be viewed and downloaded, but may not be reused, modified, or rehosted.'}</p></section>
+    </section>`;
+}
+
+export function renderFaq(language) {
+  const entries = language === 'de' ? [
+    ['Wann und wie sollte ich eine Zutat umbenennen?', 'Am besten passt ihr die Namen vor einer neuen Reise in der Zutatenliste an – besonders vor dem Einkauf. Tippt neben der Zutat auf „Name ändern“ und tragt einen deutschen sowie einen englischen Namen ein. Während einer laufenden Reise könnt ihr den Namen dort ebenfalls ändern.'],
+    ['Wofür ist das Umbenennen gedacht?', 'Damit könnt ihr eine vorhandene Zutat durch eine für eure Crew passendere Zutat ersetzen, etwa wegen Geschmack, Ernährung, Allergien oder Verfügbarkeit. Es entsteht keine zusätzliche Zutat: Der neue Name übernimmt den Platz der ursprünglichen Zutat.'],
+    ['Welcher Ersatz ist geeignet?', 'Der Ersatz sollte kulinarisch eine ähnliche Aufgabe erfüllen und in allen bei der ursprünglichen Zutat angezeigten Gängen sinnvoll verwendbar sein. Möglich sind zum Beispiel Kokosmilch gegen Mandelmilch, Ingwer gegen Chili, Äpfel gegen Bananen oder Fleisch gegen Tofu beziehungsweise ein anderes vegetarisches Ersatzprodukt.'],
+    ['Was bleibt nach dem Umbenennen gleich?', 'Gang-Zuordnung, Kategorie, Pflichtstatus, Karteneffekt und Spielregeln bleiben unverändert. Eine umbenannte Zutat kann weiterhin nur in den Gängen erscheinen, die bei der ursprünglichen Zutat stehen. Prüft außerdem selbst, ob der angezeigte Mengenvorschlag für den Ersatz angepasst werden sollte.'],
+    ['Warum werden ein deutscher und ein englischer Name benötigt?', 'Jede Person kann das Spiel in ihrer eigenen Sprache sehen. Tragt deshalb beide Varianten ein, damit auf Karten, in Aufgaben und in der Zutatenliste immer der passende Name erscheint.'],
+    ['Was passiert, wenn alle Personen beschäftigt sind?', 'Die Zugfolge wartet, bis eine laufende Küchenaufgabe über die Aufgabenliste beendet wird. Danach ist die nächste freie Person in der bisherigen Reihenfolge am Zug.'],
+    ['Muss eine Aufgabe bis zum Timerende laufen?', 'Nein. Aufgaben dürfen jederzeit als erledigt markiert werden. Der Challenge-Timer bestimmt nur die Münzwertung; bei Backen, Braten und anderen Garprozessen entscheidet der tatsächliche Gargrad.']
+  ] : [
+    ['When and how should I rename an ingredient?', 'It is best to adjust names in the ingredient list before starting a new voyage, especially before shopping. Tap “Rename” beside the ingredient and enter both a German and an English name. You can also change the name during an active voyage.'],
+    ['What is ingredient renaming for?', 'It lets you replace an existing ingredient with one that better suits your crew because of taste, diet, allergies, or availability. It does not add another ingredient: the new name takes the original ingredient’s place.'],
+    ['What makes a suitable substitute?', 'The substitute should serve a similar culinary purpose and work in every course listed for the original ingredient. Examples include coconut milk to almond milk, ginger to chilli, apples to bananas, or meat to tofu or another vegetarian substitute.'],
+    ['What stays the same after renaming?', 'Course assignment, category, essential status, card effect, and game rules remain unchanged. A renamed ingredient can still appear only in the courses listed for the original ingredient. Also decide for yourselves whether the displayed quantity suggestion needs adjusting.'],
+    ['Why do I need a German and an English name?', 'Each player can view the game in their own language. Enter both versions so cards, tasks, and the ingredient list always show the appropriate name.'],
+    ['What happens when everyone is busy?', 'Turn order waits until an active kitchen task is completed from the task list. The next free player in the existing order then takes the turn.'],
+    ['Must a task run until its timer ends?', 'No. Tasks can be marked complete at any time. A challenge timer affects only the coin score; baking, frying, and other cooking processes follow actual doneness.']
+  ];
+  return `
+    <section class="screen-padding">
+      <div class="section-header"><div><p class="eyebrow">Adventure Dinner</p><h1>${tx('faqTitle', language)}</h1><p class="muted">${language === 'de' ? 'Kurze Antworten auf Fragen, die vor oder während einer Reise auftauchen können.' : 'Short answers to questions that may come up before or during a voyage.'}</p></div></div>
+      <div class="faq-list">${entries.map(([question, answer], index) => `<details class="panel faq-item" ${index === 0 ? 'open' : ''}><summary><span>${escapeHtml(question)}</span></summary><p class="muted">${escapeHtml(answer)}</p></details>`).join('')}</div>
     </section>`;
 }

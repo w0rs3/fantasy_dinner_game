@@ -29,6 +29,8 @@ const DEFAULT_PREFERENCES = Object.freeze({
   language: 'de',
   audio: true,
   reducedMotion: false,
+  ingredientNames: Object.freeze({}),
+  shoppingStapleNames: Object.freeze({}),
 });
 
 const SESSION_STATUS = Object.freeze({
@@ -378,6 +380,117 @@ const question = (de, en, correctDe, correctEn, wrong1De, wrong1En, wrong2De, wr
   wrong: [{ de: wrong1De, en: wrong1En }, { de: wrong2De, en: wrong2En }]
 });
 
+const ISLAND_STORIES = Object.freeze([
+  {
+    de: [
+      'Die Tapasinsel ist eine lebhafte Hafeninsel, deren weiße Häuser sich dicht um die geschützte Bucht drängen.',
+      'Über dem höchsten Dach weht ein rotes Segel mit einem silbernen Anker als Zeichen für friedliche Gäste.',
+      'Die Inselbewohner begrüßen ankommende Crews mit kleinen Tellern und tauschen Neuigkeiten gegen einen ehrlichen Trinkspruch.',
+      'Wer die Insel friedlich umrundet, darf am Abend die große Messingglocke am Rathaus läuten.'
+    ],
+    en: [
+      'Tapas Island is a lively harbour island whose white houses crowd around a sheltered bay.',
+      'A red sail bearing a silver anchor flies above the highest roof as a sign for peaceful visitors.',
+      'The islanders welcome arriving crews with small plates and trade news for an honest toast.',
+      'Anyone who circles the island in peace may ring the great brass bell at the town hall that evening.'
+    ],
+    quizzes: [
+      question('Welches Zeichen trägt das rote Segel der Tapasinsel?', 'Which symbol appears on the red sail of Tapas Island?', 'Einen silbernen Anker', 'A silver anchor', 'Einen goldenen Kraken', 'A golden octopus', 'Eine blaue Krone', 'A blue crown'),
+      question('Aus welchem Material besteht die große Glocke am Rathaus?', 'What is the great bell at the town hall made from?', 'Messing', 'Brass', 'Kupfer', 'Copper', 'Silber', 'Silver')
+    ]
+  },
+  {
+    de: [
+      'Die Nebelinsel liegt über warmen unterirdischen Quellen, deren Dampf jeden Morgen durch Felsspalten steigt.',
+      'Die Fährleute orientieren sich im dichten Weiß an drei kurzen Hornstößen, die von Tal zu Tal beantwortet werden.',
+      'An sicheren Kreuzungen hängen violette Schilfbündel, während unmarkierte Pfade tiefer ins Moor führen.',
+      'Im Inselinneren soll ein alter Kessel stehen, der niemals ganz auskühlt.'
+    ],
+    en: [
+      'Mist Island rests above warm underground springs whose steam rises through cracks in the rock each morning.',
+      'The ferrymen navigate the dense white mist by three short horn calls answered from valley to valley.',
+      'Purple bundles of reeds mark safe crossings, while unmarked paths lead deeper into the marsh.',
+      'An ancient cauldron said never to grow completely cold waits in the island’s interior.'
+    ],
+    quizzes: [
+      question('Was erzeugt jeden Morgen den Nebel der Nebelinsel?', 'What creates the mist on Mist Island each morning?', 'Warme unterirdische Quellen', 'Warm underground springs', 'Ein gefrorener See', 'A frozen lake', 'Rauchende Lagerfeuer', 'Smoking campfires'),
+      question('Wie viele kurze Hornstöße weisen den Fährleuten den Weg?', 'How many short horn calls guide the ferrymen?', 'Drei', 'Three', 'Zwei', 'Two', 'Sieben', 'Seven')
+    ]
+  },
+  {
+    de: [
+      'Die Dschungelinsel wird von einem so dichten Blätterdach bedeckt, dass selbst mittags grünes Dämmerlicht herrscht.',
+      'Steinerne Jaguare bewachen die alten Wege zwischen Fluss, Ruinen und Tempelgärten.',
+      'Forscher markieren sichere Rückwege mit gelben Schnüren, die hoch genug hängen, um nicht von Tieren fortgetragen zu werden.',
+      'Unter der Insel fließt ein klarer Strom, der an Wasserfällen und Quellen wieder ans Licht tritt.'
+    ],
+    en: [
+      'Jungle Island is covered by such a dense canopy that green twilight remains even at midday.',
+      'Stone jaguars guard the old paths between river, ruins, and temple gardens.',
+      'Explorers mark safe return routes with yellow cords hung high enough that animals cannot carry them away.',
+      'A clear current flows beneath the island and returns to daylight at waterfalls and springs.'
+    ],
+    quizzes: [
+      question('Welche Tiere bewachen als Steinfiguren die alten Wege?', 'Which animals guard the old paths as stone figures?', 'Jaguare', 'Jaguars', 'Papageien', 'Parrots', 'Affen', 'Monkeys'),
+      question('Welche Farbe haben die Schnüre für sichere Rückwege?', 'What colour are the cords marking safe return routes?', 'Gelb', 'Yellow', 'Rot', 'Red', 'Blau', 'Blue')
+    ]
+  },
+  {
+    de: [
+      'Die Vulkaninsel erhebt sich wie ein Ring aus schwarzem Basalt um einen rauchenden Gipfel.',
+      'Schmieden, Festungsmauern und Küchen nutzen dieselbe Erdwärme, die durch sorgfältig gemauerte Kanäle geleitet wird.',
+      'Bei Sonnenuntergang schimmert der Vulkanrauch violett, obwohl die Glut darunter orange bleibt.',
+      'Vor großen Festen gießt die Inselwache einen Becher Wasser auf einen warmen Stein und hört am Zischen, ob der Wind günstig steht.'
+    ],
+    en: [
+      'Volcano Island rises like a ring of black basalt around a smoking summit.',
+      'Forges, fortress walls, and kitchens share the same geothermal heat carried through carefully built channels.',
+      'At sunset the volcanic smoke shimmers violet although the embers beneath remain orange.',
+      'Before great feasts, the island watch pours a cup of water onto a warm stone and judges the wind by its hiss.'
+    ],
+    quizzes: [
+      question('Aus welchem Gestein besteht der Ring der Vulkaninsel?', 'Which rock forms the ring of Volcano Island?', 'Schwarzer Basalt', 'Black basalt', 'Weißer Marmor', 'White marble', 'Roter Sandstein', 'Red sandstone'),
+      question('Was gießt die Inselwache vor großen Festen auf einen warmen Stein?', 'What does the island watch pour onto a warm stone before great feasts?', 'Einen Becher Wasser', 'A cup of water', 'Eine Schale Öl', 'A bowl of oil', 'Einen Krug Wein', 'A jug of wine')
+    ]
+  },
+  {
+    de: [
+      'Die Tropeninsel besitzt sieben Süßwasserquellen, die zwischen Palmen, Obstgärten und warmen Lagunen hervortreten.',
+      'Eine goldene Geckofigur gilt als Inselzeichen und ist an jedem Wegweiser zu finden.',
+      'Zum Sonnenuntergang erklingen vom Strand zwei tiefe Muschelhorn-Töne, damit alle Ernteboote sicher zurückkehren.',
+      'Die Bewohner teilen reife Früchte zuerst mit Gästen und lagern den Rest in kühlen Felshöhlen.'
+    ],
+    en: [
+      'Tropical Island has seven freshwater springs emerging among palms, orchards, and warm lagoons.',
+      'A golden gecko figure is the island emblem and appears on every signpost.',
+      'At sunset two low conch-horn notes sound from the beach so every harvest boat returns safely.',
+      'The islanders share ripe fruit with guests first and store the rest in cool rock caves.'
+    ],
+    quizzes: [
+      question('Welches Tier zeigt das goldene Inselzeichen der Tropeninsel?', 'Which animal appears on Tropical Island’s golden emblem?', 'Einen Gecko', 'A gecko', 'Einen Delfin', 'A dolphin', 'Einen Papagei', 'A parrot'),
+      question('Wie viele tiefe Muschelhorn-Töne erklingen bei Sonnenuntergang?', 'How many low conch-horn notes sound at sunset?', 'Zwei', 'Two', 'Drei', 'Three', 'Fünf', 'Five')
+    ]
+  },
+  {
+    de: [
+      'Die Piratenbucht liegt verborgen unter einer schwarzen Klippe und dient freien Crews seit Generationen als friedlicher Zufluchtsort.',
+      'Drei bernsteinfarbene Laternen am Eingang bedeuten, dass Waffen verstaut und Streitigkeiten an Land gelassen werden.',
+      'Ein alter Kompass ist über der Strandbar festgenagelt und zeigt stets zur schmalen Einfahrt der Bucht.',
+      'Nach dem ältesten Gesetz der Bucht muss der letzte Schatz einer Reise mit der gesamten Crew geteilt werden.'
+    ],
+    en: [
+      'Pirate Cove lies hidden beneath a black cliff and has served free crews as a peaceful refuge for generations.',
+      'Three amber lanterns at the entrance mean that weapons must be stowed and quarrels left ashore.',
+      'An old compass is nailed above the beach bar and always points toward the cove’s narrow entrance.',
+      'Under the cove’s oldest law, the final treasure of a voyage must be shared with the entire crew.'
+    ],
+    quizzes: [
+      question('Wie viele bernsteinfarbene Laternen markieren den Eingang der Piratenbucht?', 'How many amber lanterns mark the entrance to Pirate Cove?', 'Drei', 'Three', 'Zwei', 'Two', 'Sechs', 'Six'),
+      question('Mit wem muss der letzte Schatz nach dem ältesten Gesetz geteilt werden?', 'Who must share the final treasure under the oldest law?', 'Mit der gesamten Crew', 'The entire crew', 'Nur mit dem Kapitän', 'Only the captain', 'Mit der Inselwache', 'The island watch')
+    ]
+  }
+]);
+
 const DETAIL_QUESTIONS = Object.freeze([
   [
     [question('Welche Tiere kreisen über den schiefen Masten des Hafenbeckens?', 'Which animals circle above the crooked masts of the Harbour Basin?', 'Möwen', 'Gulls', 'Raben', 'Ravens', 'Fledermäuse', 'Bats'), question('Was öffnen die Händler nach dem Glockenton?', 'What do the merchants open after the bell rings?', 'Ihre ersten Vorratskisten', 'Their first provision crates', 'Das Stadttor', 'The town gate', 'Ein Segel', 'A sail')],
@@ -429,6 +542,19 @@ const DETAIL_QUESTIONS = Object.freeze([
   ]
 ]);
 
+const ISLAND_STORY_CARDS = Object.freeze(ISLAND_STORIES.map((island, chapterIndex) => ({
+  id: `SI${chapterIndex + 1}`,
+  storyKind: 'island',
+  mandatory: true,
+  chapterId: CHAPTERS[chapterIndex].id,
+  chapterIndex,
+  title: {
+    de: `${CHAPTERS[chapterIndex].name.de} · Inselchronik`,
+    en: `${CHAPTERS[chapterIndex].name.en} · Island Chronicle`
+  },
+  story: { de: island.de.join(' '), en: island.en.join(' ') }
+})));
+
 const LOCATION_STORY_CARDS = Object.freeze(LOCATION_STORIES.flatMap((stories, chapterIndex) =>
   stories.map((story, locationIndex) => ({
     id: `SL${chapterIndex + 1}-${locationIndex + 1}`,
@@ -446,7 +572,30 @@ const LOCATION_STORY_CARDS = Object.freeze(LOCATION_STORIES.flatMap((stories, ch
   }))
 ));
 
-const detailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => DETAIL_QUESTIONS[chapterIndex][locationIndex].map((quiz, quizIndex) => {
+const islandDetailQuizzes = ISLAND_STORIES.flatMap((island, chapterIndex) => island.quizzes.map((quiz, quizIndex) => {
+  const sourceCard = ISLAND_STORY_CARDS[chapterIndex];
+  const rawAnswers = [
+    { id: 'correct', label: quiz.correct },
+    ...quiz.wrong.map((label, index) => ({ id: `wrong-${index + 1}`, label }))
+  ];
+  return {
+    id: `SQ${chapterIndex + 1}-I${quizIndex + 1}`,
+    storyKind: 'quiz',
+    quizKind: 'island-detail',
+    chapterId: CHAPTERS[chapterIndex].id,
+    sourceStoryId: sourceCard.id,
+    title: {
+      de: `Inselerinnerung ${quizIndex + 1} · ${CHAPTERS[chapterIndex].name.de}`,
+      en: `Island Memory ${quizIndex + 1} · ${CHAPTERS[chapterIndex].name.en}`
+    },
+    question: { de: quiz.de, en: quiz.en },
+    answers: rotateAnswers(rawAnswers, (chapterIndex + quizIndex) % rawAnswers.length),
+    correctAnswerId: 'correct',
+    requirements: { storyIds: [sourceCard.id] }
+  };
+}));
+
+const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => DETAIL_QUESTIONS[chapterIndex][locationIndex].map((quiz, quizIndex) => {
   const sourceCard = LOCATION_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex && card.locationIndex === locationIndex);
   const rawAnswers = [
     { id: 'correct', label: quiz.correct },
@@ -456,7 +605,7 @@ const detailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => storie
   return {
     id: `SQ${chapterIndex + 1}-D${locationIndex + 1}-${quizIndex + 1}`,
     storyKind: 'quiz',
-    quizKind: 'detail',
+    quizKind: 'location-detail',
     chapterId: CHAPTERS[chapterIndex].id,
     sourceStoryId: sourceCard.id,
     title: {
@@ -506,8 +655,9 @@ const routeQuizzes = CHAPTERS.flatMap((chapter, chapterIndex) => routeQuestionTe
   };
 }));
 
-const STORY_QUIZ_CARDS = Object.freeze([...detailQuizzes, ...routeQuizzes]);
-const STORY_CARDS = Object.freeze([...LOCATION_STORY_CARDS, ...STORY_QUIZ_CARDS]);
+const STORY_QUIZ_CARDS = Object.freeze([...islandDetailQuizzes, ...locationDetailQuizzes, ...routeQuizzes]);
+const MANDATORY_STORY_CARDS = Object.freeze([...ISLAND_STORY_CARDS, ...LOCATION_STORY_CARDS]);
+const STORY_CARDS = Object.freeze([...MANDATORY_STORY_CARDS, ...STORY_QUIZ_CARDS]);
 
 function storyCardById(storyCardId) {
   return STORY_CARDS.find((card) => card.id === storyCardId) ?? null;
@@ -515,6 +665,10 @@ function storyCardById(storyCardId) {
 
 function locationStoryCard(chapterIndex, locationIndex) {
   return LOCATION_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex && card.locationIndex === locationIndex) ?? null;
+}
+
+function islandStoryCard(chapterIndex) {
+  return ISLAND_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex) ?? null;
 }
 
 function storyLocationKey(chapterIndex, locationIndex) {
@@ -527,11 +681,14 @@ function validateStoryCatalog() {
   const titlesEn = new Set(STORY_CARDS.map((card) => card.title.en));
   return {
     total: STORY_CARDS.length,
+    islandStories: ISLAND_STORY_CARDS.length,
     locationStories: LOCATION_STORY_CARDS.length,
     quizzes: STORY_QUIZ_CARDS.length,
-    detailQuizzes: detailQuizzes.length,
+    islandDetailQuizzes: islandDetailQuizzes.length,
+    locationDetailQuizzes: locationDetailQuizzes.length,
     routeQuizzes: routeQuizzes.length,
-    valid: STORY_CARDS.length === 132 && LOCATION_STORY_CARDS.length === 36 && detailQuizzes.length === 72 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 96 &&
+    valid: STORY_CARDS.length === 150 && ISLAND_STORY_CARDS.length === 6 && LOCATION_STORY_CARDS.length === 36 &&
+      islandDetailQuizzes.length === 12 && locationDetailQuizzes.length === 72 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 108 &&
       ids.size === STORY_CARDS.length && titlesDe.size === STORY_CARDS.length && titlesEn.size === STORY_CARDS.length
   };
 }
@@ -548,6 +705,7 @@ const UI_TEXT = Object.freeze({
   navCrew: { de: 'Crew', en: 'Crew' },
   navSessions: { de: 'Reisen', en: 'Voyages' },
   navRules: { de: 'Regeln', en: 'Rules' },
+  navFaq: { de: 'FAQ', en: 'FAQ' },
   continueGame: { de: 'Reise fortsetzen', en: 'Continue voyage' },
   newGame: { de: 'Neue Reise beginnen', en: 'Start a new voyage' },
   welcomeKicker: { de: 'Kochen · Würfeln · Entdecken', en: 'Cook · Roll · Explore' },
@@ -595,6 +753,7 @@ const UI_TEXT = Object.freeze({
   deleteConfirm: { de: 'Diese Reise dauerhaft löschen?', en: 'Permanently delete this voyage?' },
   reset: { de: 'Aktuelle Reise zurücksetzen', en: 'Reset current voyage' },
   rulesTitle: { de: 'So wird gespielt', en: 'How to play' },
+  faqTitle: { de: 'Häufige Fragen', en: 'Frequently asked questions' },
   rolePassive: { de: 'Passive Fähigkeit', en: 'Passive ability' },
   roleActive: { de: 'Aktive Fähigkeit', en: 'Active ability' },
   usesLeft: { de: 'Einsätze übrig', en: 'uses left' },
@@ -893,6 +1052,24 @@ const SHOPPING_STAPLES = Object.freeze([
     'main-seasonings', 'Gewürze für den Hauptgang', 'Main-course seasonings', q(1, 1, 'Grundausstattung', 'basic selection'),
     'Mindestens Salz, Pfeffer und Paprika; weitere passende Gewürze können nach Geschmack ergänzt werden.',
     'At minimum salt, pepper, and paprika; add other suitable seasonings to taste.'
+  ),
+  shoppingStaple(
+    'coconut-milk', 'Kokosmilch', 'Coconut milk', q(400, 800, 'ml'),
+    'Als cremige, pflanzliche Grundlage für passende Suppen, Saucen, Desserts oder Cocktails nach Bedarf verwenden.',
+    'Use as a creamy plant-based base for suitable soups, sauces, desserts, or cocktails when needed.',
+    ['soup', 'main', 'dessert', 'cocktails']
+  ),
+  shoppingStaple(
+    'milk', 'Milch', 'Milk', q(1, 2, 'l'),
+    'Für passende Cremesuppen, Desserts und Cocktails nach Bedarf; nicht automatisch in jedem Gang verwenden.',
+    'Use when suitable for cream soups, desserts, and cocktails; it is not automatically used in every course.',
+    ['soup', 'dessert', 'cocktails']
+  ),
+  shoppingStaple(
+    'cream', 'Sahne', 'Cream', q(400, 800, 'ml'),
+    'Zum Abrunden passender Cremesuppen, Saucen, Desserts und Cocktails nach Bedarf bereitstellen.',
+    'Keep available to finish suitable cream soups, sauces, desserts, and cocktails when needed.',
+    ['soup', 'main', 'dessert', 'cocktails']
   )
 ]);
 
@@ -2141,6 +2318,7 @@ const MAX_EVENT_CHAIN_DEPTH = 2;
 const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
 const CURRENT_INGREDIENT_IDS = new Set(CURRENT_INGREDIENTS_BY_ID.keys());
+const CURRENT_SHOPPING_STAPLE_IDS = new Set(SHOPPING_STAPLES.map((staple) => staple.id));
 const STORED_INGREDIENT_EFFECTS = Object.freeze({
   doubleDie: { bonus: 'doubleNextDie', trigger: 'dice' },
   rerollDie: { bonus: 'rerollNext', trigger: 'dice' },
@@ -2157,6 +2335,30 @@ const LEGACY_STORED_EFFECT_ORDER = Object.freeze([
   'doubleDie', 'rerollDie', 'adjustDie', 'ignoreEvent', 'revealEvent', 'replaceEvent',
   'ignoreIngredient', 'repeatNextIngredient', 'replaceIngredient'
 ]);
+
+function normalizedCustomName(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+function normalizedLocalizedName(value) {
+  if (typeof value === 'string') {
+    const name = normalizedCustomName(value);
+    return name ? { de: name, en: name } : null;
+  }
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return null;
+  const de = normalizedCustomName(value.de);
+  const en = normalizedCustomName(value.en);
+  if (!de && !en) return null;
+  return { de: de || en, en: en || de };
+}
+
+function sanitizedNameMap(source, allowedIds) {
+  if (!source || typeof source !== 'object' || Array.isArray(source)) return {};
+  return Object.fromEntries(Object.entries(source)
+    .filter(([id]) => allowedIds.has(id))
+    .map(([id, name]) => [id, normalizedLocalizedName(name)])
+    .filter(([, name]) => Boolean(name)));
+}
 
 function supportedIngredientPlan(ingredients) {
   if (!Array.isArray(ingredients)) return false;
@@ -2223,6 +2425,7 @@ function freshTurn() {
     watchPartnerPlayerIds: [],
     pendingCocktailTeam: null,
     courseDecisionType: null,
+    watchSecretRevealedAt: null,
     watchStartedAt: null,
     watchEndsAt: null,
     watchOutcome: null,
@@ -2232,6 +2435,7 @@ function freshTurn() {
     assignedTaskId: null,
     resolvedTaskId: null,
     resolvedIngredientId: null,
+    ingredientActionTargetId: null,
     resolvedIngredientEffect: null,
     resolvedIngredientEffectMode: null,
     resolvedPreviousIngredientId: null,
@@ -2375,8 +2579,19 @@ class GameEngine {
     }
     this.state.ingredients.forEach((ingredient) => {
       const current = CURRENT_INGREDIENTS_BY_ID.get(ingredient.id);
-      if (current) ingredient.courseTags = [...current.courseTags];
+      if (current) {
+        ingredient.courseTags = [...current.courseTags];
+        const customName = normalizedLocalizedName(ingredient.customName);
+        if (customName) {
+          ingredient.customName = customName;
+          ingredient.name = clone(customName);
+        } else {
+          delete ingredient.customName;
+          ingredient.name = clone(current.name);
+        }
+      }
     });
+    this.state.shoppingStapleNames = sanitizedNameMap(this.state.shoppingStapleNames, CURRENT_SHOPPING_STAPLE_IDS);
     this.state.ingredientQueues = this.state.ingredientQueues.map((queue, chapterIndex) => {
       const chapterId = CHAPTERS[chapterIndex].id;
       const retained = queue.filter((ingredientId) => {
@@ -2474,7 +2689,7 @@ class GameEngine {
     this.state.visitedLocationIds = [...new Set((this.state.visitedLocationIds ?? []).filter((key) =>
       /^\d+:\d+$/.test(key)
     ))];
-    const knownLocationStoryIds = new Set(LOCATION_STORY_CARDS.map((card) => card.id));
+    const knownLocationStoryIds = new Set(MANDATORY_STORY_CARDS.map((card) => card.id));
     this.state.pendingLocationStoryIds = [...new Set((this.state.pendingLocationStoryIds ?? []).filter((id) =>
       knownLocationStoryIds.has(id) && !(this.state.eventsDrawn ?? []).includes(id)
     ))];
@@ -2592,6 +2807,14 @@ class GameEngine {
 
     const ingredients = buildIngredientPlan(rngState, players.length);
     rngState = ingredients.state;
+    const configuredIngredientNames = sanitizedNameMap(setup.ingredientNames, CURRENT_INGREDIENT_IDS);
+    ingredients.plan.forEach((ingredient) => {
+      const customName = configuredIngredientNames[ingredient.id];
+      if (!customName) return;
+      ingredient.customName = customName;
+      ingredient.name = clone(customName);
+    });
+    const shoppingStapleNames = sanitizedNameMap(setup.shoppingStapleNames, CURRENT_SHOPPING_STAPLE_IDS);
 
     const eventQueues = [];
     for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
@@ -2698,6 +2921,7 @@ class GameEngine {
       lastIngredientId: null,
       previousIngredientId: null,
       ingredientEffectStack: [],
+      shoppingStapleNames,
       ingredientBonuses: freshBonuses(),
       bonuses: freshBonuses(),
       activeChallenges: [],
@@ -3136,6 +3360,41 @@ class GameEngine {
 
   unlockedCourseIngredients() {
     return this.courseIngredients().filter((ingredient) => ingredient.status === 'discovered');
+  }
+
+  openCourseIngredient(ingredientId) {
+    if (!ingredientId) return null;
+    return this.state.ingredients.find((ingredient) =>
+      ingredient.id === ingredientId &&
+      ingredient.chapterIndex === this.state.chapterIndex &&
+      ingredient.status === 'discovered'
+    ) ?? null;
+  }
+
+  latestUnlockedCourseIngredient() {
+    return this.unlockedCourseIngredients().reduce((latest, ingredient) => {
+      if (!latest) return ingredient;
+      return (ingredient.discoveredAt ?? 0) >= (latest.discoveredAt ?? 0) ? ingredient : latest;
+    }, null);
+  }
+
+  ingredientActionTarget() {
+    return this.openCourseIngredient(this.state.turn.ingredientActionTargetId)
+      ?? this.openCourseIngredient(this.state.lastIngredientId)
+      ?? this.latestUnlockedCourseIngredient();
+  }
+
+  captureIngredientActionTarget(event = this.currentEvent) {
+    const actions = event?.options ?? event?.outcomes ?? [];
+    const needsIngredientTarget = actions.some((actionCode) =>
+      ['lockIngredient', 'returnIngredient', 'swapIngredient'].includes(actionCode)
+    );
+    const currentTarget = this.openCourseIngredient(this.state.lastIngredientId)
+      ?? this.latestUnlockedCourseIngredient();
+    this.state.turn.ingredientActionTargetId = needsIngredientTarget
+      ? currentTarget?.id ?? null
+      : null;
+    return this.state.turn.ingredientActionTargetId;
   }
 
   ingredientsLockedForCourse() {
@@ -3768,7 +4027,12 @@ class GameEngine {
   }
 
   currentEventStage() {
-    if (this.state.chapter.stage === 'clearing') return 'tasks';
+    // The clearing deck exists only to hand out the one opening clearing job.
+    // Once that job is assigned, free crew members keep drawing ordinary fun
+    // events while the task runs instead of seeing another clearing prompt.
+    if (this.state.chapter.stage === 'clearing') {
+      return this.taskCardCandidates().length ? 'tasks' : 'cooking';
+    }
     if (this.state.chapter.stage === 'ingredients') return 'ingredients';
     if (this.taskCardCandidates().length) return 'tasks';
     return 'cooking';
@@ -3783,12 +4047,12 @@ class GameEngine {
       case 'discoverIngredient':
       case 'treasureAndIngredient': return this.currentEventStage() === 'ingredients' &&
         this.canAddIngredientThisTurn() && this.courseIngredientCandidates().length > 0;
-      case 'lockIngredient': return this.currentEventStage() === 'ingredients' && this.unlockedCourseIngredients().length > 0;
-      case 'returnIngredient': return this.currentEventStage() === 'ingredients' && this.unlockedCourseIngredients().length > 0;
+      case 'lockIngredient': return this.currentEventStage() === 'ingredients' &&
+        this.canLockIngredient(this.ingredientActionTarget());
+      case 'returnIngredient': return this.currentEventStage() === 'ingredients' && Boolean(this.ingredientActionTarget());
       case 'swapIngredient': {
-        const ingredient = this.state.ingredients.find((entry) => entry.id === this.state.lastIngredientId && entry.status === 'discovered')
-          ?? this.unlockedCourseIngredients().at(-1);
-        return Boolean(ingredient && this.courseIngredientCandidates(ingredient.category).length);
+        const ingredient = this.ingredientActionTarget();
+        return Boolean(ingredient && this.swapIngredientAlternatives(ingredient).length);
       }
       case 'drawTask':
       case 'treasureAndTask': return this.currentEventStage() === 'tasks' && this.assignableTaskCards().length > 0;
@@ -3822,7 +4086,10 @@ class GameEngine {
     const fallbacks = this.fallbackActions(event.stage);
     if (event.type === 'choice') {
       const options = [...new Set((event.options ?? []).filter((action) => this.actionAvailable(action)))];
-      return { ...event, options: options.length ? options : fallbacks.slice(0, 2) };
+      return this.contextualizeIngredientText({
+        ...event,
+        options: options.length ? options : fallbacks.slice(0, 2)
+      });
     }
     const pool = [...new Set([...(event.outcomes ?? []), ...fallbacks, 'coinLoss', 'treasure'])]
       .filter((action) => this.actionAvailable(action));
@@ -3838,7 +4105,7 @@ class GameEngine {
       if (!selected) break;
       outcomes.push(selected);
     }
-    return { ...event, outcomes };
+    return this.contextualizeIngredientText({ ...event, outcomes });
   }
 
   taskForAction(actionCode) {
@@ -3981,16 +4248,25 @@ class GameEngine {
 
   registerLocationVisit(chapterIndex, locationIndex, now = Date.now(), { log = true } = {}) {
     const card = locationStoryCard(chapterIndex, locationIndex);
-    if (!card) return false;
+    const islandCard = islandStoryCard(chapterIndex);
+    if (!card || !islandCard) return false;
     const key = storyLocationKey(chapterIndex, locationIndex);
     const firstVisit = !this.state.visitedLocationIds.includes(key);
     if (firstVisit) this.state.visitedLocationIds.push(key);
+    const islandStoryAlreadyKnown = this.state.eventsDrawn.includes(islandCard.id) || this.state.pendingLocationStoryIds.includes(islandCard.id);
+    if (!islandStoryAlreadyKnown) {
+      const firstChapterStoryIndex = this.state.pendingLocationStoryIds.findIndex((storyId) =>
+        storyCardById(storyId)?.chapterIndex === chapterIndex
+      );
+      if (firstChapterStoryIndex < 0) this.state.pendingLocationStoryIds.push(islandCard.id);
+      else this.state.pendingLocationStoryIds.splice(firstChapterStoryIndex, 0, islandCard.id);
+    }
     const storyAlreadyKnown = this.state.eventsDrawn.includes(card.id) || this.state.pendingLocationStoryIds.includes(card.id);
     if (!storyAlreadyKnown) this.state.pendingLocationStoryIds.push(card.id);
     if (firstVisit && log) {
-      this.log('storyLocationVisited', { chapterIndex, locationIndex, locationKey: key, storyCardId: card.id }, now);
+      this.log('storyLocationVisited', { chapterIndex, locationIndex, locationKey: key, islandStoryCardId: islandCard.id, storyCardId: card.id }, now);
     }
-    return firstVisit || !storyAlreadyKnown;
+    return firstVisit || !islandStoryAlreadyKnown || !storyAlreadyKnown;
   }
 
   pendingLocationStoryForCurrentChapter() {
@@ -4023,7 +4299,7 @@ class GameEngine {
 
   openStoryCard(card, now = Date.now()) {
     if (!card || this.state.turn.phase !== 'draw') return null;
-    if (card.storyKind === 'location') {
+    if (['island', 'location'].includes(card.storyKind)) {
       const pendingIndex = this.state.pendingLocationStoryIds.indexOf(card.id);
       if (pendingIndex < 0) return null;
       this.state.pendingLocationStoryIds.splice(pendingIndex, 1);
@@ -4040,7 +4316,7 @@ class GameEngine {
     this.state.turn.currentEventId = card.id;
     this.state.turn.phase = 'event';
     if (!this.state.eventsDrawn.includes(card.id)) this.state.eventsDrawn.push(card.id);
-    this.state.turn.eventChoiceSignature = card.storyKind === 'quiz' ? `story-quiz:${card.id}` : `story-location:${card.id}`;
+    this.state.turn.eventChoiceSignature = card.storyKind === 'quiz' ? `story-quiz:${card.id}` : `story-${card.storyKind}:${card.id}`;
     this.state.turn.eventSignature = this.state.turn.eventChoiceSignature;
     this.log('storyCardDrawn', {
       eventId: card.id,
@@ -4053,11 +4329,16 @@ class GameEngine {
 
   completeStoryCard(now = Date.now()) {
     const card = this.currentEvent;
-    if (this.state.turn.phase !== 'event' || card?.storyKind !== 'location') return false;
+    if (this.state.turn.phase !== 'event' || !['island', 'location'].includes(card?.storyKind)) return false;
     this.state.turn.outcomeCode = 'storyRead';
     this.state.turn.phase = 'resolved';
-    this.markEventResolved(card, now);
-    this.log('locationStoryRead', { eventId: card.id, locationKey: card.locationKey }, now);
+    if (card.storyKind === 'location') this.markEventResolved(card, now);
+    else this.log('eventResolved', { eventId: card.id, outcomeCode: this.state.turn.outcomeCode, dieResult: null }, now);
+    this.log(card.storyKind === 'island' ? 'islandStoryRead' : 'locationStoryRead', {
+      eventId: card.id,
+      chapterIndex: card.chapterIndex,
+      locationKey: card.locationKey ?? null
+    }, now);
     this.evaluateChapter(now);
     return true;
   }
@@ -4081,7 +4362,7 @@ class GameEngine {
 
   beginEvent(now = Date.now(), skipStoredIngredientEffect = false) {
     if (this.state.status !== 'active' || this.state.turn.phase !== 'draw') return null;
-    if (this.state.chapterIndex === 1 && !this.state.chapter.courseStyle) {
+    if (this.state.chapterIndex === 1 && this.state.chapter.stage === 'ingredients' && !this.state.chapter.courseStyle) {
       this.state.turn.phase = 'courseDecision';
       this.log('soupStyleChoiceStarted', {}, now);
       return { courseDecision: 'soupStyle' };
@@ -4213,6 +4494,9 @@ class GameEngine {
     this.state.turn.currentEventId = eventId;
     this.state.turn.phase = 'event';
     this.state.eventsDrawn.push(eventId);
+    // Ingredient ids never live on queued event cards. Bind a concrete target
+    // only after this card has actually left the stack and is being revealed.
+    this.captureIngredientActionTarget(this.currentEvent);
     this.state.turn.eventChoiceSignature = controlSignature(this.currentEvent);
     this.state.turn.eventSignature = eventSignature(this.currentEvent);
     this.log('eventDrawn', { eventId, stage, playerId: this.activePlayer.id, groupId: group.id }, now);
@@ -4303,6 +4587,7 @@ class GameEngine {
   activateOngoingWatchChallenge(now = Date.now()) {
     if (this.state.turn.phase !== 'watch' || !this.currentWatchChallenge || this.currentWatchChallenge.flow !== 'ongoing') return false;
     const challenge = this.currentWatchChallenge;
+    if (challenge.secret && this.state.turn.watchSecretRevealedAt == null) return false;
     this.state.turn.watchStartedAt = now;
     const ownerPlayerId = this.activePlayer.id;
     const instance = {
@@ -4326,19 +4611,35 @@ class GameEngine {
 
   startWatchChallengeAction(now = Date.now()) {
     const challenge = this.currentWatchChallenge;
-    if (this.state.turn.phase !== 'watch' || !challenge?.secret || challenge.flow !== 'immediate' || this.state.turn.watchStartedAt != null) return false;
+    if (this.state.turn.phase !== 'watch' || !challenge?.secret || challenge.flow !== 'immediate' ||
+      this.state.turn.watchSecretRevealedAt == null || this.state.turn.watchStartedAt != null) return false;
     this.state.turn.watchStartedAt = now;
     this.state.turn.watchEndsAt = now + challenge.durationSeconds * 1000;
     this.log('watchChallengeActionStarted', { challengeId: challenge.id, playerId: this.activePlayer.id }, now);
     return true;
   }
 
-  resolveChoice(actionCode, now = Date.now()) {
+  revealSecretWatchChallenge(now = Date.now()) {
+    const challenge = this.currentWatchChallenge;
+    if (this.state.turn.phase !== 'watch' || !challenge?.secret || this.state.turn.watchSecretRevealedAt != null) return false;
+    this.state.turn.watchSecretRevealedAt = now;
+    this.log('watchChallengeSecretRevealed', { challengeId: challenge.id, playerId: this.activePlayer.id }, now);
+    return true;
+  }
+
+  resolveChoice(actionCode, now = Date.now(), ingredientTargetId = null) {
     const event = this.currentEvent;
     if (!event || event.type !== 'choice' || this.state.turn.phase !== 'event') return false;
     if (!actionCode && event.options.length === 0) return false;
     if (!event.options.includes(actionCode)) {
       throw new Error(`Choice is not available on this event: ${String(actionCode)} for ${event.id} (${event.stage}).`);
+    }
+    if (['lockIngredient', 'returnIngredient', 'swapIngredient'].includes(actionCode)) {
+      const target = this.ingredientActionTarget();
+      if (!target || (ingredientTargetId && ingredientTargetId !== target.id)) return false;
+      // Pin the concrete id before applying the card. This also protects calls
+      // restored from a turn that predates ingredient target ids.
+      this.state.turn.ingredientActionTargetId = target.id;
     }
     const needsChoice = this.applyAction(actionCode, now, 'event');
     this.state.turn.outcomeCode = actionCode;
@@ -4433,6 +4734,7 @@ class GameEngine {
   }
 
   applyAction(actionCode, now = Date.now(), context = 'event') {
+    const ingredientTargetId = context === 'event' ? this.state.turn.ingredientActionTargetId : null;
     switch (actionCode) {
       case 'drawTask': return this.prepareTaskAssignment({ group: this.activeGroup, now });
       case 'singleTask': return this.prepareTaskAssignment({ group: this.activeGroup, peopleMode: 'single', now });
@@ -4441,8 +4743,8 @@ class GameEngine {
       case 'treasureAndIngredient':
         this.addCoins(COIN_VALUES.event, 'event', now);
         return this.prepareIngredientChoice(null, context, {}, now);
-      case 'lockIngredient': this.lockLastIngredient(now); break;
-      case 'returnIngredient': this.returnLastIngredient(now); break;
+      case 'lockIngredient': this.lockLastIngredient(now, null, ingredientTargetId); break;
+      case 'returnIngredient': this.returnLastIngredient(now, ingredientTargetId); break;
       case 'treasure': this.addCoins(COIN_VALUES.event, 'event', now); break;
       case 'coinLoss': this.addCoins(COIN_VALUES.coinLoss, 'event', now); break;
       case 'fiveMinuteBreak': return this.startWatchChallenge('fiveMinuteBreak', now);
@@ -4462,7 +4764,7 @@ class GameEngine {
       case 'chain':
         if (this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH) this.state.turn.chainPending = true;
         break;
-      case 'swapIngredient': this.swapLastIngredient(now); break;
+      case 'swapIngredient': this.swapLastIngredient(now, ingredientTargetId); break;
       default: throw new Error(`Unknown action: ${actionCode}`);
     }
     return false;
@@ -4503,8 +4805,9 @@ class GameEngine {
     this.state.turn.watchChallengeIndex = WATCH_CHALLENGES.findIndex((entry) => entry.id === challenge.id);
     this.state.turn.watchTargetPlayerId = challenge.playerSelection ? null : targetPlayerId;
     this.state.turn.watchPartnerPlayerIds = this.coopPartnerPlayerIds(challenge);
-    this.state.turn.watchStartedAt = challenge.playerSelection || (challenge.secret && !challenge.mandatory) ? null : now;
-    this.state.turn.watchEndsAt = challenge.playerSelection || (challenge.secret && !challenge.mandatory) ? null : now + challenge.durationSeconds * 1000;
+    this.state.turn.watchSecretRevealedAt = challenge.secret ? null : now;
+    this.state.turn.watchStartedAt = challenge.playerSelection || challenge.secret ? null : now;
+    this.state.turn.watchEndsAt = challenge.playerSelection || challenge.secret ? null : now + challenge.durationSeconds * 1000;
     this.state.turn.phase = 'watch';
     this.log('watchChallengeStarted', {
       challengeId: challenge.id,
@@ -4828,9 +5131,10 @@ class GameEngine {
     return true;
   }
 
-  swapLastIngredient(now = Date.now()) {
-    const previous = this.state.ingredients.find((entry) => entry.id === this.state.lastIngredientId && entry.status === 'discovered')
-      ?? this.unlockedCourseIngredients().at(-1);
+  swapLastIngredient(now = Date.now(), ingredientId = null) {
+    const previous = ingredientId
+      ? this.openCourseIngredient(ingredientId)
+      : this.openCourseIngredient(this.state.lastIngredientId) ?? this.latestUnlockedCourseIngredient();
     if (!previous) return false;
     const alternatives = this.swapIngredientAlternatives(previous);
     if (!alternatives.length) return false;
@@ -4852,10 +5156,8 @@ class GameEngine {
     return true;
   }
 
-  lockLastIngredient(now = Date.now(), cocktailUse = null) {
-    const ingredient = this.state.ingredients.find((entry) => entry.id === this.state.lastIngredientId && entry.status === 'discovered')
-      ?? [...this.unlockedCourseIngredients()].sort((a, b) => (b.discoveredAt ?? 0) - (a.discoveredAt ?? 0))[0];
-    if (!ingredient) return false;
+  canLockIngredient(ingredient, cocktailUse = null) {
+    if (!this.openCourseIngredient(ingredient?.id)) return false;
     // The ingredient itself is already in the basket, so exclude it while
     // checking whether a different ingredient has filled this category.
     if (!this.courseCategoryLimitAllows(ingredient, ingredient.id)) return false;
@@ -4869,7 +5171,17 @@ class GameEngine {
       }
       const use = cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
       if (!['alcoholic', 'alcohol-free', 'shared'].includes(use) || (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
-      ingredient.cocktailUse = use;
+    }
+    return true;
+  }
+
+  lockLastIngredient(now = Date.now(), cocktailUse = null, ingredientId = null) {
+    const ingredient = ingredientId
+      ? this.openCourseIngredient(ingredientId)
+      : this.openCourseIngredient(this.state.lastIngredientId) ?? this.latestUnlockedCourseIngredient();
+    if (!this.canLockIngredient(ingredient, cocktailUse)) return false;
+    if (this.currentChapter.id === 'cocktails') {
+      ingredient.cocktailUse = cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
     }
     ingredient.status = 'locked';
     ingredient.basketCourseIndex = null;
@@ -4928,12 +5240,10 @@ class GameEngine {
     return true;
   }
 
-  returnLastIngredient(now = Date.now()) {
-    const ingredient = this.state.ingredients.find((entry) =>
-      entry.id === this.state.lastIngredientId && entry.status === 'discovered'
-    ) ?? [...this.unlockedCourseIngredients()].sort((a, b) =>
-      (b.discoveredAt ?? 0) - (a.discoveredAt ?? 0)
-    )[0];
+  returnLastIngredient(now = Date.now(), ingredientId = null) {
+    const ingredient = ingredientId
+      ? this.openCourseIngredient(ingredientId)
+      : this.openCourseIngredient(this.state.lastIngredientId) ?? this.latestUnlockedCourseIngredient();
     return ingredient ? this.removeIngredientFromBasket(ingredient.id, now) : false;
   }
 
@@ -4942,8 +5252,7 @@ class GameEngine {
       entry.id === ingredientId && entry.chapterIndex === this.state.chapterIndex && entry.status === 'discovered'
     );
     if (!ingredient || this.state.chapter.stage !== 'ingredients') return false;
-    this.state.lastIngredientId = ingredient.id;
-    return this.lockLastIngredient(now, cocktailUse);
+    return this.lockLastIngredient(now, cocktailUse, ingredient.id);
   }
 
   ingredientCategoriesForTask(card) {
@@ -5622,8 +5931,8 @@ class GameEngine {
 
   swapIngredientAlternatives(previous = null) {
     const ingredient = previous
-      ?? this.state.ingredients.find((entry) => entry.id === this.state.lastIngredientId && entry.status === 'discovered')
-      ?? this.unlockedCourseIngredients().at(-1);
+      ?? this.openCourseIngredient(this.state.lastIngredientId)
+      ?? this.latestUnlockedCourseIngredient();
     if (!ingredient) return [];
     // A mandatory ingredient on its final possible course may not be returned
     // to the global pool: there would be no later course left to consume it.
@@ -5815,7 +6124,9 @@ class GameEngine {
     const card = taskById(instance.taskId);
     const team = this.cocktailTeamForTask(card);
     const technique = team ? this.cocktailTechniqueForTeam(team, instance.chapterIndex ?? this.state.chapterIndex) : null;
-    if (!card || !technique) return card;
+    if (!card) return card;
+    const contextualizedCard = this.contextualizeIngredientText(card);
+    if (!technique) return contextualizedCard;
     const techniqueInstruction = technique === 'mixed'
       ? {
           de: 'Verbindliche Technik: Mixen. Verarbeitet die Mischung portionsweise im Mixer, bis sie gleichmäßig verbunden ist.',
@@ -5826,16 +6137,95 @@ class GameEngine {
           en: 'Required technique: stir. Stir the mixture thoroughly with ice in a jug until cold; do not blend it.'
         };
     return {
-      ...card,
+      ...contextualizedCard,
       instruction: {
-        de: `${card.instruction.de} ${techniqueInstruction.de}`,
-        en: `${card.instruction.en} ${techniqueInstruction.en}`
+        de: `${contextualizedCard.instruction.de} ${techniqueInstruction.de}`,
+        en: `${contextualizedCard.instruction.en} ${techniqueInstruction.en}`
       }
+    };
+  }
+
+  contextualizeIngredientText(value) {
+    const ingredientReplacements = this.state.ingredients
+      .filter((ingredient) => ingredient.customName)
+      .map((ingredient) => ({
+        customName: ingredient.customName,
+        originalName: CURRENT_INGREDIENTS_BY_ID.get(ingredient.id)?.name
+      }))
+      .filter((replacement) => replacement.originalName);
+    const stapleReplacements = SHOPPING_STAPLES
+      .filter((staple) => this.state.shoppingStapleNames?.[staple.id])
+      .map((staple) => ({
+        customName: this.state.shoppingStapleNames[staple.id],
+        originalName: staple.name
+      }));
+    const replacements = [...ingredientReplacements, ...stapleReplacements];
+    if (!replacements.length || !value || typeof value !== 'object') return value;
+    const contextualize = (text, language) => replacements.reduce((result, replacement) => {
+      const originalName = replacement.originalName[language];
+      if (!originalName) return result;
+      const lowerCaseVariant = `${originalName.charAt(0).toLocaleLowerCase(language)}${originalName.slice(1)}`;
+      return [...new Set([originalName, lowerCaseVariant])]
+        .reduce((localizedResult, variant) => localizedResult.replaceAll(variant, replacement.customName[language]), result);
+    }, String(text ?? ''));
+    return {
+      ...value,
+      ...Object.fromEntries(['title', 'story', 'instruction', 'questName', 'completionLabel']
+        .filter((key) => value[key]?.de !== undefined || value[key]?.en !== undefined)
+        .map((key) => [key, {
+          de: contextualize(value[key]?.de, 'de'),
+          en: contextualize(value[key]?.en, 'en')
+        }]))
     };
   }
 
   getIngredient(ingredientId) {
     return this.state.ingredients.find((entry) => entry.id === ingredientId) ?? INGREDIENTS.find((entry) => entry.id === ingredientId);
+  }
+
+  renameIngredient(ingredientId, name, now = Date.now()) {
+    const ingredient = this.state.ingredients.find((entry) => entry.id === ingredientId);
+    const customName = normalizedLocalizedName(name);
+    if (!ingredient || !customName) return false;
+    ingredient.customName = customName;
+    ingredient.name = clone(customName);
+    this.log('ingredientRenamed', { ingredientId, customName }, now);
+    return true;
+  }
+
+  resetIngredientName(ingredientId, now = Date.now()) {
+    const ingredient = this.state.ingredients.find((entry) => entry.id === ingredientId);
+    const original = CURRENT_INGREDIENTS_BY_ID.get(ingredientId);
+    if (!ingredient || !original) return false;
+    delete ingredient.customName;
+    ingredient.name = clone(original.name);
+    this.log('ingredientNameReset', { ingredientId }, now);
+    return true;
+  }
+
+  shoppingStapleName(stapleId, language = 'de') {
+    const staple = SHOPPING_STAPLES.find((entry) => entry.id === stapleId);
+    if (!staple) return '';
+    const localizedName = this.state.shoppingStapleNames?.[stapleId];
+    return localizedName?.[language === 'en' ? 'en' : 'de'] || staple.name[language === 'en' ? 'en' : 'de'];
+  }
+
+  renameShoppingStaple(stapleId, name, now = Date.now()) {
+    if (!CURRENT_SHOPPING_STAPLE_IDS.has(stapleId)) return false;
+    const customName = normalizedLocalizedName(name);
+    if (!customName) return false;
+    this.state.shoppingStapleNames ??= {};
+    this.state.shoppingStapleNames[stapleId] = customName;
+    this.log('shoppingStapleRenamed', { stapleId, customName }, now);
+    return true;
+  }
+
+  resetShoppingStapleName(stapleId, now = Date.now()) {
+    if (!CURRENT_SHOPPING_STAPLE_IDS.has(stapleId)) return false;
+    this.state.shoppingStapleNames ??= {};
+    delete this.state.shoppingStapleNames[stapleId];
+    this.log('shoppingStapleNameReset', { stapleId }, now);
+    return true;
   }
 }
 
@@ -6103,9 +6493,12 @@ function renderDieResult(value, label, result) {
 }
 
 function stageCopy(engine, language) {
-  const stage = ['clearing', 'teamSelection'].includes(engine.state.chapter.stage)
-    ? engine.state.chapter.stage
-    : engine.currentEventStage();
+  const eventStage = engine.currentEventStage();
+  const stage = engine.state.chapter.stage === 'teamSelection'
+    ? 'teamSelection'
+    : engine.state.chapter.stage === 'clearing' && eventStage === 'tasks'
+      ? 'clearing'
+      : eventStage;
   const copy = STAGE_COPY[stage]?.[language] ?? STAGE_COPY.cooking[language];
   if (engine.currentChapter.id !== 'cocktails') return copy;
   const stageNumber = { clearing: 0, teamSelection: 1, ingredients: 2, tasks: 3, cooking: 4 }[stage];
@@ -6205,7 +6598,7 @@ function eventActionText(engine, actionCode, language) {
   if (actionCode === 'lockIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
       ? engine.getIngredient(engine.state.turn.resolvedIngredientId)
-      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+      : engine.ingredientActionTarget();
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} verbindlich festlegen` : `Lock in ${t(ingredient.name, language)}`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -6213,7 +6606,7 @@ function eventActionText(engine, actionCode, language) {
   if (actionCode === 'returnIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
       ? engine.getIngredient(engine.state.turn.resolvedIngredientId)
-      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+      : engine.ingredientActionTarget();
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} aus dem Gangkorb zurücklegen` : `Return ${t(ingredient.name, language)} from the course basket`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -6221,7 +6614,7 @@ function eventActionText(engine, actionCode, language) {
   if (actionCode === 'swapIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
       ? engine.getIngredient(engine.state.turn.resolvedPreviousIngredientId)
-      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+      : engine.ingredientActionTarget();
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} gegen eine Alternative tauschen` : `Swap ${t(ingredient.name, language)} for an alternative`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -6507,17 +6900,22 @@ function renderDrawCard(engine, language) {
 
 function renderStoryEventCard(engine, language) {
   const card = engine.currentEvent;
-  if (card.storyKind === 'location') {
+  if (['island', 'location'].includes(card.storyKind)) {
+    const islandStory = card.storyKind === 'island';
     return `
-      <article class="game-card story-location-card">
+      <article class="game-card story-${card.storyKind}-card">
         ${renderCourseFlow(engine, language)}
         <div class="card-row">
-          <p class="eyebrow">${language === 'de' ? 'Verbindliche Ortsgeschichte' : 'Required location story'} · ${escapeHtml(card.id)}</p>
+          <p class="eyebrow">${language === 'de'
+            ? (islandStory ? 'Verbindliche Inselgeschichte' : 'Verbindliche Ortsgeschichte')
+            : (islandStory ? 'Required island story' : 'Required location story')} · ${escapeHtml(card.id)}</p>
           ${statusTag(language === 'de' ? 'Laut vorlesen' : 'Read aloud', 'gold')}
         </div>
         <h2>${t(card.title, language)}</h2>
         <p class="card-story">${t(card.story, language)}</p>
-        <div class="card-effect"><strong>${language === 'de' ? 'Diese Chronik gehört zu diesem Ort.' : 'This chronicle belongs to this location.'}</strong><p>${language === 'de' ? 'Lest die drei Sätze der Crew laut vor. Details daraus können später auf einer Erinnerungskarte abgefragt werden.' : 'Read the three sentences aloud to the crew. A later memory card may ask about their details.'}</p></div>
+        <div class="card-effect"><strong>${language === 'de'
+          ? (islandStory ? 'Diese Chronik eröffnet die neue Insel.' : 'Diese Chronik gehört zu diesem Ort.')
+          : (islandStory ? 'This chronicle opens the new island.' : 'This chronicle belongs to this location.')}</strong><p>${language === 'de' ? 'Lest die Geschichte der Crew laut vor. Details daraus können später auf einer Erinnerungskarte abgefragt werden.' : 'Read the story aloud to the crew. A later memory card may ask about its details.'}</p></div>
         <button class="primary-button" type="button" data-action="complete-story-card">${language === 'de' ? 'Geschichte vorgelesen' : 'Story read aloud'}</button>
       </article>`;
   }
@@ -6541,11 +6939,15 @@ function renderEventCard(engine, language) {
   const event = engine.currentEvent;
   if (event?.storyKind) return renderStoryEventCard(engine, language);
   const pauseBlocked = event.archetype === 'respite' && !event.options?.includes('fiveMinuteBreak');
-  const choices = event.options?.map((code) => `
-    <button type="button" class="choice-button" data-action="resolve-choice" data-choice="${code}">${eventActionText(engine, code, language)}</button>`).join('') ?? '';
-  const copy = engine.state.chapter.stage === 'clearing'
-    ? STAGE_COPY.clearing[language]
-    : STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
+  const choices = event.options?.map((code) => {
+    const ingredientTarget = ['lockIngredient', 'returnIngredient', 'swapIngredient'].includes(code)
+      ? engine.ingredientActionTarget()
+      : null;
+    const targetAttribute = ingredientTarget ? ` data-ingredient-id="${escapeHtml(ingredientTarget.id)}"` : '';
+    return `
+    <button type="button" class="choice-button" data-action="resolve-choice" data-choice="${code}"${targetAttribute}>${eventActionText(engine, code, language)}</button>`;
+  }).join('') ?? '';
+  const copy = STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
@@ -6905,6 +7307,26 @@ function renderResolvedCard(engine, language) {
 function renderWatchCard(engine, language) {
   const event = engine.currentEvent;
   const challenge = engine.currentWatchChallenge;
+  const secretRevealed = !challenge.secret || engine.state.turn.watchSecretRevealedAt != null;
+  if (challenge.secret && !secretRevealed) {
+    const activeName = escapeHtml(engine.activePlayer.name);
+    return `
+      <article class="game-card secret-event-announcement">
+        ${renderCourseFlow(engine, language)}
+        <p class="eyebrow">${language === 'de' ? 'Private Karte auf dem Tablet' : 'Private card on the tablet'}</p>
+        <h2>${language === 'de' ? 'Geheimes Event' : 'Secret event'}</h2>
+        <div class="secret-screen-warning" role="status">
+          <strong>${language === 'de' ? 'Alle außer der aktiven Person schauen jetzt vom großen Bildschirm weg.' : 'Everyone except the active player now looks away from the large screen.'}</strong>
+          <p>${language === 'de'
+            ? `${activeName} öffnet die Karte erst, wenn niemand sonst mehr auf den gespiegelten Bildschirm schaut.`
+            : `${activeName} opens the card only after everyone else has stopped looking at the mirrored screen.`}</p>
+        </div>
+        <p class="card-story">${language === 'de'
+          ? 'Die geheime Anweisung wird erst nach dem Öffnen sichtbar. Sie kann anschließend kurz gelesen und wieder zugeklappt werden.'
+          : 'The secret instruction is only shown after opening. It can then be read briefly and collapsed again.'}</p>
+        <button class="primary-button" type="button" data-action="reveal-secret-watch">${language === 'de' ? 'Geheimes Event öffnen' : 'Open secret event'}</button>
+      </article>`;
+  }
   if (challenge.playerSelection) {
     const selectedId = engine.state.turn.watchTargetPlayerId;
     const choices = engine.state.players.map((player) => {
@@ -6943,7 +7365,19 @@ function renderWatchCard(engine, language) {
     .filter(Boolean)
     .map(escapeHtml)
     .join(', ');
-  const awaitingSecretStart = challenge.secret && !ongoing && !mandatory && engine.state.turn.watchStartedAt == null;
+  const awaitingSecretStart = challenge.secret && !ongoing && engine.state.turn.watchStartedAt == null;
+  const secretInstruction = challenge.secret ? `
+    <div class="secret-reading-note"><strong>${language === 'de' ? `Nur ${escapeHtml(engine.activePlayer.name)} liest die Anweisung.` : `Only ${escapeHtml(engine.activePlayer.name)} reads the instruction.`}</strong> ${language === 'de' ? 'Danach bitte wieder zuklappen, bevor die anderen auf den Bildschirm schauen.' : 'Please collapse it again before everyone else looks at the screen.'}</div>
+    <details class="secret-instruction" ${engine.state.turn.watchStartedAt == null ? 'open' : ''}>
+      <summary data-open-label="${language === 'de' ? 'Ansehen' : 'View'}" data-close-label="${language === 'de' ? 'Zuklappen' : 'Collapse'}">${language === 'de' ? 'Geheime Anweisung anzeigen' : 'Show secret instruction'}</summary>
+      <div class="secret-instruction-body">
+        <h2>${t(challenge.title, language)}</h2>
+        <p class="card-story">${t(challenge, language)}</p>
+        <div class="card-effect"><strong>${language === 'de'
+          ? mandatory ? 'Nicht vorlesen: Diese Anweisung ist verbindlich.' : 'Nicht vorlesen, nicht zeigen und der Gruppe nicht erklären.'
+          : mandatory ? 'Do not read aloud: this instruction is mandatory.' : 'Do not read it aloud, show it, or explain it to the group.'}</strong></div>
+      </div>
+    </details>` : '';
   const seconds = Math.max(0, Math.ceil(((engine.state.turn.watchEndsAt ?? Date.now()) - Date.now()) / 1000));
   const durationText = challenge.endTrigger === 'ownerNextTurn'
     ? (language === 'de' ? 'Läuft bis zu deinem nächsten Zug' : 'Runs until your next turn')
@@ -6964,40 +7398,37 @@ function renderWatchCard(engine, language) {
         : cooperative
           ? (language === 'de' ? 'Koop-Zeitfüller · sofort gemeinsam ausführen' : 'Co-op interlude · do it together now')
           : (language === 'de' ? 'Zeitfüller · sofort ausführen' : 'Interlude · do it now')}</p>
-      <h2>${t(challenge.title, language)}</h2>
+      ${challenge.secret ? '' : `<h2>${t(challenge.title, language)}</h2>`}
       ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
       ${cooperative ? `<div class="card-effect"><strong>${language === 'de' ? 'Beteiligte' : 'Participants'}: ${cooperativeNames}</strong><p>${language === 'de'
         ? 'Alle ausgewählten Personen sind gerade ohne laufende Küchenaufgabe.'
         : 'Every selected participant is currently free from an active kitchen task.'}</p></div>` : ''}
-      ${challenge.secret ? `<div class="card-effect"><strong>${language === 'de'
-        ? mandatory ? 'Nicht vorlesen: Diese Anweisung ist verbindlich und muss jetzt ausgeführt werden.' : 'Nicht vorlesen, nicht zeigen und der Gruppe nicht erklären.'
-        : mandatory ? 'Do not read aloud: this instruction is mandatory and must be carried out now.' : 'Do not read it aloud, show it, or explain it to the group.'}</strong><p>${language === 'de'
-        ? `Diese Karte gilt nur für ${escapeHtml(engine.activePlayer.name)}.`
-        : `This card applies only to ${escapeHtml(engine.activePlayer.name)}.`}</p></div>` : ''}
-      <p class="card-story">${t(challenge, language)}</p>
-      <div class="challenge-clock">${mandatory ? `<span>${language === 'de' ? 'Jetzt verbindlich ausführen' : 'Carry out now'}</span>` : ongoing ? `<span>${durationText}</span>` : awaitingSecretStart
+      ${secretInstruction}
+      ${challenge.secret ? '' : `<p class="card-story">${t(challenge, language)}</p>`}
+      <div class="challenge-clock">${awaitingSecretStart
         ? `<span>${language === 'de' ? 'Noch nicht gestartet' : 'Not started yet'}</span>`
+        : mandatory ? `<span>${language === 'de' ? 'Jetzt verbindlich ausführen' : 'Carry out now'}</span>` : ongoing ? `<span>${durationText}</span>`
         : `<span class="timer" data-watch-timer>${formatDuration(seconds)}</span>`}<strong>${skillCheck ? skillScoreText : challenge.coins > 0 ? `+${challenge.coins} ${language === 'de' ? 'Münzen nach Abschluss' : 'coins after completion'}` : (language === 'de' ? 'echte Pause' : 'real break')}</strong></div>
       <div class="card-effect">${skillCheck
         ? (language === 'de' ? 'Führt genau den beschriebenen Versuch aus und wertet ehrlich. Drückt danach genau einen der beiden Ergebnis-Buttons.' : 'Perform the described attempt exactly and score it honestly. Then press exactly one of the two result buttons.')
+        : awaitingSecretStart
+          ? (language === 'de' ? 'Lies die aufgeklappte Anweisung, klappe sie wieder zu und starte das geheime Event erst dann. Die Aktion beginnt erst mit dem Startknopf.' : 'Read the expanded instruction, collapse it again, and only then start the secret event. The action begins only with the start button.')
         : mandatory
-        ? (language === 'de' ? 'Keine Auswahl und kein Startknopf: Führe die Anweisung jetzt aus und bestätige sie anschließend.' : 'There is no choice and no start button: carry out the instruction now, then confirm it.')
+        ? (language === 'de' ? 'Führe die verbindliche Anweisung jetzt aus und bestätige sie anschließend.' : 'Carry out the mandatory instruction now, then confirm it.')
         : ongoing
         ? (language === 'de' ? 'Die Aktion beginnt erst mit dem Button. Danach wird das Tablet sofort weitergegeben; die Challenge endet später automatisch.' : 'The action starts only when you press the button. The tablet is then passed immediately and the challenge ends automatically later.')
-        : awaitingSecretStart
-          ? (language === 'de' ? 'Die Aktion läuft noch nicht. Lies und merke dir den Auftrag; drücke erst dann auf „Geheime Challenge starten“. Danach führst du ihn aus, ohne die Karte zu erklären.' : 'The action is not running yet. Read and remember it, then press “Start secret challenge”. Carry it out without explaining the card.')
-          : challenge.secret
+        : challenge.secret
             ? (language === 'de' ? 'Die geheime Challenge läuft jetzt. Führe sie aus, ohne der Gruppe die Karte zu erklären.' : 'The secret challenge is now running. Carry it out without explaining the card to the group.')
             : (language === 'de' ? 'Erledigt die kurze Aktion jetzt; laufende Küchen-Challenges bleiben davon unberührt.' : 'Complete the short action now; running kitchen challenges continue independently.')}</div>
       ${skillCheck ? `<div class="button-row skill-check-actions">
         <button class="primary-button" type="button" data-action="resolve-watch-outcome" data-outcome="success">${language === 'de' ? `Hat geklappt · +${challenge.successCoins} Münzen` : `Succeeded · +${challenge.successCoins} coins`}</button>
         <button class="secondary-button" type="button" data-action="resolve-watch-outcome" data-outcome="failure">${language === 'de' ? `Gescheitert · −${failureCoins} Münzen` : `Failed · −${failureCoins} coins`}</button>
-      </div>` : `<button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${mandatory
-        ? (language === 'de' ? 'Anweisung ausgeführt' : 'Instruction completed')
-        : ongoing
+      </div>` : `<button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${ongoing
         ? (language === 'de' ? 'Geheime Challenge starten & Tablet weitergeben' : 'Start secret challenge & pass the tablet')
         : awaitingSecretStart
-          ? (language === 'de' ? 'Geheime Challenge starten' : 'Start secret challenge')
+          ? (language === 'de' ? 'Geheimes Event starten' : 'Start secret event')
+          : mandatory
+            ? (language === 'de' ? 'Anweisung ausgeführt' : 'Instruction completed')
           : (language === 'de' ? 'Challenge abgeschlossen' : 'Challenge complete')}</button>`}
     </article>`;
 }
@@ -7277,6 +7708,13 @@ function renderPantry(engine, language) {
     const chapter = CHAPTERS.find((entry) => entry.id === courseId);
     return chapter ? t(chapter.course, language) : courseId;
   }).join(' · ');
+  const renameControl = (ingredient) => ingredientRenameControl({
+    id: ingredient.id,
+    kind: 'ingredient',
+    currentNames: ingredient.name,
+    defaultNames: INGREDIENTS.find((entry) => entry.id === ingredient.id)?.name ?? ingredient.name,
+    customized: Boolean(ingredient.customName)
+  }, language);
   const ingredientRow = (ingredient) => {
     const isBasket = ingredient.status === 'discovered';
     const tone = ingredient.status === 'used' ? 'green' : isBasket ? 'gold' : ingredient.status === 'locked' ? 'blue' : '';
@@ -7288,7 +7726,7 @@ function renderPantry(engine, language) {
           ? (language === 'de' ? 'fest zugeordnet' : 'locked into course')
           : tx(ingredient.status, language);
     return `<li class="ingredient-item">
-      <strong>${t(ingredient.name, language)}</strong>${statusTag(label, tone)}
+      <div class="ingredient-name-line"><strong>${t(ingredient.name, language)}</strong>${renameControl(ingredient)}</div>${statusTag(label, tone)}
       <small>${tx('quantitySuggestion', language)}: ${t(ingredient.suggestedQuantity, language)} · ${ingredient.essential ? tx('required', language) : tx('optional', language)}</small>
       <small>${language === 'de' ? 'Mögliche Gänge' : 'Possible courses'}: ${escapeHtml(courseTagNames(ingredient))}</small>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : ''}
@@ -7301,7 +7739,7 @@ function renderPantry(engine, language) {
         <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
       </div>
       <div class="content-grid">
-        ${renderShoppingStaples(engine.state.players.length, language)}
+        ${renderShoppingStaples(engine.state.players.length, language, engine.state.shoppingStapleNames, true)}
         ${CHAPTERS.map((chapter, chapterIndex) => {
           const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === chapterIndex);
           return `<section class="panel">
@@ -7329,21 +7767,42 @@ const INGREDIENT_GROUPS = Object.freeze([
   { id: 'drinks', de: 'Cocktails & Getränke', en: 'Cocktails & drinks' }
 ]);
 
-function renderShoppingStaples(playerCount, language) {
-  const mainCourse = CHAPTERS.find((chapter) => chapter.id === 'main');
+function localizedRenameNames(customNames, defaultNames) {
+  if (typeof customNames === 'string') return { de: customNames, en: customNames };
+  return {
+    de: customNames?.de || defaultNames.de,
+    en: customNames?.en || defaultNames.en
+  };
+}
+
+function ingredientRenameControl({ id, kind, currentNames, defaultNames, customized = false }, language) {
+  const editLabel = language === 'de' ? 'Name ändern' : 'Rename';
+  const currentName = localize(currentNames, language);
+  return `<button type="button" class="quiet-button ingredient-rename-button" data-action="edit-ingredient-name" data-ingredient-kind="${escapeHtml(kind)}" data-ingredient-id="${escapeHtml(id)}" data-current-name-de="${escapeHtml(currentNames.de)}" data-current-name-en="${escapeHtml(currentNames.en)}" data-default-name-de="${escapeHtml(defaultNames.de)}" data-default-name-en="${escapeHtml(defaultNames.en)}" data-customized="${customized}" aria-label="${escapeHtml(language === 'de' ? `${currentName} umbenennen` : `Rename ${currentName}`)}">✎ ${editLabel}</button>`;
+}
+
+function renderShoppingStaples(playerCount, language, customNames = {}, editable = false) {
   return `<section class="panel ingredient-global" data-shopping-staples>
-    <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Einkaufsrelevanter Grundvorrat' : 'Shopping staples'}</p><h2>${language === 'de' ? 'Hauptgang · Backschlauch' : 'Main course · roasting bag'}</h2></div>${statusTag(String(SHOPPING_STAPLES.length), 'gold')}</div>
-    <p class="muted">${language === 'de' ? 'Diese Dinge werden nicht erspielt, müssen aber vor dem Spiel eingekauft beziehungsweise geprüft werden.' : 'These items are not played as ingredient cards, but must be bought or checked before the game.'}</p>
-    <ul class="ingredient-list">${SHOPPING_STAPLES.map((staple) => `<li class="ingredient-item">
-      <strong>${t(staple.name, language)}</strong>${statusTag(language === 'de' ? 'Grundvorrat · verbindlich' : 'staple · required', 'blue')}
+    <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Einkaufsrelevanter Grundvorrat' : 'Shopping staples'}</p><h2>${language === 'de' ? 'Allgemeiner Küchenvorrat' : 'Shared kitchen pantry'}</h2></div>${statusTag(String(SHOPPING_STAPLES.length), 'gold')}</div>
+    <p class="muted">${language === 'de' ? 'Diese Dinge werden nicht erspielt, müssen aber vor dem Spiel eingekauft beziehungsweise geprüft werden. Verwendet sie nur, wenn sie zur gemeinsam komponierten Speise passen.' : 'These items are not played as ingredient cards, but must be bought or checked before the game. Use them only when they suit the dish composed by the crew.'}</p>
+    <ul class="ingredient-list">${SHOPPING_STAPLES.map((staple) => {
+      const currentNames = localizedRenameNames(customNames?.[staple.id], staple.name);
+      const currentName = localize(currentNames, language);
+      const courseNames = staple.courseTags.map((courseId) => {
+        const chapter = CHAPTERS.find((entry) => entry.id === courseId);
+        return chapter ? localize(chapter.course, language) : courseId;
+      }).join(' · ');
+      return `<li class="ingredient-item">
+      <div class="ingredient-name-line"><strong>${escapeHtml(currentName)}</strong>${editable ? ingredientRenameControl({ id: staple.id, kind: 'staple', currentNames, defaultNames: staple.name, customized: Boolean(customNames?.[staple.id]) }, language) : ''}</div>${statusTag(language === 'de' ? 'Grundvorrat · Einkaufsliste' : 'staple · shopping list', 'blue')}
       <small>${tx('quantitySuggestion', language)}: ${escapeHtml(suggestQuantity(staple, playerCount, language))}</small>
-      <small>${language === 'de' ? 'Verwendung' : 'Used for'}: ${t(mainCourse.course, language)}</small>
+      <small>${language === 'de' ? 'Mögliche Verwendung' : 'Possible use'}: ${escapeHtml(courseNames)}</small>
       <small class="ingredient-effect">${t(staple.note, language)}</small>
-    </li>`).join('')}</ul>
+    </li>`;
+    }).join('')}</ul>
   </section>`;
 }
 
-function renderIngredientGuide(playerCount, language) {
+function renderIngredientGuide(playerCount, language, ingredientNames = {}, shoppingStapleNames = {}) {
   const crewSize = Math.min(10, Math.max(6, Number(playerCount) || 6));
   return `
     <section class="screen-padding">
@@ -7358,18 +7817,22 @@ function renderIngredientGuide(playerCount, language) {
         ${statusTag(`${crewSize} ${language === 'de' ? 'Personen' : 'players'}`, 'gold')}
       </div>
       <div class="content-grid">
-        ${renderShoppingStaples(crewSize, language)}
+        ${renderShoppingStaples(crewSize, language, shoppingStapleNames, true)}
         ${INGREDIENT_GROUPS.map((group) => {
           const ingredients = INGREDIENTS.filter((ingredient) => ingredient.category === group.id);
           return `<section class="panel">
             <div class="panel-header"><h2>${escapeHtml(group[language])}</h2>${statusTag(String(ingredients.length))}</div>
-            <ul class="ingredient-list">${ingredients.map((ingredient) => `<li class="ingredient-item">
-              <strong>${t(ingredient.name, language)}</strong>
+            <ul class="ingredient-list">${ingredients.map((ingredient) => {
+              const currentNames = localizedRenameNames(ingredientNames?.[ingredient.id], ingredient.name);
+              const currentName = localize(currentNames, language);
+              return `<li class="ingredient-item">
+              <div class="ingredient-name-line"><strong>${escapeHtml(currentName)}</strong>${ingredientRenameControl({ id: ingredient.id, kind: 'ingredient', currentNames, defaultNames: ingredient.name, customized: Boolean(ingredientNames?.[ingredient.id]) }, language)}</div>
               ${statusTag(ingredient.essential ? tx('required', language) : tx('optional', language), ingredient.essential ? '' : 'gold')}
               <small>${tx('quantitySuggestion', language)}: ${escapeHtml(suggestQuantity(ingredient, crewSize, language))}</small>
               <small>${language === 'de' ? 'Mögliche Gänge' : 'Possible courses'}: ${ingredient.courseTags.map((courseId) => t(CHAPTERS.find((chapter) => chapter.id === courseId)?.course ?? courseId, language)).join(' · ')}</small>
               ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : ''}
-            </li>`).join('')}</ul>
+            </li>`;
+            }).join('')}</ul>
           </section>`;
         }).join('')}
       </div>
@@ -7495,31 +7958,50 @@ function renderSessions(sessions, currentSessionId, language) {
 
 function renderRules(language) {
   const sections = language === 'de' ? [
-    ['1. Zufällig beginnen, dann reihum spielen', 'Zu Reisebeginn wird die erste Person zufällig bestimmt. Danach führt die hervorgehobene freie Person den Zug aus. Wer eine offene Küchenaufgabe hat, wird automatisch übersprungen. Sind alle beschäftigt, wartet das Spiel in der Aufgabenansicht, bis ein fertiger Schritt abgehakt wurde. Die Crewansicht zählt alle Züge pro Person.'],
-    ['2. Drei Decks plus frühe Spaßkarten', 'Vorrats-, Auftrags- und freie Kochereignisse folgen dem echten Zustand des Gangs. Die ersten drei gezogenen Ereigniskarten des Spiels sind unterschiedliche Spaßkarten. Danach liegen während der Besetzung der Crew regelmäßig weitere Spaßkarten zwischen den Aufträgen. Challenges mit Voraussetzungen bleiben außerhalb des Ziehstapels, bis etwa genügend Zutaten verwendet wurden oder ein passender Timer beziehungsweise Küchenauftrag läuft. Eine echte Pause wird nur angeboten, wenn keine Küchenaufgabe offen ist.'],
-    ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Für weitere Plätze werden freie Personen mit den meisten bisherigen Zügen bevorzugt; bei manchen Karten darf die aktive Person den fairen Vorschlag ändern.'],
-    ['4. Gemischte, aber fachlich abhängige Questlinien', 'Jeder Gang nach den Tapas beginnt mit einem Abräumauftrag für den vorigen Tisch; erst danach öffnet sich die Zutatenwahl. Im Auftragsstapel liegen zunächst nur die Startkarten der Questlinien. Ein erledigter Schritt mischt seinen Nachfolger in die obersten drei Positionen. Servieraufträge werden erst freigegeben, wenn sämtliche Zubereitungsreihen fertig sind; Aufräumarbeiten folgen erst nach dem vollständigen Servieren. Spaßkarten bleiben dazwischen erhalten.'],
-    ['5. Challenge, Hintergrundzeit oder Gargrad', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Feste Ruhe-, Koch- und Kühlzeiten können als unbewertete Hintergrundtimer laufen. Back- und Bratschritte mit unklarem Garzeitpunkt haben keinen Spieltimer und werden nach dem tatsächlichen Gargrad abgehakt. Jede offene Aufgabe kann jederzeit in der Aufgabenliste erledigt werden.'],
-    ['6. Orte nach Gangfortschritt bereisen', 'Abräumen, verbindlich festgelegte Zutaten und tatsächlich abgeschlossene Gangaufgaben bestimmen gemeinsam den Fortschritt. Die sechs Locations wechseln an festen Fortschrittsschwellen; die letzte beginnt erst bei ungefähr 83 Prozent. Spaßkarten und bloße Übergaben bewegen die Route nicht.'],
-    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Beginnt der letzte mögliche Gang einer noch verfügbaren Pflichtzutat, wird sie sofort automatisch für diesen Gang festgelegt; optionale Zutaten bleiben frei. Die Suppe wird zuerst als klar oder cremig festgelegt. Zu Beginn der Cocktail-Zutatenrunde legt die aktive Person verbindlich eine, zwei oder drei Spirituosensorten für den alkoholischen Cocktail fest. Brühe, Sahne, Essig, frische Kräuter und andere Mittel zum Abschmecken sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
-    ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
-    ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
+    ['1. Das Ziel', 'Bereitet als Crew sechs Gänge zu und folgt dabei den Karten auf dem Tablet. Ihr sammelt gemeinsam Münzen: 500 Münzen entsprechen der vollständigen Süßigkeitenbeute, ein kleinerer Stand dem gleichen Anteil der Belohnung.'],
+    ['2. Ein Zug', 'Die markierte Person zieht eine Karte und führt sie aus. Die Crew darf beraten, die aktive Person entscheidet. Eine aktive Spezialfähigkeit darf höchstens einmal pro Zug verwendet werden. Danach wird das Tablet an die angezeigte nächste freie Person weitergegeben.'],
+    ['3. Zutaten', 'Tapas sind fest vorgegeben. Für alle späteren Gänge bringen Karten Zutaten in den Gangkorb, legen sie verbindlich fest oder legen sie zurück. Vor den Küchenaufgaben muss der Gangkorb leer sein. Jede Pflichtzutat wird im Spiel genau einmal verwendet.'],
+    ['4. Küchenaufgaben und Zeit', 'Neue Aufgaben gehen nur an freie Personen; die aktive Person ist an einer in ihrem Zug verteilten Aufgabe beteiligt. Jede offene Aufgabe kann jederzeit über die Aufgabenliste erledigt werden. Challenge-Zeit beeinflusst Münzen, echte Garzeit und Sicherheit haben immer Vorrang.'],
+    ['5. Ein Gang', 'Nach dem ersten Gang wird zuerst der Tisch abgeräumt. Danach bestimmt ihr Zutaten, erledigt die freigeschalteten Küchenaufgaben und esst gemeinsam. Geschichten, Spaßkarten und Ortswechsel führt die App automatisch zum passenden Zeitpunkt ein.'],
+    ['6. Sicher kochen', 'Befolgt Packungs- und Gerätehinweise, trennt rohe von verzehrfertigen Lebensmitteln und reinigt Hände, Geräte sowie Flächen. Gart Fleisch und Ersatzprodukte entsprechend ihren Vorgaben vollständig. Bei Unsicherheit gilt: Sicherheit vor Karte.']
   ] : [
-    ['1. Random start, then round robin', 'The first player is chosen randomly when the voyage begins. After that, the highlighted free player leads the turn. Anyone with an open kitchen task is skipped automatically. If everyone is busy, the game waits in the task view until a finished step is checked off. The crew view counts every player’s turns.'],
-    ['2. Three decks plus early fun cards', 'Provision, work-order, and open cooking events follow the real state of the course. The first three event cards drawn in the game are different fun cards. More fun cards then appear regularly between work orders while the crew is being staffed. Conditional challenges stay out of the draw pool until enough ingredients have been used or a relevant timer or kitchen job is running. A real break appears only when no kitchen task is open.'],
-    ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Free players with the most completed turns are preferred for extra places; on some cards the active player may change that fair suggestion.'],
-    ['4. Shuffled but practical quest dependencies', 'Every course after Tapas starts with a job clearing the previous table; ingredient selection opens only afterwards. The work stack initially contains only quest-line starts, and each completed step shuffles its successor into the top three positions. Serving unlocks only after every preparation line is complete; cleanup follows only after serving is finished. Fun cards remain between work events.'],
-    ['5. Challenge, background time, or doneness', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Fixed resting, cooking, and chilling periods may use unscored background timers. Baking and frying steps with uncertain timing have no game timer and are checked off by actual doneness. Every open job can be completed from the task list at any time.'],
-    ['6. Travel by course progress', 'Clearing, locked ingredients, and actually completed course jobs determine progress together. The six locations change at fixed progress thresholds, with the final one starting around 83 percent. Fun cards and handovers alone do not move the route.'],
-    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. When an available required ingredient enters its final eligible course, it is immediately locked into that course; optional ingredients remain free. Soup is first chosen as clear or cream. At the start of the cocktail ingredient round, the active player locks in whether the alcoholic cocktail will use one, two, or three spirit varieties. Stock, cream, vinegar, fresh herbs, and other final-seasoning supplies are shared pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
-    ['8. Work safely', 'Follow packaging and appliance instructions. Separate raw meat from ready-to-eat food, then clean hands, equipment, and surfaces. Cook meat thoroughly and evenly; if in doubt, verify at least 70 °C for two minutes throughout. Safety overrides every card.'],
-    ['9. Coins, effects, and secret follow-ups', '500 coins equal the complete sweet reward; 250 coins mean half is shared. Losses can reduce the balance to zero. Ingredient effects are stored for the player who drew them. Active abilities are once per turn. Counter-cards to secret curses appear randomly three to five turns later and must resolve before the course ends.']
+    ['1. The goal', 'Prepare six courses as one crew and follow the cards shown on the tablet. You collect coins together: 500 coins equal the complete sweet reward, and a lower total awards the same share of it.'],
+    ['2. A turn', 'The highlighted player draws and resolves one card. The crew may discuss, but the active player decides. An active special ability may be used at most once per turn. Then pass the tablet to the next free player shown.'],
+    ['3. Ingredients', 'Tapas are fixed. In every later course, cards add ingredients to the course basket, lock them in, or return them. The basket must be empty before kitchen tasks begin. Every essential ingredient is used exactly once during the game.'],
+    ['4. Kitchen tasks and time', 'New tasks are assigned only to free players, and the active player participates in any task dealt during their turn. Every open task can be completed from the task list at any time. Challenge time affects coins; real doneness and safety always take priority.'],
+    ['5. A course', 'After the first course, clear the table first. Then choose ingredients, complete the unlocked kitchen tasks, and eat together. The app introduces stories, fun cards, and location changes at the appropriate time.'],
+    ['6. Cook safely', 'Follow packaging and appliance instructions, separate raw food from ready-to-eat food, and clean hands, equipment, and surfaces. Cook meat and substitutes fully according to their instructions. When in doubt, safety overrides the card.']
   ];
   return `
     <section class="screen-padding">
       <div class="section-header"><div><p class="eyebrow">Adventure Dinner</p><h1>${tx('rulesTitle', language)}</h1></div></div>
       <div class="content-grid">${sections.map(([title, body]) => `<article class="panel"><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(body)}</p></article>`).join('')}</div>
       <section class="panel" style="margin-top:1rem"><p class="eyebrow">Copyright © 2026 Jonas Lummerzheim</p><p class="muted">${language === 'de' ? 'Die offizielle Website darf frei gespielt werden. Quellcode und Inhalte dürfen angesehen und heruntergeladen, aber nicht wiederverwendet, verändert oder neu gehostet werden.' : 'The official website may be played freely. Source and content may be viewed and downloaded, but may not be reused, modified, or rehosted.'}</p></section>
+    </section>`;
+}
+
+function renderFaq(language) {
+  const entries = language === 'de' ? [
+    ['Wann und wie sollte ich eine Zutat umbenennen?', 'Am besten passt ihr die Namen vor einer neuen Reise in der Zutatenliste an – besonders vor dem Einkauf. Tippt neben der Zutat auf „Name ändern“ und tragt einen deutschen sowie einen englischen Namen ein. Während einer laufenden Reise könnt ihr den Namen dort ebenfalls ändern.'],
+    ['Wofür ist das Umbenennen gedacht?', 'Damit könnt ihr eine vorhandene Zutat durch eine für eure Crew passendere Zutat ersetzen, etwa wegen Geschmack, Ernährung, Allergien oder Verfügbarkeit. Es entsteht keine zusätzliche Zutat: Der neue Name übernimmt den Platz der ursprünglichen Zutat.'],
+    ['Welcher Ersatz ist geeignet?', 'Der Ersatz sollte kulinarisch eine ähnliche Aufgabe erfüllen und in allen bei der ursprünglichen Zutat angezeigten Gängen sinnvoll verwendbar sein. Möglich sind zum Beispiel Kokosmilch gegen Mandelmilch, Ingwer gegen Chili, Äpfel gegen Bananen oder Fleisch gegen Tofu beziehungsweise ein anderes vegetarisches Ersatzprodukt.'],
+    ['Was bleibt nach dem Umbenennen gleich?', 'Gang-Zuordnung, Kategorie, Pflichtstatus, Karteneffekt und Spielregeln bleiben unverändert. Eine umbenannte Zutat kann weiterhin nur in den Gängen erscheinen, die bei der ursprünglichen Zutat stehen. Prüft außerdem selbst, ob der angezeigte Mengenvorschlag für den Ersatz angepasst werden sollte.'],
+    ['Warum werden ein deutscher und ein englischer Name benötigt?', 'Jede Person kann das Spiel in ihrer eigenen Sprache sehen. Tragt deshalb beide Varianten ein, damit auf Karten, in Aufgaben und in der Zutatenliste immer der passende Name erscheint.'],
+    ['Was passiert, wenn alle Personen beschäftigt sind?', 'Die Zugfolge wartet, bis eine laufende Küchenaufgabe über die Aufgabenliste beendet wird. Danach ist die nächste freie Person in der bisherigen Reihenfolge am Zug.'],
+    ['Muss eine Aufgabe bis zum Timerende laufen?', 'Nein. Aufgaben dürfen jederzeit als erledigt markiert werden. Der Challenge-Timer bestimmt nur die Münzwertung; bei Backen, Braten und anderen Garprozessen entscheidet der tatsächliche Gargrad.']
+  ] : [
+    ['When and how should I rename an ingredient?', 'It is best to adjust names in the ingredient list before starting a new voyage, especially before shopping. Tap “Rename” beside the ingredient and enter both a German and an English name. You can also change the name during an active voyage.'],
+    ['What is ingredient renaming for?', 'It lets you replace an existing ingredient with one that better suits your crew because of taste, diet, allergies, or availability. It does not add another ingredient: the new name takes the original ingredient’s place.'],
+    ['What makes a suitable substitute?', 'The substitute should serve a similar culinary purpose and work in every course listed for the original ingredient. Examples include coconut milk to almond milk, ginger to chilli, apples to bananas, or meat to tofu or another vegetarian substitute.'],
+    ['What stays the same after renaming?', 'Course assignment, category, essential status, card effect, and game rules remain unchanged. A renamed ingredient can still appear only in the courses listed for the original ingredient. Also decide for yourselves whether the displayed quantity suggestion needs adjusting.'],
+    ['Why do I need a German and an English name?', 'Each player can view the game in their own language. Enter both versions so cards, tasks, and the ingredient list always show the appropriate name.'],
+    ['What happens when everyone is busy?', 'Turn order waits until an active kitchen task is completed from the task list. The next free player in the existing order then takes the turn.'],
+    ['Must a task run until its timer ends?', 'No. Tasks can be marked complete at any time. A challenge timer affects only the coin score; baking, frying, and other cooking processes follow actual doneness.']
+  ];
+  return `
+    <section class="screen-padding">
+      <div class="section-header"><div><p class="eyebrow">Adventure Dinner</p><h1>${tx('faqTitle', language)}</h1><p class="muted">${language === 'de' ? 'Kurze Antworten auf Fragen, die vor oder während einer Reise auftauchen können.' : 'Short answers to questions that may come up before or during a voyage.'}</p></div></div>
+      <div class="faq-list">${entries.map(([question, answer], index) => `<details class="panel faq-item" ${index === 0 ? 'open' : ''}><summary><span>${escapeHtml(question)}</span></summary><p class="muted">${escapeHtml(answer)}</p></details>`).join('')}</div>
     </section>`;
 }
 
@@ -7606,6 +8088,7 @@ function catalogUsage(engine) {
     fun: new Set(state?.funCardsDrawn ?? []),
     tasks: new Map((state?.tasks ?? []).map((instance) => [instance.taskId, instance])),
     ingredients: new Map((state?.ingredients ?? []).map((ingredient) => [ingredient.id, ingredient])),
+    shoppingStapleNames: state?.shoppingStapleNames ?? {},
     roles: new Set((state?.players ?? []).map((player) => player.roleId))
   };
 }
@@ -7648,11 +8131,12 @@ function catalogPrerequisiteState(requirement, language) {
     : catalogLanguageText(language, 'erledigt sein', 'be completed');
 }
 
-function catalogIngredientRequirement(requirement, language) {
+function catalogIngredientRequirement(requirement, language, usage = null) {
   if (!requirement) return '';
-  const requiredIngredients = (requirement.ids ?? []).map((ingredientId) => INGREDIENTS.find((ingredient) => ingredient.id === ingredientId)).filter(Boolean);
+  const ingredientById = (ingredientId) => usage?.ingredients.get(ingredientId) ?? INGREDIENTS.find((ingredient) => ingredient.id === ingredientId);
+  const requiredIngredients = (requirement.ids ?? []).map(ingredientById).filter(Boolean);
   const requiredCategories = (requirement.categories ?? []).map((category) => localize(CATALOG_CATEGORY_LABELS[category] ?? category, language));
-  const excludedIngredients = (requirement.excludeIds ?? []).map((ingredientId) => INGREDIENTS.find((ingredient) => ingredient.id === ingredientId)).filter(Boolean);
+  const excludedIngredients = (requirement.excludeIds ?? []).map(ingredientById).filter(Boolean);
   const ingredientNames = requiredIngredients.map((ingredient) => localize(ingredient.name, language));
   const excludedNames = excludedIngredients.map((ingredient) => localize(ingredient.name, language));
   const alternatives = [...ingredientNames, ...requiredCategories];
@@ -7668,7 +8152,21 @@ function catalogQuoted(value, language) {
   return language === 'de' ? `„${value}“` : `“${value}”`;
 }
 
-function catalogTaskRequirements(card, cardByBlueprint, language, previousCard = null) {
+function catalogIngredientText(value, usage) {
+  if (!usage?.hasSession || !value || typeof value !== 'object') return value;
+  const replacements = [
+    ...INGREDIENTS.map((ingredient) => ({ originalName: ingredient.name, customName: usage.ingredients.get(ingredient.id)?.customName })),
+    ...SHOPPING_STAPLES.map((staple) => ({ originalName: staple.name, customName: usage.shoppingStapleNames[staple.id] }))
+  ].filter((replacement) => replacement.customName);
+  return Object.fromEntries(['de', 'en'].map((language) => [language, replacements.reduce((text, replacement) => {
+    const originalName = replacement.originalName[language];
+    const lowerCaseVariant = `${originalName.charAt(0).toLocaleLowerCase(language)}${originalName.slice(1)}`;
+    return [...new Set([originalName, lowerCaseVariant])]
+      .reduce((result, variant) => result.replaceAll(variant, replacement.customName[language]), text);
+  }, String(value[language] ?? ''))]));
+}
+
+function catalogTaskRequirements(card, cardByBlueprint, language, previousCard = null, usage = null) {
   const requirements = [];
   const directPrerequisites = card.prerequisites ?? [];
   const previousIsCompatible = previousCard && (!previousCard.courseStyles?.length || !card.courseStyles?.length || previousCard.courseStyles.some((style) => card.courseStyles.includes(style)));
@@ -7719,7 +8217,7 @@ function catalogTaskRequirements(card, cardByBlueprint, language, previousCard =
         : style);
     requirements.push(catalogLanguageText(language, `Nur bei ${styles.join(' oder ')}.`, `Only for ${styles.join(' or ')}.`));
   }
-  const ingredientRequirement = catalogIngredientRequirement(card.ingredientRequirement, language);
+  const ingredientRequirement = catalogIngredientRequirement(card.ingredientRequirement, language, usage);
   if (ingredientRequirement) requirements.push(ingredientRequirement);
   if (card.repeatOnRelief) {
     requirements.push(catalogLanguageText(
@@ -7746,11 +8244,13 @@ function catalogTaskCard(card, usage, language, cardByBlueprint, previousCard = 
     ? catalogLanguageText(language, 'nicht zugewiesen', 'unassigned')
     : `${card.people[0] === card.people[1] ? String(card.people[0]) : `${card.people[0]}–${card.people[1]}`} ${catalogLanguageText(language, 'Personen', 'players')}`;
   const taskState = instance ? t(CATALOG_TASK_STATUS[instance.status] ?? instance.status, language) : '';
+  const title = catalogIngredientText(card.title, usage);
+  const instruction = catalogIngredientText(card.instruction, usage);
   return `<article class="catalog-card quest-node" data-card-kind="quest" data-card-id="${escapeHtml(card.id)}" data-used="${used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(card.id)}</span>${catalogUsedBadge(used, language, taskState)}</div>
-    <h4>${t(card.title, language)}</h4>
-    <p>${t(card.instruction, language)}</p>
-    ${catalogTaskRequirements(card, cardByBlueprint, language, previousCard)}
+    <h4>${t(title, language)}</h4>
+    <p>${t(instruction, language)}</p>
+    ${catalogTaskRequirements(card, cardByBlueprint, language, previousCard, usage)}
     <div class="catalog-card-meta"><span>${escapeHtml(people)}</span><span>${escapeHtml(catalogTaskTiming(card, language))}</span></div>
   </article>`;
 }
@@ -7868,6 +8368,13 @@ function catalogEventGroups(usage, language) {
 }
 
 function catalogStoryRequirement(card, language) {
+  if (card.storyKind === 'island') {
+    return catalogLanguageText(
+      language,
+      `Pflichtkarte: Wird beim ersten Betreten der ${localize(CHAPTERS[card.chapterIndex].name, language)} als erste Storykarte oben auf den Stapel gelegt.`,
+      `Required card: Placed on top of the deck as the first story card when ${localize(CHAPTERS[card.chapterIndex].name, language)} is entered.`
+    );
+  }
   if (card.storyKind === 'location') {
     const location = CHAPTERS[card.chapterIndex].locations[card.locationIndex];
     return catalogLanguageText(
@@ -7900,27 +8407,39 @@ function catalogStoryCard(card, usage, language) {
   const requirement = catalogStoryRequirement(card, language);
   const quiz = card.storyKind === 'quiz';
   const correctAnswer = quiz ? card.answers.find((answer) => answer.id === card.correctAnswerId) : null;
-  return `<article class="catalog-card" data-card-kind="${quiz ? 'story-quiz' : 'story-location'}" data-card-id="${escapeHtml(card.id)}" data-used="${used}">
+  const sentenceCount = quiz ? 0 : (localize(card.story, language).match(/[^.!?]+[.!?]/g) ?? []).length;
+  return `<article class="catalog-card" data-card-kind="${quiz ? 'story-quiz' : `story-${card.storyKind}`}" data-story-kind="${escapeHtml(card.storyKind)}"${quiz ? ` data-quiz-kind="${escapeHtml(card.quizKind)}"` : ''} data-card-id="${escapeHtml(card.id)}" data-used="${used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(card.id)}</span>${catalogUsedBadge(used, language)}</div>
     <h3>${t(card.title, language)}</h3>
     <p>${quiz ? t(card.question, language) : t(card.story, language)}</p>
     <div class="quest-requirements"><strong>${catalogLanguageText(language, 'Voraussetzung', 'Requirement')}</strong><p>${escapeHtml(requirement)}</p></div>
-    ${quiz ? `<details class="catalog-card-detail"><summary>${catalogLanguageText(language, 'Antworten und Wertung', 'Answers and scoring')}</summary><ul>${card.answers.map((answer) => `<li>${t(answer.label, language)}${answer.id === correctAnswer.id ? ` · ${catalogLanguageText(language, 'richtig', 'correct')}` : ''}</li>`).join('')}</ul><p>${catalogLanguageText(language, 'Richtig +3 Münzen · falsch −3 Münzen.', 'Correct +3 coins · wrong −3 coins.')}</p></details>` : `<div class="catalog-card-meta"><span>${catalogLanguageText(language, '3 Sätze · laut vorlesen', '3 sentences · read aloud')}</span></div>`}
+    ${quiz ? `<details class="catalog-card-detail"><summary>${catalogLanguageText(language, 'Antworten und Wertung', 'Answers and scoring')}</summary><ul>${card.answers.map((answer) => `<li>${t(answer.label, language)}${answer.id === correctAnswer.id ? ` · ${catalogLanguageText(language, 'richtig', 'correct')}` : ''}</li>`).join('')}</ul><p>${catalogLanguageText(language, 'Richtig +3 Münzen · falsch −3 Münzen.', 'Correct +3 coins · wrong −3 coins.')}</p></details>` : `<div class="catalog-card-meta"><span>${escapeHtml(catalogLanguageText(language, `${sentenceCount} Sätze · laut vorlesen`, `${sentenceCount} sentences · read aloud`))}</span></div>`}
   </article>`;
 }
 
 function catalogStoryGroups(usage, language) {
+  const islandUsed = ISLAND_STORY_CARDS.filter((card) => usage.stories.has(card.id)).length;
   const locationUsed = LOCATION_STORY_CARDS.filter((card) => usage.stories.has(card.id)).length;
-  const detailCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'detail');
+  const islandDetailCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'island-detail');
+  const locationDetailCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'location-detail');
   const routeCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'route');
-  const detailUsed = detailCards.filter((card) => usage.stories.has(card.id)).length;
+  const islandDetailUsed = islandDetailCards.filter((card) => usage.stories.has(card.id)).length;
+  const locationDetailUsed = locationDetailCards.filter((card) => usage.stories.has(card.id)).length;
   const routeUsed = routeCards.filter((card) => usage.stories.has(card.id)).length;
-  const quizUsed = detailUsed + routeUsed;
+  const totalUsed = islandUsed + locationUsed + islandDetailUsed + locationDetailUsed + routeUsed;
+  const locationGroups = CHAPTERS.map((chapter, chapterIndex) => {
+    const cards = LOCATION_STORY_CARDS
+      .filter((card) => card.chapterIndex === chapterIndex)
+      .sort((left, right) => left.locationIndex - right.locationIndex);
+    return `<section data-story-island="${escapeHtml(chapter.id)}"><h3>${chapter.number}. ${t(chapter.name, language)}</h3><div class="catalog-card-grid">${cards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></section>`;
+  }).join('');
   return `<section class="catalog-section" id="story-cards">
-    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storrykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jeder Ort besitzt eine verpflichtende Geschichte. Zufällige Quizkarten erscheinen nur, wenn ihre Orts- und Besuchsvoraussetzungen erfüllt sind.', 'Every location has one required story. Random quiz cards appear only when their story and visit requirements are met.')}</p></div>${statusTag(usage.hasSession ? `${locationUsed + quizUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, locationUsed + quizUsed ? 'green' : 'gold')}</div>
-    <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Storrykarten', 'Story cards'), usage.hasSession ? locationUsed : null, LOCATION_STORY_CARDS.length, language)}</summary><div class="catalog-card-grid">${LOCATION_STORY_CARDS.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
-    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail-Quizkarten', 'Detail quiz cards'), usage.hasSession ? detailUsed : null, detailCards.length, language)}</summary><div class="catalog-card-grid">${detailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
-    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Insel-Quizkarten', 'Island quiz cards'), usage.hasSession ? routeUsed : null, routeCards.length, language)}</summary><div class="catalog-card-grid">${routeCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jede Insel beginnt mit ihrer verpflichtenden Inselgeschichte, direkt gefolgt von der Geschichte des ersten Ortes. Weitere Ortsgeschichten erscheinen beim ersten Besuch; Quizkarten beachten ihre Story- und Besuchsvoraussetzungen.', 'Each island begins with its required island story, immediately followed by the first location story. Further location stories appear on first visit; quiz cards respect their story and visit requirements.')}</p></div>${statusTag(usage.hasSession ? `${totalUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, totalUsed ? 'green' : 'gold')}</div>
+    <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Insel Karten', 'Island Story Cards'), usage.hasSession ? islandUsed : null, ISLAND_STORY_CARDS.length, language)}</summary><div class="catalog-card-grid">${ISLAND_STORY_CARDS.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Ort Karten', 'Location Story Cards'), usage.hasSession ? locationUsed : null, LOCATION_STORY_CARDS.length, language)}</summary><div class="catalog-course-groups">${locationGroups}</div></details>
+    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail Insel Quiz Karten', 'Island Detail Quiz Cards'), usage.hasSession ? islandDetailUsed : null, islandDetailCards.length, language)}</summary><div class="catalog-card-grid">${islandDetailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail Ort Quiz Karten', 'Location Detail Quiz Cards'), usage.hasSession ? locationDetailUsed : null, locationDetailCards.length, language)}</summary><div class="catalog-card-grid">${locationDetailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Insel Quiz Karten', 'Island Quiz Cards'), usage.hasSession ? routeUsed : null, routeCards.length, language)}</summary><div class="catalog-card-grid">${routeCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
   </section>`;
 }
 
@@ -7935,11 +8454,14 @@ function catalogIngredientUse(ingredientState, language) {
 }
 
 function catalogIngredientCard(ingredient, usage, language) {
-  const ingredientUse = catalogIngredientUse(usage.ingredients.get(ingredient.id), language);
+  const ingredientState = usage.ingredients.get(ingredient.id);
+  const ingredientUse = catalogIngredientUse(ingredientState, language);
+  const displayIngredient = ingredientState ?? ingredient;
   const courses = ingredient.courseTags.map((courseId) => CHAPTERS.find((chapter) => chapter.id === courseId)?.course ?? courseId);
   return `<article class="catalog-card" data-card-kind="ingredient" data-card-id="${escapeHtml(ingredient.id)}" data-used="${ingredientUse.used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(ingredient.id)}</span>${catalogUsedBadge(ingredientUse.used, language, ingredientUse.suffix)}</div>
-    <h3>${t(ingredient.name, language)}</h3>
+    <h3>${t(displayIngredient.name, language)}</h3>
+    ${ingredientState?.customName ? `<p class="muted">${catalogLanguageText(language, 'Angepasster Zutatenname', 'Customized ingredient name')}</p>` : ''}
     <p class="muted">${catalogLanguageText(language, 'Mögliche Gänge', 'Possible courses')}: ${courses.map((course) => t(course, language)).join(' · ')}</p>
     ${ingredient.effect ? `<p class="catalog-effect"><strong>${catalogLanguageText(language, 'Karteneffekt', 'Card effect')}:</strong> ${t(INGREDIENT_EFFECT_TEXT[ingredient.effect] ?? ingredient.effect, language)}</p>` : ''}
   </article>`;
@@ -7998,7 +8520,7 @@ function renderCardCatalog(engine, language) {
 
     <nav class="catalog-jumps" aria-label="${catalogLanguageText(language, 'Kartengruppen', 'Card groups')}">
       <a href="#quest-cards">${catalogLanguageText(language, 'Questlinien', 'Quest lines')}</a>
-      <a href="#story-cards">${catalogLanguageText(language, 'Storrykarten', 'Story cards')}</a>
+      <a href="#story-cards">${catalogLanguageText(language, 'Story', 'Story')}</a>
       <a href="#fun-cards">${catalogLanguageText(language, 'Spaß', 'Fun')}</a>
       <a href="#coop-fun-cards">${catalogLanguageText(language, 'Koop-Spaß', 'Co-op fun')}</a>
       <a href="#event-cards">${catalogLanguageText(language, 'Ereignisse', 'Events')}</a>
@@ -8052,6 +8574,7 @@ let engine = null;
 let view = 'welcome';
 let publicHomeView = 'welcome';
 let deleteCandidateId = null;
+let ingredientRenameTarget = null;
 let wakeLock = null;
 let setupDraft = {
   title: '',
@@ -8104,10 +8627,11 @@ function render() {
   else if (view === 'setup') root.innerHTML = renderSetup(currentLanguage, setupDraft);
   else if (view === 'pantry') root.innerHTML = engine
     ? renderPantry(engine, currentLanguage)
-    : renderIngredientGuide(setupDraft.playerCount, currentLanguage);
+    : renderIngredientGuide(setupDraft.playerCount, currentLanguage, preferences.ingredientNames, preferences.shoppingStapleNames);
   else if (view === 'cards') root.innerHTML = renderCardCatalog(engine, currentLanguage);
   else if (view === 'sessions') root.innerHTML = renderSessions(repository.listSessions(), engine?.state.id, currentLanguage);
   else if (view === 'rules') root.innerHTML = renderRules(currentLanguage);
+  else if (view === 'faq') root.innerHTML = renderFaq(currentLanguage);
   else if (!engine) {
     view = publicHomeView;
     root.innerHTML = view === 'setup'
@@ -8218,6 +8742,71 @@ function showDeleteConfirmation(sessionId) {
   });
 }
 
+function normalizedIngredientName(value) {
+  return String(value ?? '').replace(/\s+/g, ' ').trim().slice(0, 80);
+}
+
+function normalizedIngredientNames() {
+  return {
+    de: normalizedIngredientName(document.querySelector('#ingredient-name-de-input')?.value),
+    en: normalizedIngredientName(document.querySelector('#ingredient-name-en-input')?.value)
+  };
+}
+
+function showIngredientNameEditor(target) {
+  const currentLanguage = language();
+  ingredientRenameTarget = {
+    kind: target.dataset.ingredientKind,
+    id: target.dataset.ingredientId,
+    currentNames: { de: target.dataset.currentNameDe, en: target.dataset.currentNameEn },
+    defaultNames: { de: target.dataset.defaultNameDe, en: target.dataset.defaultNameEn },
+    customized: target.dataset.customized === 'true'
+  };
+  const label = ingredientRenameTarget.kind === 'staple'
+    ? (currentLanguage === 'de' ? 'Grundvorrat umbenennen' : 'Rename shopping staple')
+    : (currentLanguage === 'de' ? 'Zutat umbenennen' : 'Rename ingredient');
+  dialog.show({
+    kicker: currentLanguage === 'de' ? 'Zutatenliste anpassen' : 'Customize ingredient list',
+    title: label,
+    content: `<div class="field"><label for="ingredient-name-de-input">Deutsch</label><input id="ingredient-name-de-input" name="ingredientNameDe" maxlength="80" value="${escapeHtml(ingredientRenameTarget.currentNames.de)}" autocomplete="off" autofocus></div><div class="field"><label for="ingredient-name-en-input">English</label><input id="ingredient-name-en-input" name="ingredientNameEn" maxlength="80" value="${escapeHtml(ingredientRenameTarget.currentNames.en)}" autocomplete="off"></div><p class="muted">${currentLanguage === 'de' ? 'Beide Namen werden passend zur Sprache der aktuellen Person angezeigt. Gang-Tags, Karteneffekt, Mengenempfehlung und Spiellogik bleiben unverändert.' : 'Each name is shown according to the current player’s language. Course tags, card effect, quantity suggestion, and game logic remain unchanged.'}</p>`,
+    actions: `${ingredientRenameTarget.customized ? `<button type="button" class="quiet-button" data-action="reset-ingredient-name">${currentLanguage === 'de' ? 'Originalnamen wiederherstellen' : 'Restore original name'}</button>` : ''}<button type="button" class="secondary-button" data-action="close-dialog">${ui('back', currentLanguage)}</button><button type="button" class="primary-button" data-action="save-ingredient-name">${currentLanguage === 'de' ? 'Namen speichern' : 'Save name'}</button>`
+  });
+  window.setTimeout(() => document.querySelector('#ingredient-name-de-input')?.select(), 0);
+}
+
+function updateDefaultIngredientName(kind, id, name = null) {
+  const key = kind === 'staple' ? 'shoppingStapleNames' : 'ingredientNames';
+  const catalog = kind === 'staple' ? SHOPPING_STAPLES : INGREDIENTS;
+  if (!catalog.some((entry) => entry.id === id)) return false;
+  const names = { ...(preferences[key] ?? {}) };
+  if (name == null) delete names[id];
+  else names[id] = name;
+  preferences = repository.savePreferences({ [key]: names });
+  return true;
+}
+
+function saveIngredientName(reset = false) {
+  if (!ingredientRenameTarget) return false;
+  const { kind, id } = ingredientRenameTarget;
+  const customName = reset ? null : normalizedIngredientNames();
+  if (!reset && (!customName.de || !customName.en)) {
+    showToast(language() === 'de' ? 'Bitte tragt den deutschen und den englischen Zutatennamen ein.' : 'Please enter both the German and English ingredient name.');
+    return false;
+  }
+  const changed = engine
+    ? kind === 'staple'
+      ? reset ? engine.resetShoppingStapleName(id) : engine.renameShoppingStaple(id, customName)
+      : reset ? engine.resetIngredientName(id) : engine.renameIngredient(id, customName)
+    : updateDefaultIngredientName(kind, id, customName);
+  if (!changed) return false;
+  if (engine) persist();
+  ingredientRenameTarget = null;
+  dialog.close();
+  render();
+  showToast(language() === 'de' ? (reset ? 'Originalname wiederhergestellt.' : 'Zutatenname gespeichert.') : (reset ? 'Original name restored.' : 'Ingredient name saved.'));
+  return true;
+}
+
 function resumeSession(sessionId) {
   const snapshot = repository.getSession(sessionId);
   if (!snapshot || !validateSessionState(snapshot).valid) {
@@ -8237,7 +8826,7 @@ function resumeSession(sessionId) {
 function navigate(nextView) {
   if (view === 'setup') readSetupForm();
   if (!engine && nextView === 'game') nextView = publicHomeView;
-  if (!engine && !['welcome', 'setup', 'pantry', 'cards', 'sessions', 'rules'].includes(nextView)) nextView = publicHomeView;
+  if (!engine && !['welcome', 'setup', 'pantry', 'cards', 'sessions', 'rules', 'faq'].includes(nextView)) nextView = publicHomeView;
   if (!engine && ['welcome', 'setup'].includes(nextView)) publicHomeView = nextView;
   view = nextView;
   render();
@@ -8300,7 +8889,6 @@ function processTimers() {
     audio.play('timer');
   });
   persist();
-  if (result.notices.some((notice) => notice.threshold === 0)) render();
 }
 
 async function handleAction(target) {
@@ -8316,6 +8904,9 @@ async function handleAction(target) {
     case 'continue-session':
     case 'resume-session': resumeSession(target.dataset.sessionId); break;
     case 'navigate': navigate(target.dataset.view); break;
+    case 'edit-ingredient-name': showIngredientNameEditor(target); break;
+    case 'save-ingredient-name': saveIngredientName(false); break;
+    case 'reset-ingredient-name': saveIngredientName(true); break;
     case 'draw-event': engine.beginEvent(); audio.play('card'); persist(); render(); break;
     case 'complete-story-card':
       if (engine.completeStoryCard()) { audio.play('complete'); persist(); render(); }
@@ -8328,7 +8919,7 @@ async function handleAction(target) {
     }
     case 'resolve-choice': {
       const choice = target.dataset.choice;
-      const resolved = engine.resolveChoice(choice);
+      const resolved = engine.resolveChoice(choice, Date.now(), target.dataset.ingredientId ?? null);
       const gamblerRolled = resolved && Number.isInteger(engine.state.turn.gamblerLossRoll);
       if (resolved) audio.play(gamblerRolled ? 'dice' : cueForAction(choice));
       persist(); render();
@@ -8371,6 +8962,9 @@ async function handleAction(target) {
       break;
     case 'confirm-watch-player':
       if (engine.confirmWatchChallengePlayer()) { audio.play('complete'); persist(); render(); }
+      break;
+    case 'reveal-secret-watch':
+      if (engine.revealSecretWatchChallenge()) { audio.play('card'); persist(); render(); }
       break;
     case 'start-watch':
       if (engine.startWatchChallengeAction()) { audio.play('move'); persist(); render(); }
@@ -8499,7 +9093,7 @@ async function handleAction(target) {
       navigate('sessions');
       break;
     }
-    case 'close-dialog': dialog.close(); break;
+    case 'close-dialog': ingredientRenameTarget = null; dialog.close(); break;
     default: break;
   }
 }
@@ -8530,6 +9124,11 @@ document.addEventListener('change', (event) => {
 });
 
 document.addEventListener('submit', (event) => {
+  if (event.target.matches('#app-dialog .dialog-frame') && ingredientRenameTarget) {
+    event.preventDefault();
+    saveIngredientName(false);
+    return;
+  }
   if (event.target.id !== 'setup-form') return;
   event.preventDefault();
   const draft = readSetupForm();
@@ -8538,7 +9137,13 @@ document.addEventListener('submit', (event) => {
     showToast(language() === 'de' ? 'Bitte gebt für jede Person einen Namen ein.' : 'Please enter a name for every player.');
     return;
   }
-  engine = GameEngine.create({ ...draft, names, audio: preferences.audio });
+  engine = GameEngine.create({
+    ...draft,
+    names,
+    audio: preferences.audio,
+    ingredientNames: preferences.ingredientNames,
+    shoppingStapleNames: preferences.shoppingStapleNames
+  });
   preferences = repository.savePreferences({ language: draft.defaultLanguage });
   audio.setEnabled(preferences.audio);
   view = 'game';

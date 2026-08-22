@@ -1,9 +1,9 @@
 import { CHAPTERS } from '../data/chapters.js';
 import { EFFECT_TEXT, EVENT_DECKS, EVENT_STAGES, WATCH_CHALLENGES } from '../data/events.js';
-import { INGREDIENT_EFFECT_TEXT, INGREDIENTS } from '../data/ingredients.js';
+import { INGREDIENT_EFFECT_TEXT, INGREDIENTS, SHOPPING_STAPLES } from '../data/ingredients.js';
 import { localize } from '../data/i18n.js';
 import { ROLES } from '../data/roles.js';
-import { LOCATION_STORY_CARDS, STORY_CARDS, STORY_QUIZ_CARDS, storyCardById } from '../data/story-events.js';
+import { ISLAND_STORY_CARDS, LOCATION_STORY_CARDS, STORY_CARDS, STORY_QUIZ_CARDS, storyCardById } from '../data/story-events.js';
 import { getPlayableQuestLines } from '../data/tasks.js';
 import { escapeHtml, statusTag, t } from './helpers.js';
 
@@ -88,6 +88,7 @@ function catalogUsage(engine) {
     fun: new Set(state?.funCardsDrawn ?? []),
     tasks: new Map((state?.tasks ?? []).map((instance) => [instance.taskId, instance])),
     ingredients: new Map((state?.ingredients ?? []).map((ingredient) => [ingredient.id, ingredient])),
+    shoppingStapleNames: state?.shoppingStapleNames ?? {},
     roles: new Set((state?.players ?? []).map((player) => player.roleId))
   };
 }
@@ -130,11 +131,12 @@ function catalogPrerequisiteState(requirement, language) {
     : catalogLanguageText(language, 'erledigt sein', 'be completed');
 }
 
-function catalogIngredientRequirement(requirement, language) {
+function catalogIngredientRequirement(requirement, language, usage = null) {
   if (!requirement) return '';
-  const requiredIngredients = (requirement.ids ?? []).map((ingredientId) => INGREDIENTS.find((ingredient) => ingredient.id === ingredientId)).filter(Boolean);
+  const ingredientById = (ingredientId) => usage?.ingredients.get(ingredientId) ?? INGREDIENTS.find((ingredient) => ingredient.id === ingredientId);
+  const requiredIngredients = (requirement.ids ?? []).map(ingredientById).filter(Boolean);
   const requiredCategories = (requirement.categories ?? []).map((category) => localize(CATALOG_CATEGORY_LABELS[category] ?? category, language));
-  const excludedIngredients = (requirement.excludeIds ?? []).map((ingredientId) => INGREDIENTS.find((ingredient) => ingredient.id === ingredientId)).filter(Boolean);
+  const excludedIngredients = (requirement.excludeIds ?? []).map(ingredientById).filter(Boolean);
   const ingredientNames = requiredIngredients.map((ingredient) => localize(ingredient.name, language));
   const excludedNames = excludedIngredients.map((ingredient) => localize(ingredient.name, language));
   const alternatives = [...ingredientNames, ...requiredCategories];
@@ -150,7 +152,21 @@ function catalogQuoted(value, language) {
   return language === 'de' ? `„${value}“` : `“${value}”`;
 }
 
-function catalogTaskRequirements(card, cardByBlueprint, language, previousCard = null) {
+function catalogIngredientText(value, usage) {
+  if (!usage?.hasSession || !value || typeof value !== 'object') return value;
+  const replacements = [
+    ...INGREDIENTS.map((ingredient) => ({ originalName: ingredient.name, customName: usage.ingredients.get(ingredient.id)?.customName })),
+    ...SHOPPING_STAPLES.map((staple) => ({ originalName: staple.name, customName: usage.shoppingStapleNames[staple.id] }))
+  ].filter((replacement) => replacement.customName);
+  return Object.fromEntries(['de', 'en'].map((language) => [language, replacements.reduce((text, replacement) => {
+    const originalName = replacement.originalName[language];
+    const lowerCaseVariant = `${originalName.charAt(0).toLocaleLowerCase(language)}${originalName.slice(1)}`;
+    return [...new Set([originalName, lowerCaseVariant])]
+      .reduce((result, variant) => result.replaceAll(variant, replacement.customName[language]), text);
+  }, String(value[language] ?? ''))]));
+}
+
+function catalogTaskRequirements(card, cardByBlueprint, language, previousCard = null, usage = null) {
   const requirements = [];
   const directPrerequisites = card.prerequisites ?? [];
   const previousIsCompatible = previousCard && (!previousCard.courseStyles?.length || !card.courseStyles?.length || previousCard.courseStyles.some((style) => card.courseStyles.includes(style)));
@@ -201,7 +217,7 @@ function catalogTaskRequirements(card, cardByBlueprint, language, previousCard =
         : style);
     requirements.push(catalogLanguageText(language, `Nur bei ${styles.join(' oder ')}.`, `Only for ${styles.join(' or ')}.`));
   }
-  const ingredientRequirement = catalogIngredientRequirement(card.ingredientRequirement, language);
+  const ingredientRequirement = catalogIngredientRequirement(card.ingredientRequirement, language, usage);
   if (ingredientRequirement) requirements.push(ingredientRequirement);
   if (card.repeatOnRelief) {
     requirements.push(catalogLanguageText(
@@ -228,11 +244,13 @@ function catalogTaskCard(card, usage, language, cardByBlueprint, previousCard = 
     ? catalogLanguageText(language, 'nicht zugewiesen', 'unassigned')
     : `${card.people[0] === card.people[1] ? String(card.people[0]) : `${card.people[0]}–${card.people[1]}`} ${catalogLanguageText(language, 'Personen', 'players')}`;
   const taskState = instance ? t(CATALOG_TASK_STATUS[instance.status] ?? instance.status, language) : '';
+  const title = catalogIngredientText(card.title, usage);
+  const instruction = catalogIngredientText(card.instruction, usage);
   return `<article class="catalog-card quest-node" data-card-kind="quest" data-card-id="${escapeHtml(card.id)}" data-used="${used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(card.id)}</span>${catalogUsedBadge(used, language, taskState)}</div>
-    <h4>${t(card.title, language)}</h4>
-    <p>${t(card.instruction, language)}</p>
-    ${catalogTaskRequirements(card, cardByBlueprint, language, previousCard)}
+    <h4>${t(title, language)}</h4>
+    <p>${t(instruction, language)}</p>
+    ${catalogTaskRequirements(card, cardByBlueprint, language, previousCard, usage)}
     <div class="catalog-card-meta"><span>${escapeHtml(people)}</span><span>${escapeHtml(catalogTaskTiming(card, language))}</span></div>
   </article>`;
 }
@@ -350,6 +368,13 @@ function catalogEventGroups(usage, language) {
 }
 
 function catalogStoryRequirement(card, language) {
+  if (card.storyKind === 'island') {
+    return catalogLanguageText(
+      language,
+      `Pflichtkarte: Wird beim ersten Betreten der ${localize(CHAPTERS[card.chapterIndex].name, language)} als erste Storykarte oben auf den Stapel gelegt.`,
+      `Required card: Placed on top of the deck as the first story card when ${localize(CHAPTERS[card.chapterIndex].name, language)} is entered.`
+    );
+  }
   if (card.storyKind === 'location') {
     const location = CHAPTERS[card.chapterIndex].locations[card.locationIndex];
     return catalogLanguageText(
@@ -382,27 +407,39 @@ function catalogStoryCard(card, usage, language) {
   const requirement = catalogStoryRequirement(card, language);
   const quiz = card.storyKind === 'quiz';
   const correctAnswer = quiz ? card.answers.find((answer) => answer.id === card.correctAnswerId) : null;
-  return `<article class="catalog-card" data-card-kind="${quiz ? 'story-quiz' : 'story-location'}" data-card-id="${escapeHtml(card.id)}" data-used="${used}">
+  const sentenceCount = quiz ? 0 : (localize(card.story, language).match(/[^.!?]+[.!?]/g) ?? []).length;
+  return `<article class="catalog-card" data-card-kind="${quiz ? 'story-quiz' : `story-${card.storyKind}`}" data-story-kind="${escapeHtml(card.storyKind)}"${quiz ? ` data-quiz-kind="${escapeHtml(card.quizKind)}"` : ''} data-card-id="${escapeHtml(card.id)}" data-used="${used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(card.id)}</span>${catalogUsedBadge(used, language)}</div>
     <h3>${t(card.title, language)}</h3>
     <p>${quiz ? t(card.question, language) : t(card.story, language)}</p>
     <div class="quest-requirements"><strong>${catalogLanguageText(language, 'Voraussetzung', 'Requirement')}</strong><p>${escapeHtml(requirement)}</p></div>
-    ${quiz ? `<details class="catalog-card-detail"><summary>${catalogLanguageText(language, 'Antworten und Wertung', 'Answers and scoring')}</summary><ul>${card.answers.map((answer) => `<li>${t(answer.label, language)}${answer.id === correctAnswer.id ? ` · ${catalogLanguageText(language, 'richtig', 'correct')}` : ''}</li>`).join('')}</ul><p>${catalogLanguageText(language, 'Richtig +3 Münzen · falsch −3 Münzen.', 'Correct +3 coins · wrong −3 coins.')}</p></details>` : `<div class="catalog-card-meta"><span>${catalogLanguageText(language, '3 Sätze · laut vorlesen', '3 sentences · read aloud')}</span></div>`}
+    ${quiz ? `<details class="catalog-card-detail"><summary>${catalogLanguageText(language, 'Antworten und Wertung', 'Answers and scoring')}</summary><ul>${card.answers.map((answer) => `<li>${t(answer.label, language)}${answer.id === correctAnswer.id ? ` · ${catalogLanguageText(language, 'richtig', 'correct')}` : ''}</li>`).join('')}</ul><p>${catalogLanguageText(language, 'Richtig +3 Münzen · falsch −3 Münzen.', 'Correct +3 coins · wrong −3 coins.')}</p></details>` : `<div class="catalog-card-meta"><span>${escapeHtml(catalogLanguageText(language, `${sentenceCount} Sätze · laut vorlesen`, `${sentenceCount} sentences · read aloud`))}</span></div>`}
   </article>`;
 }
 
 function catalogStoryGroups(usage, language) {
+  const islandUsed = ISLAND_STORY_CARDS.filter((card) => usage.stories.has(card.id)).length;
   const locationUsed = LOCATION_STORY_CARDS.filter((card) => usage.stories.has(card.id)).length;
-  const detailCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'detail');
+  const islandDetailCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'island-detail');
+  const locationDetailCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'location-detail');
   const routeCards = STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'route');
-  const detailUsed = detailCards.filter((card) => usage.stories.has(card.id)).length;
+  const islandDetailUsed = islandDetailCards.filter((card) => usage.stories.has(card.id)).length;
+  const locationDetailUsed = locationDetailCards.filter((card) => usage.stories.has(card.id)).length;
   const routeUsed = routeCards.filter((card) => usage.stories.has(card.id)).length;
-  const quizUsed = detailUsed + routeUsed;
+  const totalUsed = islandUsed + locationUsed + islandDetailUsed + locationDetailUsed + routeUsed;
+  const locationGroups = CHAPTERS.map((chapter, chapterIndex) => {
+    const cards = LOCATION_STORY_CARDS
+      .filter((card) => card.chapterIndex === chapterIndex)
+      .sort((left, right) => left.locationIndex - right.locationIndex);
+    return `<section data-story-island="${escapeHtml(chapter.id)}"><h3>${chapter.number}. ${t(chapter.name, language)}</h3><div class="catalog-card-grid">${cards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></section>`;
+  }).join('');
   return `<section class="catalog-section" id="story-cards">
-    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storrykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jeder Ort besitzt eine verpflichtende Geschichte. Zufällige Quizkarten erscheinen nur, wenn ihre Orts- und Besuchsvoraussetzungen erfüllt sind.', 'Every location has one required story. Random quiz cards appear only when their story and visit requirements are met.')}</p></div>${statusTag(usage.hasSession ? `${locationUsed + quizUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, locationUsed + quizUsed ? 'green' : 'gold')}</div>
-    <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Storrykarten', 'Story cards'), usage.hasSession ? locationUsed : null, LOCATION_STORY_CARDS.length, language)}</summary><div class="catalog-card-grid">${LOCATION_STORY_CARDS.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
-    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail-Quizkarten', 'Detail quiz cards'), usage.hasSession ? detailUsed : null, detailCards.length, language)}</summary><div class="catalog-card-grid">${detailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
-    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Insel-Quizkarten', 'Island quiz cards'), usage.hasSession ? routeUsed : null, routeCards.length, language)}</summary><div class="catalog-card-grid">${routeCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jede Insel beginnt mit ihrer verpflichtenden Inselgeschichte, direkt gefolgt von der Geschichte des ersten Ortes. Weitere Ortsgeschichten erscheinen beim ersten Besuch; Quizkarten beachten ihre Story- und Besuchsvoraussetzungen.', 'Each island begins with its required island story, immediately followed by the first location story. Further location stories appear on first visit; quiz cards respect their story and visit requirements.')}</p></div>${statusTag(usage.hasSession ? `${totalUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, totalUsed ? 'green' : 'gold')}</div>
+    <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Insel Karten', 'Island Story Cards'), usage.hasSession ? islandUsed : null, ISLAND_STORY_CARDS.length, language)}</summary><div class="catalog-card-grid">${ISLAND_STORY_CARDS.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Ort Karten', 'Location Story Cards'), usage.hasSession ? locationUsed : null, LOCATION_STORY_CARDS.length, language)}</summary><div class="catalog-course-groups">${locationGroups}</div></details>
+    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail Insel Quiz Karten', 'Island Detail Quiz Cards'), usage.hasSession ? islandDetailUsed : null, islandDetailCards.length, language)}</summary><div class="catalog-card-grid">${islandDetailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail Ort Quiz Karten', 'Location Detail Quiz Cards'), usage.hasSession ? locationDetailUsed : null, locationDetailCards.length, language)}</summary><div class="catalog-card-grid">${locationDetailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
+    <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Insel Quiz Karten', 'Island Quiz Cards'), usage.hasSession ? routeUsed : null, routeCards.length, language)}</summary><div class="catalog-card-grid">${routeCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
   </section>`;
 }
 
@@ -417,11 +454,14 @@ function catalogIngredientUse(ingredientState, language) {
 }
 
 function catalogIngredientCard(ingredient, usage, language) {
-  const ingredientUse = catalogIngredientUse(usage.ingredients.get(ingredient.id), language);
+  const ingredientState = usage.ingredients.get(ingredient.id);
+  const ingredientUse = catalogIngredientUse(ingredientState, language);
+  const displayIngredient = ingredientState ?? ingredient;
   const courses = ingredient.courseTags.map((courseId) => CHAPTERS.find((chapter) => chapter.id === courseId)?.course ?? courseId);
   return `<article class="catalog-card" data-card-kind="ingredient" data-card-id="${escapeHtml(ingredient.id)}" data-used="${ingredientUse.used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(ingredient.id)}</span>${catalogUsedBadge(ingredientUse.used, language, ingredientUse.suffix)}</div>
-    <h3>${t(ingredient.name, language)}</h3>
+    <h3>${t(displayIngredient.name, language)}</h3>
+    ${ingredientState?.customName ? `<p class="muted">${catalogLanguageText(language, 'Angepasster Zutatenname', 'Customized ingredient name')}</p>` : ''}
     <p class="muted">${catalogLanguageText(language, 'Mögliche Gänge', 'Possible courses')}: ${courses.map((course) => t(course, language)).join(' · ')}</p>
     ${ingredient.effect ? `<p class="catalog-effect"><strong>${catalogLanguageText(language, 'Karteneffekt', 'Card effect')}:</strong> ${t(INGREDIENT_EFFECT_TEXT[ingredient.effect] ?? ingredient.effect, language)}</p>` : ''}
   </article>`;
@@ -480,7 +520,7 @@ export function renderCardCatalog(engine, language) {
 
     <nav class="catalog-jumps" aria-label="${catalogLanguageText(language, 'Kartengruppen', 'Card groups')}">
       <a href="#quest-cards">${catalogLanguageText(language, 'Questlinien', 'Quest lines')}</a>
-      <a href="#story-cards">${catalogLanguageText(language, 'Storrykarten', 'Story cards')}</a>
+      <a href="#story-cards">${catalogLanguageText(language, 'Story', 'Story')}</a>
       <a href="#fun-cards">${catalogLanguageText(language, 'Spaß', 'Fun')}</a>
       <a href="#coop-fun-cards">${catalogLanguageText(language, 'Koop-Spaß', 'Co-op fun')}</a>
       <a href="#event-cards">${catalogLanguageText(language, 'Ereignisse', 'Events')}</a>

@@ -96,6 +96,11 @@ test('parchment card choices use a dark high-contrast palette in every state', a
   assert.match(css, /\.game-card button\[disabled\][\s\S]*?color:\s*#5e503c;[\s\S]*?opacity:\s*\.75;/);
 });
 
+test('the shared start and eating backdrop keeps the complete island map width visible', async () => {
+  const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
+  assert.match(css, /\.hero-screen::before[\s\S]*?background-size:\s*cover,\s*100% auto;/);
+});
+
 test('location board uses cinematic scene assets without player circles and the die stays three-dimensional', async () => {
   const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
   const game = await readFile(join(root, 'js', 'ui', 'game.js'), 'utf8');

@@ -98,9 +98,12 @@ function renderDieResult(value, label, result) {
 }
 
 function stageCopy(engine, language) {
-  const stage = ['clearing', 'teamSelection'].includes(engine.state.chapter.stage)
-    ? engine.state.chapter.stage
-    : engine.currentEventStage();
+  const eventStage = engine.currentEventStage();
+  const stage = engine.state.chapter.stage === 'teamSelection'
+    ? 'teamSelection'
+    : engine.state.chapter.stage === 'clearing' && eventStage === 'tasks'
+      ? 'clearing'
+      : eventStage;
   const copy = STAGE_COPY[stage]?.[language] ?? STAGE_COPY.cooking[language];
   if (engine.currentChapter.id !== 'cocktails') return copy;
   const stageNumber = { clearing: 0, teamSelection: 1, ingredients: 2, tasks: 3, cooking: 4 }[stage];
@@ -200,7 +203,7 @@ function eventActionText(engine, actionCode, language) {
   if (actionCode === 'lockIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
       ? engine.getIngredient(engine.state.turn.resolvedIngredientId)
-      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+      : engine.ingredientActionTarget();
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} verbindlich festlegen` : `Lock in ${t(ingredient.name, language)}`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -208,7 +211,7 @@ function eventActionText(engine, actionCode, language) {
   if (actionCode === 'returnIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
       ? engine.getIngredient(engine.state.turn.resolvedIngredientId)
-      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+      : engine.ingredientActionTarget();
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} aus dem Gangkorb zurücklegen` : `Return ${t(ingredient.name, language)} from the course basket`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -216,7 +219,7 @@ function eventActionText(engine, actionCode, language) {
   if (actionCode === 'swapIngredient') {
     const ingredient = engine.state.turn.phase === 'resolved'
       ? engine.getIngredient(engine.state.turn.resolvedPreviousIngredientId)
-      : engine.state.ingredients.find((entry) => entry.id === engine.state.lastIngredientId && entry.status === 'discovered') ?? engine.unlockedCourseIngredients().at(-1);
+      : engine.ingredientActionTarget();
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} gegen eine Alternative tauschen` : `Swap ${t(ingredient.name, language)} for an alternative`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -502,17 +505,22 @@ function renderDrawCard(engine, language) {
 
 function renderStoryEventCard(engine, language) {
   const card = engine.currentEvent;
-  if (card.storyKind === 'location') {
+  if (['island', 'location'].includes(card.storyKind)) {
+    const islandStory = card.storyKind === 'island';
     return `
-      <article class="game-card story-location-card">
+      <article class="game-card story-${card.storyKind}-card">
         ${renderCourseFlow(engine, language)}
         <div class="card-row">
-          <p class="eyebrow">${language === 'de' ? 'Verbindliche Ortsgeschichte' : 'Required location story'} · ${escapeHtml(card.id)}</p>
+          <p class="eyebrow">${language === 'de'
+            ? (islandStory ? 'Verbindliche Inselgeschichte' : 'Verbindliche Ortsgeschichte')
+            : (islandStory ? 'Required island story' : 'Required location story')} · ${escapeHtml(card.id)}</p>
           ${statusTag(language === 'de' ? 'Laut vorlesen' : 'Read aloud', 'gold')}
         </div>
         <h2>${t(card.title, language)}</h2>
         <p class="card-story">${t(card.story, language)}</p>
-        <div class="card-effect"><strong>${language === 'de' ? 'Diese Chronik gehört zu diesem Ort.' : 'This chronicle belongs to this location.'}</strong><p>${language === 'de' ? 'Lest die drei Sätze der Crew laut vor. Details daraus können später auf einer Erinnerungskarte abgefragt werden.' : 'Read the three sentences aloud to the crew. A later memory card may ask about their details.'}</p></div>
+        <div class="card-effect"><strong>${language === 'de'
+          ? (islandStory ? 'Diese Chronik eröffnet die neue Insel.' : 'Diese Chronik gehört zu diesem Ort.')
+          : (islandStory ? 'This chronicle opens the new island.' : 'This chronicle belongs to this location.')}</strong><p>${language === 'de' ? 'Lest die Geschichte der Crew laut vor. Details daraus können später auf einer Erinnerungskarte abgefragt werden.' : 'Read the story aloud to the crew. A later memory card may ask about its details.'}</p></div>
         <button class="primary-button" type="button" data-action="complete-story-card">${language === 'de' ? 'Geschichte vorgelesen' : 'Story read aloud'}</button>
       </article>`;
   }
@@ -536,11 +544,15 @@ function renderEventCard(engine, language) {
   const event = engine.currentEvent;
   if (event?.storyKind) return renderStoryEventCard(engine, language);
   const pauseBlocked = event.archetype === 'respite' && !event.options?.includes('fiveMinuteBreak');
-  const choices = event.options?.map((code) => `
-    <button type="button" class="choice-button" data-action="resolve-choice" data-choice="${code}">${eventActionText(engine, code, language)}</button>`).join('') ?? '';
-  const copy = engine.state.chapter.stage === 'clearing'
-    ? STAGE_COPY.clearing[language]
-    : STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
+  const choices = event.options?.map((code) => {
+    const ingredientTarget = ['lockIngredient', 'returnIngredient', 'swapIngredient'].includes(code)
+      ? engine.ingredientActionTarget()
+      : null;
+    const targetAttribute = ingredientTarget ? ` data-ingredient-id="${escapeHtml(ingredientTarget.id)}"` : '';
+    return `
+    <button type="button" class="choice-button" data-action="resolve-choice" data-choice="${code}"${targetAttribute}>${eventActionText(engine, code, language)}</button>`;
+  }).join('') ?? '';
+  const copy = STAGE_COPY[event.stage]?.[language] ?? stageCopy(engine, language);
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
@@ -900,6 +912,26 @@ function renderResolvedCard(engine, language) {
 function renderWatchCard(engine, language) {
   const event = engine.currentEvent;
   const challenge = engine.currentWatchChallenge;
+  const secretRevealed = !challenge.secret || engine.state.turn.watchSecretRevealedAt != null;
+  if (challenge.secret && !secretRevealed) {
+    const activeName = escapeHtml(engine.activePlayer.name);
+    return `
+      <article class="game-card secret-event-announcement">
+        ${renderCourseFlow(engine, language)}
+        <p class="eyebrow">${language === 'de' ? 'Private Karte auf dem Tablet' : 'Private card on the tablet'}</p>
+        <h2>${language === 'de' ? 'Geheimes Event' : 'Secret event'}</h2>
+        <div class="secret-screen-warning" role="status">
+          <strong>${language === 'de' ? 'Alle außer der aktiven Person schauen jetzt vom großen Bildschirm weg.' : 'Everyone except the active player now looks away from the large screen.'}</strong>
+          <p>${language === 'de'
+            ? `${activeName} öffnet die Karte erst, wenn niemand sonst mehr auf den gespiegelten Bildschirm schaut.`
+            : `${activeName} opens the card only after everyone else has stopped looking at the mirrored screen.`}</p>
+        </div>
+        <p class="card-story">${language === 'de'
+          ? 'Die geheime Anweisung wird erst nach dem Öffnen sichtbar. Sie kann anschließend kurz gelesen und wieder zugeklappt werden.'
+          : 'The secret instruction is only shown after opening. It can then be read briefly and collapsed again.'}</p>
+        <button class="primary-button" type="button" data-action="reveal-secret-watch">${language === 'de' ? 'Geheimes Event öffnen' : 'Open secret event'}</button>
+      </article>`;
+  }
   if (challenge.playerSelection) {
     const selectedId = engine.state.turn.watchTargetPlayerId;
     const choices = engine.state.players.map((player) => {
@@ -938,7 +970,19 @@ function renderWatchCard(engine, language) {
     .filter(Boolean)
     .map(escapeHtml)
     .join(', ');
-  const awaitingSecretStart = challenge.secret && !ongoing && !mandatory && engine.state.turn.watchStartedAt == null;
+  const awaitingSecretStart = challenge.secret && !ongoing && engine.state.turn.watchStartedAt == null;
+  const secretInstruction = challenge.secret ? `
+    <div class="secret-reading-note"><strong>${language === 'de' ? `Nur ${escapeHtml(engine.activePlayer.name)} liest die Anweisung.` : `Only ${escapeHtml(engine.activePlayer.name)} reads the instruction.`}</strong> ${language === 'de' ? 'Danach bitte wieder zuklappen, bevor die anderen auf den Bildschirm schauen.' : 'Please collapse it again before everyone else looks at the screen.'}</div>
+    <details class="secret-instruction" ${engine.state.turn.watchStartedAt == null ? 'open' : ''}>
+      <summary data-open-label="${language === 'de' ? 'Ansehen' : 'View'}" data-close-label="${language === 'de' ? 'Zuklappen' : 'Collapse'}">${language === 'de' ? 'Geheime Anweisung anzeigen' : 'Show secret instruction'}</summary>
+      <div class="secret-instruction-body">
+        <h2>${t(challenge.title, language)}</h2>
+        <p class="card-story">${t(challenge, language)}</p>
+        <div class="card-effect"><strong>${language === 'de'
+          ? mandatory ? 'Nicht vorlesen: Diese Anweisung ist verbindlich.' : 'Nicht vorlesen, nicht zeigen und der Gruppe nicht erklären.'
+          : mandatory ? 'Do not read aloud: this instruction is mandatory.' : 'Do not read it aloud, show it, or explain it to the group.'}</strong></div>
+      </div>
+    </details>` : '';
   const seconds = Math.max(0, Math.ceil(((engine.state.turn.watchEndsAt ?? Date.now()) - Date.now()) / 1000));
   const durationText = challenge.endTrigger === 'ownerNextTurn'
     ? (language === 'de' ? 'Läuft bis zu deinem nächsten Zug' : 'Runs until your next turn')
@@ -959,40 +1003,37 @@ function renderWatchCard(engine, language) {
         : cooperative
           ? (language === 'de' ? 'Koop-Zeitfüller · sofort gemeinsam ausführen' : 'Co-op interlude · do it together now')
           : (language === 'de' ? 'Zeitfüller · sofort ausführen' : 'Interlude · do it now')}</p>
-      <h2>${t(challenge.title, language)}</h2>
+      ${challenge.secret ? '' : `<h2>${t(challenge.title, language)}</h2>`}
       ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
       ${cooperative ? `<div class="card-effect"><strong>${language === 'de' ? 'Beteiligte' : 'Participants'}: ${cooperativeNames}</strong><p>${language === 'de'
         ? 'Alle ausgewählten Personen sind gerade ohne laufende Küchenaufgabe.'
         : 'Every selected participant is currently free from an active kitchen task.'}</p></div>` : ''}
-      ${challenge.secret ? `<div class="card-effect"><strong>${language === 'de'
-        ? mandatory ? 'Nicht vorlesen: Diese Anweisung ist verbindlich und muss jetzt ausgeführt werden.' : 'Nicht vorlesen, nicht zeigen und der Gruppe nicht erklären.'
-        : mandatory ? 'Do not read aloud: this instruction is mandatory and must be carried out now.' : 'Do not read it aloud, show it, or explain it to the group.'}</strong><p>${language === 'de'
-        ? `Diese Karte gilt nur für ${escapeHtml(engine.activePlayer.name)}.`
-        : `This card applies only to ${escapeHtml(engine.activePlayer.name)}.`}</p></div>` : ''}
-      <p class="card-story">${t(challenge, language)}</p>
-      <div class="challenge-clock">${mandatory ? `<span>${language === 'de' ? 'Jetzt verbindlich ausführen' : 'Carry out now'}</span>` : ongoing ? `<span>${durationText}</span>` : awaitingSecretStart
+      ${secretInstruction}
+      ${challenge.secret ? '' : `<p class="card-story">${t(challenge, language)}</p>`}
+      <div class="challenge-clock">${awaitingSecretStart
         ? `<span>${language === 'de' ? 'Noch nicht gestartet' : 'Not started yet'}</span>`
+        : mandatory ? `<span>${language === 'de' ? 'Jetzt verbindlich ausführen' : 'Carry out now'}</span>` : ongoing ? `<span>${durationText}</span>`
         : `<span class="timer" data-watch-timer>${formatDuration(seconds)}</span>`}<strong>${skillCheck ? skillScoreText : challenge.coins > 0 ? `+${challenge.coins} ${language === 'de' ? 'Münzen nach Abschluss' : 'coins after completion'}` : (language === 'de' ? 'echte Pause' : 'real break')}</strong></div>
       <div class="card-effect">${skillCheck
         ? (language === 'de' ? 'Führt genau den beschriebenen Versuch aus und wertet ehrlich. Drückt danach genau einen der beiden Ergebnis-Buttons.' : 'Perform the described attempt exactly and score it honestly. Then press exactly one of the two result buttons.')
+        : awaitingSecretStart
+          ? (language === 'de' ? 'Lies die aufgeklappte Anweisung, klappe sie wieder zu und starte das geheime Event erst dann. Die Aktion beginnt erst mit dem Startknopf.' : 'Read the expanded instruction, collapse it again, and only then start the secret event. The action begins only with the start button.')
         : mandatory
-        ? (language === 'de' ? 'Keine Auswahl und kein Startknopf: Führe die Anweisung jetzt aus und bestätige sie anschließend.' : 'There is no choice and no start button: carry out the instruction now, then confirm it.')
+        ? (language === 'de' ? 'Führe die verbindliche Anweisung jetzt aus und bestätige sie anschließend.' : 'Carry out the mandatory instruction now, then confirm it.')
         : ongoing
         ? (language === 'de' ? 'Die Aktion beginnt erst mit dem Button. Danach wird das Tablet sofort weitergegeben; die Challenge endet später automatisch.' : 'The action starts only when you press the button. The tablet is then passed immediately and the challenge ends automatically later.')
-        : awaitingSecretStart
-          ? (language === 'de' ? 'Die Aktion läuft noch nicht. Lies und merke dir den Auftrag; drücke erst dann auf „Geheime Challenge starten“. Danach führst du ihn aus, ohne die Karte zu erklären.' : 'The action is not running yet. Read and remember it, then press “Start secret challenge”. Carry it out without explaining the card.')
-          : challenge.secret
+        : challenge.secret
             ? (language === 'de' ? 'Die geheime Challenge läuft jetzt. Führe sie aus, ohne der Gruppe die Karte zu erklären.' : 'The secret challenge is now running. Carry it out without explaining the card to the group.')
             : (language === 'de' ? 'Erledigt die kurze Aktion jetzt; laufende Küchen-Challenges bleiben davon unberührt.' : 'Complete the short action now; running kitchen challenges continue independently.')}</div>
       ${skillCheck ? `<div class="button-row skill-check-actions">
         <button class="primary-button" type="button" data-action="resolve-watch-outcome" data-outcome="success">${language === 'de' ? `Hat geklappt · +${challenge.successCoins} Münzen` : `Succeeded · +${challenge.successCoins} coins`}</button>
         <button class="secondary-button" type="button" data-action="resolve-watch-outcome" data-outcome="failure">${language === 'de' ? `Gescheitert · −${failureCoins} Münzen` : `Failed · −${failureCoins} coins`}</button>
-      </div>` : `<button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${mandatory
-        ? (language === 'de' ? 'Anweisung ausgeführt' : 'Instruction completed')
-        : ongoing
+      </div>` : `<button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${ongoing
         ? (language === 'de' ? 'Geheime Challenge starten & Tablet weitergeben' : 'Start secret challenge & pass the tablet')
         : awaitingSecretStart
-          ? (language === 'de' ? 'Geheime Challenge starten' : 'Start secret challenge')
+          ? (language === 'de' ? 'Geheimes Event starten' : 'Start secret event')
+          : mandatory
+            ? (language === 'de' ? 'Anweisung ausgeführt' : 'Instruction completed')
           : (language === 'de' ? 'Challenge abgeschlossen' : 'Challenge complete')}</button>`}
     </article>`;
 }

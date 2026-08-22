@@ -188,6 +188,117 @@ const question = (de, en, correctDe, correctEn, wrong1De, wrong1En, wrong2De, wr
   wrong: [{ de: wrong1De, en: wrong1En }, { de: wrong2De, en: wrong2En }]
 });
 
+const ISLAND_STORIES = Object.freeze([
+  {
+    de: [
+      'Die Tapasinsel ist eine lebhafte Hafeninsel, deren weiße Häuser sich dicht um die geschützte Bucht drängen.',
+      'Über dem höchsten Dach weht ein rotes Segel mit einem silbernen Anker als Zeichen für friedliche Gäste.',
+      'Die Inselbewohner begrüßen ankommende Crews mit kleinen Tellern und tauschen Neuigkeiten gegen einen ehrlichen Trinkspruch.',
+      'Wer die Insel friedlich umrundet, darf am Abend die große Messingglocke am Rathaus läuten.'
+    ],
+    en: [
+      'Tapas Island is a lively harbour island whose white houses crowd around a sheltered bay.',
+      'A red sail bearing a silver anchor flies above the highest roof as a sign for peaceful visitors.',
+      'The islanders welcome arriving crews with small plates and trade news for an honest toast.',
+      'Anyone who circles the island in peace may ring the great brass bell at the town hall that evening.'
+    ],
+    quizzes: [
+      question('Welches Zeichen trägt das rote Segel der Tapasinsel?', 'Which symbol appears on the red sail of Tapas Island?', 'Einen silbernen Anker', 'A silver anchor', 'Einen goldenen Kraken', 'A golden octopus', 'Eine blaue Krone', 'A blue crown'),
+      question('Aus welchem Material besteht die große Glocke am Rathaus?', 'What is the great bell at the town hall made from?', 'Messing', 'Brass', 'Kupfer', 'Copper', 'Silber', 'Silver')
+    ]
+  },
+  {
+    de: [
+      'Die Nebelinsel liegt über warmen unterirdischen Quellen, deren Dampf jeden Morgen durch Felsspalten steigt.',
+      'Die Fährleute orientieren sich im dichten Weiß an drei kurzen Hornstößen, die von Tal zu Tal beantwortet werden.',
+      'An sicheren Kreuzungen hängen violette Schilfbündel, während unmarkierte Pfade tiefer ins Moor führen.',
+      'Im Inselinneren soll ein alter Kessel stehen, der niemals ganz auskühlt.'
+    ],
+    en: [
+      'Mist Island rests above warm underground springs whose steam rises through cracks in the rock each morning.',
+      'The ferrymen navigate the dense white mist by three short horn calls answered from valley to valley.',
+      'Purple bundles of reeds mark safe crossings, while unmarked paths lead deeper into the marsh.',
+      'An ancient cauldron said never to grow completely cold waits in the island’s interior.'
+    ],
+    quizzes: [
+      question('Was erzeugt jeden Morgen den Nebel der Nebelinsel?', 'What creates the mist on Mist Island each morning?', 'Warme unterirdische Quellen', 'Warm underground springs', 'Ein gefrorener See', 'A frozen lake', 'Rauchende Lagerfeuer', 'Smoking campfires'),
+      question('Wie viele kurze Hornstöße weisen den Fährleuten den Weg?', 'How many short horn calls guide the ferrymen?', 'Drei', 'Three', 'Zwei', 'Two', 'Sieben', 'Seven')
+    ]
+  },
+  {
+    de: [
+      'Die Dschungelinsel wird von einem so dichten Blätterdach bedeckt, dass selbst mittags grünes Dämmerlicht herrscht.',
+      'Steinerne Jaguare bewachen die alten Wege zwischen Fluss, Ruinen und Tempelgärten.',
+      'Forscher markieren sichere Rückwege mit gelben Schnüren, die hoch genug hängen, um nicht von Tieren fortgetragen zu werden.',
+      'Unter der Insel fließt ein klarer Strom, der an Wasserfällen und Quellen wieder ans Licht tritt.'
+    ],
+    en: [
+      'Jungle Island is covered by such a dense canopy that green twilight remains even at midday.',
+      'Stone jaguars guard the old paths between river, ruins, and temple gardens.',
+      'Explorers mark safe return routes with yellow cords hung high enough that animals cannot carry them away.',
+      'A clear current flows beneath the island and returns to daylight at waterfalls and springs.'
+    ],
+    quizzes: [
+      question('Welche Tiere bewachen als Steinfiguren die alten Wege?', 'Which animals guard the old paths as stone figures?', 'Jaguare', 'Jaguars', 'Papageien', 'Parrots', 'Affen', 'Monkeys'),
+      question('Welche Farbe haben die Schnüre für sichere Rückwege?', 'What colour are the cords marking safe return routes?', 'Gelb', 'Yellow', 'Rot', 'Red', 'Blau', 'Blue')
+    ]
+  },
+  {
+    de: [
+      'Die Vulkaninsel erhebt sich wie ein Ring aus schwarzem Basalt um einen rauchenden Gipfel.',
+      'Schmieden, Festungsmauern und Küchen nutzen dieselbe Erdwärme, die durch sorgfältig gemauerte Kanäle geleitet wird.',
+      'Bei Sonnenuntergang schimmert der Vulkanrauch violett, obwohl die Glut darunter orange bleibt.',
+      'Vor großen Festen gießt die Inselwache einen Becher Wasser auf einen warmen Stein und hört am Zischen, ob der Wind günstig steht.'
+    ],
+    en: [
+      'Volcano Island rises like a ring of black basalt around a smoking summit.',
+      'Forges, fortress walls, and kitchens share the same geothermal heat carried through carefully built channels.',
+      'At sunset the volcanic smoke shimmers violet although the embers beneath remain orange.',
+      'Before great feasts, the island watch pours a cup of water onto a warm stone and judges the wind by its hiss.'
+    ],
+    quizzes: [
+      question('Aus welchem Gestein besteht der Ring der Vulkaninsel?', 'Which rock forms the ring of Volcano Island?', 'Schwarzer Basalt', 'Black basalt', 'Weißer Marmor', 'White marble', 'Roter Sandstein', 'Red sandstone'),
+      question('Was gießt die Inselwache vor großen Festen auf einen warmen Stein?', 'What does the island watch pour onto a warm stone before great feasts?', 'Einen Becher Wasser', 'A cup of water', 'Eine Schale Öl', 'A bowl of oil', 'Einen Krug Wein', 'A jug of wine')
+    ]
+  },
+  {
+    de: [
+      'Die Tropeninsel besitzt sieben Süßwasserquellen, die zwischen Palmen, Obstgärten und warmen Lagunen hervortreten.',
+      'Eine goldene Geckofigur gilt als Inselzeichen und ist an jedem Wegweiser zu finden.',
+      'Zum Sonnenuntergang erklingen vom Strand zwei tiefe Muschelhorn-Töne, damit alle Ernteboote sicher zurückkehren.',
+      'Die Bewohner teilen reife Früchte zuerst mit Gästen und lagern den Rest in kühlen Felshöhlen.'
+    ],
+    en: [
+      'Tropical Island has seven freshwater springs emerging among palms, orchards, and warm lagoons.',
+      'A golden gecko figure is the island emblem and appears on every signpost.',
+      'At sunset two low conch-horn notes sound from the beach so every harvest boat returns safely.',
+      'The islanders share ripe fruit with guests first and store the rest in cool rock caves.'
+    ],
+    quizzes: [
+      question('Welches Tier zeigt das goldene Inselzeichen der Tropeninsel?', 'Which animal appears on Tropical Island’s golden emblem?', 'Einen Gecko', 'A gecko', 'Einen Delfin', 'A dolphin', 'Einen Papagei', 'A parrot'),
+      question('Wie viele tiefe Muschelhorn-Töne erklingen bei Sonnenuntergang?', 'How many low conch-horn notes sound at sunset?', 'Zwei', 'Two', 'Drei', 'Three', 'Fünf', 'Five')
+    ]
+  },
+  {
+    de: [
+      'Die Piratenbucht liegt verborgen unter einer schwarzen Klippe und dient freien Crews seit Generationen als friedlicher Zufluchtsort.',
+      'Drei bernsteinfarbene Laternen am Eingang bedeuten, dass Waffen verstaut und Streitigkeiten an Land gelassen werden.',
+      'Ein alter Kompass ist über der Strandbar festgenagelt und zeigt stets zur schmalen Einfahrt der Bucht.',
+      'Nach dem ältesten Gesetz der Bucht muss der letzte Schatz einer Reise mit der gesamten Crew geteilt werden.'
+    ],
+    en: [
+      'Pirate Cove lies hidden beneath a black cliff and has served free crews as a peaceful refuge for generations.',
+      'Three amber lanterns at the entrance mean that weapons must be stowed and quarrels left ashore.',
+      'An old compass is nailed above the beach bar and always points toward the cove’s narrow entrance.',
+      'Under the cove’s oldest law, the final treasure of a voyage must be shared with the entire crew.'
+    ],
+    quizzes: [
+      question('Wie viele bernsteinfarbene Laternen markieren den Eingang der Piratenbucht?', 'How many amber lanterns mark the entrance to Pirate Cove?', 'Drei', 'Three', 'Zwei', 'Two', 'Sechs', 'Six'),
+      question('Mit wem muss der letzte Schatz nach dem ältesten Gesetz geteilt werden?', 'Who must share the final treasure under the oldest law?', 'Mit der gesamten Crew', 'The entire crew', 'Nur mit dem Kapitän', 'Only the captain', 'Mit der Inselwache', 'The island watch')
+    ]
+  }
+]);
+
 const DETAIL_QUESTIONS = Object.freeze([
   [
     [question('Welche Tiere kreisen über den schiefen Masten des Hafenbeckens?', 'Which animals circle above the crooked masts of the Harbour Basin?', 'Möwen', 'Gulls', 'Raben', 'Ravens', 'Fledermäuse', 'Bats'), question('Was öffnen die Händler nach dem Glockenton?', 'What do the merchants open after the bell rings?', 'Ihre ersten Vorratskisten', 'Their first provision crates', 'Das Stadttor', 'The town gate', 'Ein Segel', 'A sail')],
@@ -239,6 +350,19 @@ const DETAIL_QUESTIONS = Object.freeze([
   ]
 ]);
 
+export const ISLAND_STORY_CARDS = Object.freeze(ISLAND_STORIES.map((island, chapterIndex) => ({
+  id: `SI${chapterIndex + 1}`,
+  storyKind: 'island',
+  mandatory: true,
+  chapterId: CHAPTERS[chapterIndex].id,
+  chapterIndex,
+  title: {
+    de: `${CHAPTERS[chapterIndex].name.de} · Inselchronik`,
+    en: `${CHAPTERS[chapterIndex].name.en} · Island Chronicle`
+  },
+  story: { de: island.de.join(' '), en: island.en.join(' ') }
+})));
+
 export const LOCATION_STORY_CARDS = Object.freeze(LOCATION_STORIES.flatMap((stories, chapterIndex) =>
   stories.map((story, locationIndex) => ({
     id: `SL${chapterIndex + 1}-${locationIndex + 1}`,
@@ -256,7 +380,30 @@ export const LOCATION_STORY_CARDS = Object.freeze(LOCATION_STORIES.flatMap((stor
   }))
 ));
 
-const detailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => DETAIL_QUESTIONS[chapterIndex][locationIndex].map((quiz, quizIndex) => {
+const islandDetailQuizzes = ISLAND_STORIES.flatMap((island, chapterIndex) => island.quizzes.map((quiz, quizIndex) => {
+  const sourceCard = ISLAND_STORY_CARDS[chapterIndex];
+  const rawAnswers = [
+    { id: 'correct', label: quiz.correct },
+    ...quiz.wrong.map((label, index) => ({ id: `wrong-${index + 1}`, label }))
+  ];
+  return {
+    id: `SQ${chapterIndex + 1}-I${quizIndex + 1}`,
+    storyKind: 'quiz',
+    quizKind: 'island-detail',
+    chapterId: CHAPTERS[chapterIndex].id,
+    sourceStoryId: sourceCard.id,
+    title: {
+      de: `Inselerinnerung ${quizIndex + 1} · ${CHAPTERS[chapterIndex].name.de}`,
+      en: `Island Memory ${quizIndex + 1} · ${CHAPTERS[chapterIndex].name.en}`
+    },
+    question: { de: quiz.de, en: quiz.en },
+    answers: rotateAnswers(rawAnswers, (chapterIndex + quizIndex) % rawAnswers.length),
+    correctAnswerId: 'correct',
+    requirements: { storyIds: [sourceCard.id] }
+  };
+}));
+
+const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => DETAIL_QUESTIONS[chapterIndex][locationIndex].map((quiz, quizIndex) => {
   const sourceCard = LOCATION_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex && card.locationIndex === locationIndex);
   const rawAnswers = [
     { id: 'correct', label: quiz.correct },
@@ -266,7 +413,7 @@ const detailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => storie
   return {
     id: `SQ${chapterIndex + 1}-D${locationIndex + 1}-${quizIndex + 1}`,
     storyKind: 'quiz',
-    quizKind: 'detail',
+    quizKind: 'location-detail',
     chapterId: CHAPTERS[chapterIndex].id,
     sourceStoryId: sourceCard.id,
     title: {
@@ -316,8 +463,9 @@ const routeQuizzes = CHAPTERS.flatMap((chapter, chapterIndex) => routeQuestionTe
   };
 }));
 
-export const STORY_QUIZ_CARDS = Object.freeze([...detailQuizzes, ...routeQuizzes]);
-export const STORY_CARDS = Object.freeze([...LOCATION_STORY_CARDS, ...STORY_QUIZ_CARDS]);
+export const STORY_QUIZ_CARDS = Object.freeze([...islandDetailQuizzes, ...locationDetailQuizzes, ...routeQuizzes]);
+export const MANDATORY_STORY_CARDS = Object.freeze([...ISLAND_STORY_CARDS, ...LOCATION_STORY_CARDS]);
+export const STORY_CARDS = Object.freeze([...MANDATORY_STORY_CARDS, ...STORY_QUIZ_CARDS]);
 
 export function storyCardById(storyCardId) {
   return STORY_CARDS.find((card) => card.id === storyCardId) ?? null;
@@ -325,6 +473,10 @@ export function storyCardById(storyCardId) {
 
 export function locationStoryCard(chapterIndex, locationIndex) {
   return LOCATION_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex && card.locationIndex === locationIndex) ?? null;
+}
+
+export function islandStoryCard(chapterIndex) {
+  return ISLAND_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex) ?? null;
 }
 
 export function storyLocationKey(chapterIndex, locationIndex) {
@@ -337,11 +489,14 @@ export function validateStoryCatalog() {
   const titlesEn = new Set(STORY_CARDS.map((card) => card.title.en));
   return {
     total: STORY_CARDS.length,
+    islandStories: ISLAND_STORY_CARDS.length,
     locationStories: LOCATION_STORY_CARDS.length,
     quizzes: STORY_QUIZ_CARDS.length,
-    detailQuizzes: detailQuizzes.length,
+    islandDetailQuizzes: islandDetailQuizzes.length,
+    locationDetailQuizzes: locationDetailQuizzes.length,
     routeQuizzes: routeQuizzes.length,
-    valid: STORY_CARDS.length === 132 && LOCATION_STORY_CARDS.length === 36 && detailQuizzes.length === 72 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 96 &&
+    valid: STORY_CARDS.length === 150 && ISLAND_STORY_CARDS.length === 6 && LOCATION_STORY_CARDS.length === 36 &&
+      islandDetailQuizzes.length === 12 && locationDetailQuizzes.length === 72 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 108 &&
       ids.size === STORY_CARDS.length && titlesDe.size === STORY_CARDS.length && titlesEn.size === STORY_CARDS.length
   };
 }

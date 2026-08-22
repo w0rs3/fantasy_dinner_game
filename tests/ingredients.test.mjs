@@ -244,10 +244,11 @@ test('draw, character-choice, deck-swap, repeat, and event-replacement effects c
   beginAbilityIngredientFlow(onionEngine);
   onionEngine.applyIngredientEffect(effectCard(onionEngine, 'disablePassive'));
   assert.equal(onionEngine.state.turn.phase, 'effectChoice');
-  assert.equal(onionEngine.resolveIngredientEffectChoice('player-2'), true);
-  assert.equal(onionEngine.isPassiveEnabled(onionEngine.state.players[1]), false);
-  onionEngine.state.players[1].turns += 1;
-  assert.equal(onionEngine.isPassiveEnabled(onionEngine.state.players[1]), true);
+  const otherPlayer = onionEngine.state.players.find((player) => player.id !== onionEngine.activePlayer.id);
+  assert.equal(onionEngine.resolveIngredientEffectChoice(otherPlayer.id), true);
+  assert.equal(onionEngine.isPassiveEnabled(otherPlayer), false);
+  otherPlayer.turns += 1;
+  assert.equal(onionEngine.isPassiveEnabled(otherPlayer), true);
 
   const selfOnionEngine = createEngine(885);
   beginAbilityIngredientFlow(selfOnionEngine);
@@ -301,6 +302,8 @@ test('the Cook can ignore one ingredient effect per course and the Alchemist pas
   const alternative = alchemistEngine.ingredientCandidates(first.category)[1];
   assert.ok(alternative, 'test requires an ingredient alternative');
   first.status = 'discovered';
+  first.chapterIndex = alchemistEngine.state.chapterIndex;
+  first.basketCourseIndex = alchemistEngine.state.chapterIndex;
   alchemistEngine.state.lastIngredientId = first.id;
   const uses = alchemistEngine.activePlayer.activeUsesRemaining;
   assert.equal(alchemistEngine.useAlchemistPassive(), true);

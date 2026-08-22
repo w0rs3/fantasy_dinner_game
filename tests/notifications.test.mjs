@@ -24,4 +24,9 @@ test('timer notices stay inside the game and only fire when a timer finishes', a
   assert.doesNotMatch(acceptTaskHandler, /Notification|requestNotifications/);
   assert.doesNotMatch(startTaskHandler, /Notification|requestNotifications/);
   assert.match(app, /\[data-task-progress\][\s\S]*?style\.setProperty\('--progress'/);
+  const timerHandler = app.match(/function processTimers\(\) \{([\s\S]*?)\n\}/)?.[1] ?? '';
+  assert.match(timerHandler, /updateVisibleTimers\(\)/);
+  assert.match(timerHandler, /showToast\(/);
+  assert.match(timerHandler, /persist\(\)/);
+  assert.doesNotMatch(timerHandler, /\brender\(\)/, 'a timer notification must not rebuild the current screen');
 });

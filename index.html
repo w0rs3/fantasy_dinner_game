@@ -53,6 +53,7 @@
         <button type="button" data-nav="crew"><span aria-hidden="true">♙</span><span data-i18n="navCrew">Crew</span></button>
         <button type="button" data-nav="sessions"><span aria-hidden="true">↺</span><span data-i18n="navSessions">Reisen</span></button>
         <button type="button" data-nav="rules"><span aria-hidden="true">?</span><span data-i18n="navRules">Regeln</span></button>
+        <button type="button" data-nav="faq"><span aria-hidden="true">i</span><span data-i18n="navFaq">FAQ</span></button>
       </nav>
 
       <main id="main-content" class="main-content" tabindex="-1">
@@ -70,7 +71,7 @@
             <p id="dialog-kicker" class="eyebrow"></p>
             <h2 id="dialog-title"></h2>
           </div>
-          <button class="icon-button" value="close" aria-label="Schließen">×</button>
+          <button class="icon-button" type="button" data-action="close-dialog" aria-label="Schließen">×</button>
         </div>
         <div id="dialog-content" class="dialog-content"></div>
         <div id="dialog-actions" class="dialog-actions"></div>

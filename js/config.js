@@ -24,6 +24,8 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   language: 'de',
   audio: true,
   reducedMotion: false,
+  ingredientNames: Object.freeze({}),
+  shoppingStapleNames: Object.freeze({}),
 });
 
 export const SESSION_STATUS = Object.freeze({

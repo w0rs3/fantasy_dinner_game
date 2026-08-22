@@ -106,7 +106,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
       if (!engine.beginEvent(now) && engine.state.turn.phase === 'draw') pureWaitingSteps += 1;
     } else if (phase === 'event') {
       const event = engine.currentEvent;
-      if (event.storyKind === 'location') {
+      if (['island', 'location'].includes(event.storyKind)) {
         if (!engine.completeStoryCard(now)) failedTransitions += 1;
       } else if (event.storyKind === 'quiz') {
         const answer = (seed + steps) % 4
@@ -128,7 +128,9 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
       if (!engine.confirmRoll(now)) failedTransitions += 1;
     } else if (phase === 'watch') {
       let handled;
-      if (engine.currentWatchChallenge?.playerSelection) {
+      if (engine.currentWatchChallenge?.secret && engine.state.turn.watchSecretRevealedAt == null) {
+        handled = engine.revealSecretWatchChallenge(now);
+      } else if (engine.currentWatchChallenge?.playerSelection) {
         const player = engine.state.players[(engine.state.activePlayerIndex + 1) % engine.state.players.length];
         handled = engine.selectWatchChallengePlayer(player.id) && engine.confirmWatchChallengePlayer(now);
       } else if (engine.currentWatchChallenge?.flow === 'ongoing') handled = engine.activateOngoingWatchChallenge(now);
@@ -231,6 +233,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     taskMarkerSpread: Math.max(...markers) - Math.min(...markers),
     events: engine.state.eventsDrawn.length,
     uniqueEvents: new Set(engine.state.eventsDrawn).size,
+    islandStories: engine.state.eventsDrawn.filter((eventId) => eventId.startsWith('SI')).length,
     locationStories: engine.state.eventsDrawn.filter((eventId) => eventId.startsWith('SL')).length,
     storyQuizzes: engine.state.eventsDrawn.filter((eventId) => eventId.startsWith('SQ')).length,
     funCards: engine.state.funCardsDrawn.length,

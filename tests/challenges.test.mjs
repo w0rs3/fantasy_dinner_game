@@ -25,7 +25,15 @@ function startChallenge(id, seed = 700, targetPlayerId = null) {
 test('multi-turn challenges activate and hand over instead of blocking the current turn', () => {
   const engine = startChallenge('compliments');
   const ownerId = engine.activePlayer.id;
+  const announcement = renderGame(engine, 'de');
+  assert.match(announcement, /Alle außer der aktiven Person schauen jetzt vom großen Bildschirm weg/);
+  assert.match(announcement, /data-action="reveal-secret-watch"/);
+  assert.doesNotMatch(announcement, /Rückenwind für die Crew|ehrliches, kurzes Kompliment|data-action="activate-watch"/);
+
+  assert.equal(engine.activateOngoingWatchChallenge(now + 150), false, 'a secret event cannot start before it is privately opened');
+  assert.equal(engine.revealSecretWatchChallenge(now + 160), true);
   const html = renderGame(engine, 'de');
+  assert.match(html, /<details class="secret-instruction" open>/);
   assert.match(html, /data-action="activate-watch"/);
   assert.match(html, /Geheime Challenge starten &amp; Tablet weitergeben|Geheime Challenge starten & Tablet weitergeben/);
   assert.match(html, /Nicht vorlesen, nicht zeigen und der Gruppe nicht erklären/);
@@ -57,8 +65,13 @@ test('speech rules and captain permission last until the owner next receives the
     const targetName = engine.state.players.find((player) => player.id === engine.state.turn.watchTargetPlayerId).name;
     const html = renderGame(engine, 'de');
     if (id === 'captain-permission') {
-      assert.match(html, new RegExp(targetName));
-      assert.doesNotMatch(html, /\{targetPlayer\}/);
+      assert.doesNotMatch(html, new RegExp(targetName));
+      assert.equal(engine.revealSecretWatchChallenge(now + 150 + index), true);
+      const revealedHtml = renderGame(engine, 'de');
+      assert.match(revealedHtml, new RegExp(targetName));
+      assert.doesNotMatch(revealedHtml, /\{targetPlayer\}/);
+    } else {
+      assert.equal(engine.revealSecretWatchChallenge(now + 150 + index), true);
     }
     assert.equal(engine.currentWatchChallenge.flow, 'ongoing');
     assert.equal(engine.currentWatchChallenge.endTrigger, 'ownerNextTurn');
@@ -70,6 +83,7 @@ test('speech rules and captain permission last until the owner next receives the
 test('target-turn and linked chicken challenges resolve at the correct later moment', () => {
   const laughter = startChallenge('laugh-turn', 701);
   const targetId = laughter.state.turn.watchTargetPlayerId;
+  laughter.revealSecretWatchChallenge(now + 150);
   laughter.activateOngoingWatchChallenge(now + 200);
   laughter.endTurn(now + 300);
   assert.equal(laughter.activePlayer.id, targetId);
@@ -81,6 +95,7 @@ test('target-turn and linked chicken challenges resolve at the correct later mom
 
   const chicken = startChallenge('chicken', 702);
   const cursedPlayerId = chicken.activePlayer.id;
+  chicken.revealSecretWatchChallenge(now + 450);
   chicken.activateOngoingWatchChallenge(now + 500);
   assert.equal(chicken.state.activeChallenges[0].endTrigger, 'followUp');
   chicken.endTurn(now + 600);
@@ -96,12 +111,19 @@ test('target-turn and linked chicken challenges resolve at the correct later mom
   assert.equal(chicken.currentWatchChallenge.id, 'stop-chicken');
   assert.equal(chicken.state.turn.watchTargetPlayerId, cursedPlayerId);
   assert.equal(chicken.currentWatchChallenge.mandatory, true);
-  assert.equal(chicken.state.turn.watchStartedAt, now + 700, 'mandatory instructions start as soon as they appear');
+  assert.equal(chicken.state.turn.watchStartedAt, null, 'mandatory secret instructions also wait behind the privacy screen');
+  const mandatoryAnnouncement = renderGame(chicken, 'de');
+  assert.match(mandatoryAnnouncement, /data-action="reveal-secret-watch"/);
+  assert.doesNotMatch(mandatoryAnnouncement, /Hühnerfluch ist gebrochen|Gegenmittel/);
+  assert.equal(chicken.completeWatchChallenge(now + 710), false);
+  assert.equal(chicken.revealSecretWatchChallenge(now + 720), true);
   const mandatoryHtml = renderGame(chicken, 'de');
   assert.match(mandatoryHtml, new RegExp(chicken.state.players.find((player) => player.id === cursedPlayerId).name));
   assert.match(mandatoryHtml, /Verbindliche geheime Anweisung/);
-  assert.match(mandatoryHtml, /data-action="complete-watch"/);
-  assert.doesNotMatch(mandatoryHtml, /\{targetPlayer\}|data-action="start-watch"/);
+  assert.match(mandatoryHtml, /data-action="start-watch"/);
+  assert.doesNotMatch(mandatoryHtml, /\{targetPlayer\}|data-action="complete-watch"/);
+  assert.equal(chicken.startWatchChallengeAction(now + 750), true);
+  assert.match(renderGame(chicken, 'de'), /data-action="complete-watch"/);
   assert.equal(chicken.completeWatchChallenge(now + 800), true);
   assert.equal(chicken.state.activeChallenges.length, 0);
   assert.equal(chicken.state.coins, 2, 'curse and antidote both pay only after the antidote');
@@ -109,6 +131,7 @@ test('target-turn and linked chicken challenges resolve at the correct later mom
 
 test('every linked counter-card ends its matching curse and follow-ups block serving until resolved', () => {
   const engine = startChallenge('nose-voice', 715);
+  engine.revealSecretWatchChallenge(now + 150);
   engine.activateOngoingWatchChallenge(now + 200);
   const dueTurn = engine.state.chapter.scheduledChallenges[0].dueTurn;
   engine.state.taskQueues[0] = [];
@@ -122,6 +145,8 @@ test('every linked counter-card ends its matching curse and follow-ups block ser
   engine.state.turn.phase = 'draw';
   engine.beginEvent(now + 500);
   assert.equal(engine.currentWatchChallenge.id, 'stop-nose');
+  assert.equal(engine.revealSecretWatchChallenge(now + 550), true);
+  assert.equal(engine.startWatchChallengeAction(now + 575), true);
   assert.equal(engine.completeWatchChallenge(now + 600), true);
   assert.equal(engine.state.activeChallenges.some((challenge) => challenge.challengeId === 'nose-voice'), false);
   assert.equal(engine.unresolvedFollowUpCount(), 0);
@@ -129,6 +154,7 @@ test('every linked counter-card ends its matching curse and follow-ups block ser
 
 test('an ongoing challenge cannot be dealt to two people at the same time', () => {
   const engine = startChallenge('chicken', 706);
+  assert.equal(engine.revealSecretWatchChallenge(now + 150), true);
   assert.equal(engine.activateOngoingWatchChallenge(now + 200), true);
   engine.state.chapter.queuedChallenges = [];
   engine.state.turn.phase = 'draw';
@@ -334,22 +360,37 @@ test('the pirate verse event accepts either a song or a dramatic poem', () => {
   assert.equal(engine.state.coins, 1);
 });
 
-test('private one-person challenges require an explicit start before completion', () => {
+test('private one-person challenges announce privacy, reveal in a collapse, and require an explicit start', () => {
   const engine = startChallenge('table-lap', 704);
   assert.equal(engine.currentWatchChallenge.secret, true);
+  assert.equal(engine.state.turn.watchSecretRevealedAt, null);
   assert.equal(engine.state.turn.watchStartedAt, null);
-  assert.equal(engine.completeWatchChallenge(now + 200), false, 'reading the card does not start or complete it');
+  assert.equal(engine.completeWatchChallenge(now + 200), false, 'an unopened card cannot start or complete itself');
+  assert.equal(engine.startWatchChallengeAction(now + 210), false, 'the start action is locked until the private reveal');
 
   const before = renderGame(engine, 'de');
-  assert.match(before, /Noch nicht gestartet/);
-  assert.match(before, /data-action="start-watch"/);
-  assert.match(before, /Geheime Challenge starten/);
+  assert.match(before, /Geheimes Event/);
+  assert.match(before, /großen Bildschirm weg/);
+  assert.match(before, /data-action="reveal-secret-watch"/);
+  assert.doesNotMatch(before, /Geheimer Rundgang|geh einmal um den Tisch|data-action="start-watch"/);
+
+  assert.equal(engine.revealSecretWatchChallenge(now + 250), true);
+  assert.equal(engine.revealSecretWatchChallenge(now + 251), false, 'the private reveal boundary is unique');
+  const revealed = renderGame(engine, 'de');
+  assert.match(revealed, /<details class="secret-instruction" open>/);
+  assert.match(revealed, /<summary[^>]*>Geheime Anweisung anzeigen<\/summary>/);
+  assert.match(revealed, /Geheimer Rundgang/);
+  assert.match(revealed, /geh einmal um den Tisch/);
+  assert.match(revealed, /data-action="start-watch"/);
+  assert.match(revealed, /Geheimes Event starten/);
 
   assert.equal(engine.startWatchChallengeAction(now + 300), true);
   assert.equal(engine.startWatchChallengeAction(now + 301), false, 'the start boundary is unique');
   assert.equal(engine.state.turn.watchStartedAt, now + 300);
   const running = renderGame(engine, 'de');
   assert.match(running, /Die geheime Challenge läuft jetzt/);
+  assert.match(running, /<details class="secret-instruction" >/);
+  assert.doesNotMatch(running, /<details class="secret-instruction" open>/);
   assert.match(running, /data-action="complete-watch"/);
   assert.equal(engine.completeWatchChallenge(now + 400), true);
 });

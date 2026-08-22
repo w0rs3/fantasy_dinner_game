@@ -305,6 +305,9 @@ test('handover advances to the next free player and skips task owners', () => {
     engine.confirmTaskAssignees();
   }
   if (engine.state.turn.phase === 'taskBriefing') engine.acceptTaskBriefing();
+  if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.secret && engine.state.turn.watchSecretRevealedAt == null) {
+    engine.revealSecretWatchChallenge();
+  }
   if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.playerSelection) {
     engine.selectWatchChallengePlayer(engine.activePlayer.id);
     engine.confirmWatchChallengePlayer();
