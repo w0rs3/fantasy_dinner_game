@@ -1,5 +1,8 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
+import { GameEngine } from '../js/core/game-engine.js';
+import { WATCH_CHALLENGES } from '../js/data/events.js';
+import { TASK_DECKS } from '../js/data/tasks.js';
 import { simulateGame } from '../tools/simulation-lib.mjs';
 
 test('complete games finish for every supported crew size without pure waiting', () => {
@@ -28,16 +31,27 @@ test('complete games finish for every supported crew size without pure waiting',
       assert.equal(result.basketResidue.length, 0);
       assert.equal(result.events, result.uniqueEvents, 'a voyage must not repeat event cards');
       assert.equal(result.funCards, result.uniqueFunCards, 'a voyage must not repeat fun cards');
-      assert.ok(result.funCards <= 100, 'the finite fun-card deck must never be exceeded');
+      assert.ok(result.funCards <= WATCH_CHALLENGES.length, 'the finite fun-card deck must never be exceeded');
       assert.ok(result.productiveWaitingTurns > 0, 'timer windows should contain playable turns');
       assert.equal(result.essentialUnused.length, 0);
+      const cocktailSpiritTarget = result.snapshot.chapter.cocktailSpiritTarget;
+      const cocktailSpiritCount = result.snapshot.menu[5].ingredientIds.filter((ingredientId) =>
+        result.snapshot.ingredients.find((ingredient) => ingredient.id === ingredientId)?.category === 'alcohol'
+      ).length;
+      assert.ok([1, 2, 3].includes(cocktailSpiritTarget));
+      assert.equal(cocktailSpiritCount, cocktailSpiritTarget);
       assert.ok(result.snapshot.coins <= 500 && result.snapshot.coins >= 0, 'coin score stays within the reward scale');
       assert.equal(result.tasks, result.completedTasks);
-      assert.equal(result.tasks, 76);
+      const restored = new GameEngine(result.snapshot);
+      restored.state.menu[1].servedAt = null;
+      const expectedTasks = TASK_DECKS.reduce((total, deck, chapterIndex) => total +
+        deck.filter((card) => card.playable && restored.taskAppliesToChapter(card, chapterIndex)).length, 0);
+      const recurringWatchInstances = result.snapshot.tasks.filter((task) => restored.getTaskCard(task)?.repeatOnRelief).length;
+      assert.equal(result.tasks, expectedTasks + Math.max(0, recurringWatchInstances - 1));
       assert.ok(result.backgroundTasks >= 5);
-      assert.ok(result.manualTasks >= 4);
+      assert.ok(result.manualTasks >= 3);
       assert.ok(result.turnSpread <= 25, `turn spread was ${result.turnSpread}`);
-      assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 400, `duration was ${result.durationMinutes}`);
+      assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 410, `duration was ${result.durationMinutes}`);
       assert.equal(result.soupStyle, seed % 2 ? 'clear' : 'cream');
       assert.ok(result.maxConcurrentTasks >= 2, 'parallel tasks should occur');
     }

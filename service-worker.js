@@ -28,6 +28,7 @@ const APP_SHELL = [
   './js/core/storage.js',
   './js/core/timers.js',
   './js/data/chapters.js',
+  './js/data/story-events.js',
   './js/data/events.js',
   './js/data/i18n.js',
   './js/data/ingredients.js',

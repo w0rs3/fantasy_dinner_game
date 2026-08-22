@@ -25,7 +25,7 @@ test('service worker app shell contains every runtime module and required asset'
     'css/base.css', 'css/layout.css', 'css/components.css', 'css/animations.css',
     'js/app.bundle.js', 'js/app.js', 'js/config.js', 'js/core/audio.js', 'js/core/game-engine.js',
     'js/core/random.js', 'js/core/storage.js', 'js/core/timers.js',
-    'js/data/chapters.js', 'js/data/events.js', 'js/data/i18n.js',
+    'js/data/chapters.js', 'js/data/story-events.js', 'js/data/events.js', 'js/data/i18n.js',
     'js/data/ingredients.js', 'js/data/roles.js', 'js/data/tasks.js',
     'js/ui/dialog.js', 'js/ui/game.js', 'js/ui/helpers.js',
     'js/ui/overlays.js', 'js/ui/welcome.js'
@@ -102,13 +102,16 @@ test('location board uses cinematic scene assets without player circles and the 
   assert.match(css, /\.station-scene\[data-atlas="true"\][\s\S]*?background-size:\s*cover,\s*200% 300%/);
   assert.match(css, /\.station-caption/);
   assert.match(css, /\.voyage-map/);
+  assert.match(css, /\.active-course-heading/);
   assert.match(css, /\.sea-route\[data-state="sailed"\]/);
   assert.doesNotMatch(css, /\.station-person/);
   assert.match(css, /transform-style:\s*preserve-3d/);
   assert.match(css, /\.die-front[\s\S]*?\.die-back[\s\S]*?\.die-right[\s\S]*?\.die-left[\s\S]*?\.die-top[\s\S]*?\.die-bottom/);
   assert.match(game, /LOCATION_SCENES/);
   assert.match(game, /location-scenes\/soup-locations-atlas\.jpg/);
+  assert.ok(game.indexOf('class="active-course-heading"') < game.indexOf('class="voyage-map"'), 'the active course heading is rendered above the island map');
   assert.ok(game.indexOf('class="voyage-map"') < game.indexOf('class="station-scene"'), 'the island map is rendered above the current location scene');
+  assert.match(game, /t\(engine\.currentChapter\.course, language\)/);
   assert.doesNotMatch(game, /station-person/);
   assert.match(game, /die-cube/);
   assert.match(game, /5:\s*\[1, 3, 5, 7, 9\]/);

@@ -84,6 +84,7 @@
   flex-direction: column;
   gap: 0.35rem;
   height: calc(100vh - 4.75rem - var(--safe-top));
+  overflow-y: auto;
   padding: 1rem 0.55rem calc(1rem + var(--safe-bottom));
   background: rgba(3, 23, 30, .78);
   border-right: 1px solid var(--line);
@@ -179,10 +180,6 @@
   gap: 1rem;
 }
 
-.menu-button {
-  display: none;
-}
-
 @media (max-width: 980px) {
   .game-grid,
   .two-column {
@@ -201,6 +198,7 @@
       "header"
       "main";
     grid-template-columns: 1fr;
+    padding-bottom: calc(4.8rem + var(--safe-bottom));
   }
 
   .app-header {
@@ -214,35 +212,31 @@
 
   .app-nav {
     position: fixed;
-    top: calc(4.75rem + var(--safe-top));
+    z-index: 70;
+    top: auto;
     right: 0;
     bottom: 0;
-    left: auto;
-    width: min(18rem, 82vw);
-    height: auto;
-    padding-inline: 0.85rem;
+    left: 0;
+    flex-direction: row;
+    width: auto;
+    height: calc(4.8rem + var(--safe-bottom));
+    overflow-x: auto;
+    overflow-y: hidden;
+    padding: .35rem .45rem calc(.35rem + var(--safe-bottom));
     background: rgba(3, 23, 30, .98);
+    border-top: 1px solid var(--line);
     border-right: 0;
-    border-left: 1px solid var(--line);
-    box-shadow: -20px 0 50px rgba(0,0,0,.4);
-    transform: translateX(105%);
-    transition: transform .24s ease;
-  }
-
-  .app-nav[data-open="true"] {
-    transform: translateX(0);
+    box-shadow: 0 -12px 30px rgba(0,0,0,.28);
+    scrollbar-width: thin;
   }
 
   .app-nav button {
-    flex-direction: row;
-    justify-content: flex-start;
-    min-height: 3.65rem;
-    padding-inline: 1rem;
-    font-size: 0.85rem;
-  }
-
-  .menu-button {
-    display: grid;
+    flex: 0 0 4.4rem;
+    flex-direction: column;
+    justify-content: center;
+    min-height: 4rem;
+    padding: .35rem .2rem;
+    font-size: .65rem;
   }
 
   .game-grid,

@@ -13,7 +13,7 @@ export const ROLES = Object.freeze([
   },
   {
     id: 'merchant', icon: '◇', name: { de: 'Händler', en: 'Merchant' }, color: '#d8a94c',
-    passive: { de: 'Bei Zutatenfunden darf statt der obersten die zweite Karte genommen werden.', en: 'On ingredient draws, the second card may be taken instead of the top card.' },
+    passive: { de: 'Bei Zutatenfunden durch Ereignisse werden drei gültige Zutaten angeboten und eine davon wird gewählt.', en: 'When an event finds ingredients, three valid ingredients are offered and one is chosen.' },
     active: { de: 'Zieht zwei Zutatenkarten und behaltet eine.', en: 'Draw two ingredient cards and keep one.' },
     activeCode: 'chooseIngredient', uses: 2
   },
@@ -58,6 +58,24 @@ export const ROLES = Object.freeze([
     passive: { de: 'Ein Ereigniseffekt pro Gang darf ohne Auswirkung abgeschlossen werden.', en: 'One event effect per course may be completed without applying it.' },
     active: { de: 'Mischt den verbleibenden Ereignisstapel und deckt eine neue Karte auf.', en: 'Shuffle the remaining event deck and reveal a new card.' },
     activeCode: 'shuffleEvents', uses: 2
+  },
+  {
+    id: 'lucky', icon: '☘', name: { de: 'Glückspilz', en: 'Lucky One' }, color: '#4f9f72',
+    passive: { de: 'Münzverluste durch den eigenen Zug oder eine eigene Aufgabe fallen immer um 1 Münze geringer aus.', en: 'Coin losses caused by this player’s turn or one of their tasks are always reduced by 1 coin.' },
+    active: { de: 'Die nächste passende Aufgaben-Challenge erhält 2 Minuten mehr Zeit. Ihre Münzwertung wird dafür um 2 verschlechtert: 2 Münzen weniger Gewinn oder 2 Münzen mehr Verlust.', en: 'The next eligible task challenge gets 2 extra minutes. Its coin score is worsened by 2: gain 2 fewer coins or lose 2 more coins.' },
+    activeCode: 'extendNextTask', uses: 3
+  },
+  {
+    id: 'unlucky', icon: '☂', name: { de: 'Pechvogel', en: 'Unlucky One' }, color: '#866497',
+    passive: { de: 'Münzverluste durch den eigenen Zug oder eine eigene Aufgabe fallen immer um 1 Münze höher aus.', en: 'Coin losses caused by this player’s turn or one of their tasks are always increased by 1 coin.' },
+    active: { de: 'Die nächste passende Aufgaben-Challenge erhält 2 Minuten weniger Zeit. Ihre Münzwertung wird dafür um 2 verbessert: 2 Münzen mehr Gewinn oder 2 Münzen weniger Verlust.', en: 'The next eligible task challenge gets 2 fewer minutes. Its coin score is improved by 2: gain 2 extra coins or lose 2 fewer coins.' },
+    activeCode: 'shortenNextTask', uses: 3
+  },
+  {
+    id: 'gambler', icon: '⚄', name: { de: 'Gambler', en: 'Gambler' }, color: '#b66b4a',
+    passive: { de: 'Bei Ereignissen mit normalerweise 5 Münzen Verlust würfelt der Gambler einen zusätzlichen W6. Die Augenzahl bestimmt stattdessen den Münzverlust.', en: 'On events that would normally lose 5 coins, the Gambler rolls an extra d6. The result determines the coin loss instead.' },
+    active: { de: 'Einmal pro Gang würfeln: 6 = +6, 5 = +4, 4 = +2, 3 = −2, 2 = −4, 1 = −6 Münzen.', en: 'Roll once per course: 6 = +6, 5 = +4, 4 = +2, 3 = −2, 2 = −4, 1 = −6 coins.' },
+    activeCode: 'gambleCoins', uses: 6
   }
 ]);
 
@@ -73,7 +91,7 @@ const ROLE_USAGE = Object.freeze({
     activeButton: { de: 'Offenes Ereignis ersetzen', en: 'Replace open event' }
   },
   merchant: {
-    passiveUsage: { de: 'Automatisch bei jedem Zutatenfund: Es werden mindestens zwei gültige Zutaten angeboten und eine davon wird gewählt. Dafür gibt es keinen eigenen Button.', en: 'Automatic on every ingredient find: at least two valid ingredients are offered and one is chosen. It has no separate button.' },
+    passiveUsage: { de: 'Automatisch bei Zutatenfunden durch Ereignisse: Es werden drei gültige Zutaten angeboten und eine davon wird gewählt. Dafür gibt es keinen eigenen Button.', en: 'Automatic when an event finds ingredients: three valid ingredients are offered and one is chosen. It has no separate button.' },
     activeUsage: { de: 'Während der Zutatenphase in einem freien Zieh- oder Ereignisschritt. Öffnet zwei beliebige gültige Zutaten zur Auswahl; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'During the ingredient stage in a free draw or event step. Opens two valid ingredients of any kind to choose from; costs 1 use and can be used at most once per turn.' },
     activeButton: { de: 'Zwei beliebige Zutaten ziehen', en: 'Draw two ingredients' }
   },
@@ -116,6 +134,21 @@ const ROLE_USAGE = Object.freeze({
     passiveButton: { de: 'Ereignis ohne Wirkung abschließen (passiv)', en: 'Complete event without effect (passive)' },
     activeUsage: { de: 'Solange eine Ereigniskarte offen und noch nicht abgeschlossen ist. Die offene Karte wird zurückgemischt und durch eine neue ersetzt; kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'While an event card is face up and not yet resolved. The open card is shuffled back and replaced; costs 1 use and can be used at most once per turn.' },
     activeButton: { de: 'Ereignisstapel mischen und neu ziehen', en: 'Shuffle event deck and redraw' }
+  },
+  lucky: {
+    passiveUsage: { de: 'Automatisch bei jedem negativen Münzeffekt im eigenen Zug und bei jeder eigenen Aufgabe – auch wenn die aktive Fähigkeit auf dieser Aufgabe liegt. Der gemeinsame Verlust sinkt um 1, kann aber nie zu einem Gewinn werden.', en: 'Automatic on every negative coin effect during this player’s turn and on every task assigned to them, including a task modified by the active ability. The shared loss is reduced by 1 but can never become a gain.' },
+    activeUsage: { de: 'In einem freien, abgeschlossenen Kartenschritt vormerken. Die Fähigkeit wartet auf die nächste zugeteilte Arbeits-Challenge mit Spieltimer, verlängert sie um 2 Minuten und verschlechtert deren Münzwertung um 2. Unbewertete Hintergrund- und Gargrad-Aufgaben verbrauchen die Vormerkung nicht. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'Arm it during a free, settled card step. It waits for the next assigned scored work challenge, adds 2 minutes, and worsens its coin score by 2. Unscored background and doneness tasks do not consume it. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Nächster Aufgaben-Challenge +2 Minuten geben', en: 'Give next task challenge +2 minutes' }
+  },
+  unlucky: {
+    passiveUsage: { de: 'Automatisch bei jedem negativen Münzeffekt im eigenen Zug und bei jeder eigenen Aufgabe – auch wenn die aktive Fähigkeit auf dieser Aufgabe liegt. Der gemeinsame Verlust steigt um 1.', en: 'Automatic on every negative coin effect during this player’s turn and on every task assigned to them, including a task modified by the active ability. The shared loss increases by 1.' },
+    activeUsage: { de: 'In einem freien, abgeschlossenen Kartenschritt vormerken. Die Fähigkeit wartet auf die nächste zugeteilte Arbeits-Challenge mit mehr als 2 Minuten, verkürzt sie um 2 Minuten und verbessert deren Münzwertung um 2. Kürzere, unbewertete Hintergrund- und Gargrad-Aufgaben verbrauchen die Vormerkung nicht. Kostet 1 Einsatz und ist höchstens einmal pro Zug möglich.', en: 'Arm it during a free, settled card step. It waits for the next assigned scored work challenge longer than 2 minutes, removes 2 minutes, and improves its coin score by 2. Shorter, unscored background and doneness tasks do not consume it. Costs 1 use and can be used at most once per turn.' },
+    activeButton: { de: 'Nächste Aufgaben-Challenge −2 Minuten setzen', en: 'Set next task challenge to −2 minutes' }
+  },
+  gambler: {
+    passiveUsage: { de: 'Automatisch, wenn im eigenen Zug ein Ereigniseffekt normalerweise genau 5 Münzen kosten würde. Vor dem Abzug erscheint ein zusätzlicher W6; bei einer 1 verliert die Crew 1 Münze, bei einer 6 verliert sie 6. Dafür gibt es keinen Button.', en: 'Automatic when an event effect during this player’s turn would normally cost exactly 5 coins. An extra d6 appears before the deduction; on a 1 the crew loses 1 coin, on a 6 it loses 6. It has no button.' },
+    activeUsage: { de: 'In einem freien, abgeschlossenen Kartenschritt würfeln. Das Ergebnis und die Münzänderung werden sofort angezeigt. Kostet 1 Einsatz, ist höchstens einmal pro Zug und ausdrücklich nur einmal pro Gang möglich.', en: 'Roll during a free, settled card step. The result and coin change are shown immediately. Costs 1 use, can be used at most once per turn, and is explicitly limited to once per course.' },
+    activeButton: { de: 'Gambler-Wurf für diesen Gang', en: 'Gambler roll for this course' }
   }
 });
 

@@ -1,10 +1,12 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine } from '../js/core/game-engine.js';
+import { randomInt } from '../js/core/random.js';
 import { EVENT_DECKS } from '../js/data/events.js';
 import { ROLES, getRole } from '../js/data/roles.js';
 import { renderGame } from '../js/ui/game.js';
 import { simulateGame } from '../tools/simulation-lib.mjs';
+import { resolvePendingLocationStories } from './test-helpers.mjs';
 
 const now = 1_800_200_000_000;
 const names = Array.from({ length: 10 }, (_, index) => `Crew ${index + 1}`);
@@ -29,6 +31,7 @@ function create(roleId, seed = 4_200) {
   assert.ok(engine.beginEvent(now + 110));
   assert.equal(engine.state.turn.phase, 'courseDecision');
   assert.equal(engine.chooseSoupStyle('cream', now + 120), true);
+  resolvePendingLocationStories(engine, now + 121);
   engine.activePlayer.roleId = roleId;
   engine.activePlayer.activeUsesRemaining = 3;
   return engine;
@@ -59,7 +62,7 @@ function settleIngredientFlow(engine, timestamp = now + 1_000) {
   assert.ok(['draw', 'event', 'resolved'].includes(engine.state.turn.phase), `unexpected settled phase ${engine.state.turn.phase}`);
 }
 
-test('all ten active role abilities execute once and leave a progressable turn', () => {
+test('all thirteen active role abilities execute once and leave a progressable turn', () => {
   const exercised = new Set();
 
   for (const role of ROLES) {
@@ -181,13 +184,133 @@ test('adjusting a die by plus one keeps the roll confirmation visible and progre
   assert.notEqual(engine.state.turn.phase, 'rolled');
 });
 
-test('a complete ten-player voyage can exercise every active ability without getting stuck', () => {
-  const result = simulateGame({ playerCount: 10, seed: 97_001, useAbilities: true });
+test('stored ingredient roll effects are explained without looking like character abilities', () => {
+  const engine = create('herbalist', 4_603);
+  const diceEvent = EVENT_DECKS[1].find((event) => event.type === 'dice');
+  engine.applyIngredientEffect(engine.state.ingredients.find((ingredient) => ingredient.effect === 'rerollDie'));
+  engine.applyIngredientEffect(engine.state.ingredients.find((ingredient) => ingredient.effect === 'adjustDie'));
+  engine.applyIngredientEffect(engine.state.ingredients.find((ingredient) => ingredient.effect === 'doubleDie'));
+  engine.state.turn.currentEventId = diceEvent.id;
+  engine.state.turn.phase = 'rolled';
+  engine.state.turn.dieResult = 3;
+
+  const html = renderGame(engine, 'de');
+  assert.match(html, /Gemeinsamer Effektstapel der Crew/);
+  assert.match(html, /Alle teilen diesen Stapel/);
+  assert.match(html, /eingebracht von/);
+  assert.match(html, /als Nächstes anwendbar/);
+  assert.match(html, /Gespeicherten Neuwurf einsetzen/);
+  assert.doesNotMatch(html, /Gespeicherten Effekt: −1/);
+  assert.doesNotMatch(html, /Gespeicherten Effekt: \+1/);
+  assert.match(html, /Wenn du den Wurf direkt ausführst, verfällt der gespeicherte Effekt/);
+  assert.doesNotMatch(html, /Mit Kürbis neu würfeln|Ingwer [−+]|Rind-Bonus/);
+
+  assert.ok(engine.rerollDieWithIngredient() >= 1);
+  const afterReroll = renderGame(engine, 'de');
+  assert.match(afterReroll, /Gespeicherten Effekt: −1/);
+  assert.match(afterReroll, /Gespeicherten Effekt: \+1/);
+  assert.doesNotMatch(afterReroll, /Gespeicherten Neuwurf einsetzen/);
+});
+
+test('Lucky and Unlucky passives modify every loss caused by their own event turn', () => {
+  const lossEvent = EVENT_DECKS.flat().find((event) => event.type === 'choice' && event.options.includes('coinLoss'));
+  assert.ok(lossEvent);
+  for (const [roleId, expectedLoss] of [['lucky', 4], ['unlucky', 6]]) {
+    const engine = create(roleId, 4_700 + expectedLoss);
+    engine.state.coins = 30;
+    engine.state.turn.currentEventId = lossEvent.id;
+    engine.state.turn.phase = 'event';
+
+    const before = renderGame(engine, 'de');
+    assert.match(before, new RegExp(`−${expectedLoss} Münzen`), roleId);
+    assert.equal(engine.resolveChoice('coinLoss', now + 500), true, roleId);
+    assert.equal(engine.state.coins, 30 - expectedLoss, roleId);
+    assert.equal(engine.state.turn.coinChangeModified, -expectedLoss, roleId);
+  }
+});
+
+test('Lucky and Unlucky task abilities change the next eligible timer and score while their passives remain active', () => {
+  const cases = [
+    { roleId: 'lucky', timeDelta: 2, scoreDelta: -2, expectedVeryLate: -6 },
+    { roleId: 'unlucky', timeDelta: -2, scoreDelta: 2, expectedVeryLate: -4 }
+  ];
+
+  for (const [index, config] of cases.entries()) {
+    const engine = GameEngine.create({ names, title: `Task luck ${config.roleId}`, defaultLanguage: 'de', seed: 4_800 + index }, now);
+    engine.activePlayer.roleId = config.roleId;
+    engine.activePlayer.activeUsesRemaining = 3;
+    engine.state.coins = 100;
+    const card = engine.assignableTaskCards().find((candidate) => candidate.timingMode === 'challenge' && candidate.challengeMinutes > 2);
+    assert.ok(card, config.roleId);
+
+    assert.equal(engine.useActiveAbility(null, now + 10), true, config.roleId);
+    assert.equal(engine.activePlayer.pendingTaskAbility?.roleId, config.roleId, config.roleId);
+    const instance = engine.assignTask({ card, now: now + 20 });
+    assert.ok(instance, config.roleId);
+    assert.equal(engine.activePlayer.pendingTaskAbility, null, config.roleId);
+    assert.equal(instance.challengeMinutes, card.challengeMinutes + config.timeDelta, config.roleId);
+    assert.equal(instance.taskCoinAdjustment, config.scoreDelta, config.roleId);
+    assert.deepEqual(instance.taskAbilityAdjustments.map((adjustment) => adjustment.roleId), [config.roleId]);
+
+    assert.equal(engine.briefTask(instance, true, now + 30), true);
+    const briefing = renderGame(engine, 'de');
+    assert.match(briefing, new RegExp(`${instance.challengeMinutes} min`), config.roleId);
+    assert.match(briefing, new RegExp(config.roleId === 'lucky' ? 'Glückspilz' : 'Pechvogel'), config.roleId);
+    assert.equal(engine.startTask(instance.instanceId, now + 40), true);
+    assert.equal(engine.completeTask(instance.instanceId, now + 40 + instance.challengeMinutes * 2 * 60_000), true);
+    assert.equal(instance.challengeResult, 'veryLate', config.roleId);
+    assert.equal(instance.challengeCoinValue, config.expectedVeryLate, `${config.roleId} active and passive both apply`);
+    assert.equal(engine.state.coins, 100 + config.expectedVeryLate, config.roleId);
+  }
+});
+
+test('the Gambler rolls event losses and maps every active die face exactly once per course', () => {
+  const lossEvent = EVENT_DECKS.flat().find((event) => event.type === 'choice' && event.options.includes('coinLoss'));
+  const passiveEngine = create('gambler', 4_900);
+  passiveEngine.state.coins = 30;
+  passiveEngine.state.turn.currentEventId = lossEvent.id;
+  passiveEngine.state.turn.phase = 'event';
+  assert.match(renderGame(passiveEngine, 'de'), /Gambler würfelt den Verlust · 1–6 Münzen/);
+  assert.equal(passiveEngine.resolveChoice('coinLoss', now + 10), true);
+  const passiveRoll = passiveEngine.state.turn.gamblerLossRoll;
+  assert.ok(passiveRoll >= 1 && passiveRoll <= 6);
+  assert.equal(passiveEngine.state.coins, 30 - passiveRoll);
+  const passiveResult = renderGame(passiveEngine, 'de');
+  assert.match(passiveResult, new RegExp(`data-result="${passiveRoll}"`));
+  assert.match(passiveResult, new RegExp(`Tatsächlicher Verlust: −${passiveRoll} Münzen`));
+
+  const rngStateByValue = new Map();
+  let rngState = 1;
+  for (let attempt = 0; attempt < 1_000 && rngStateByValue.size < 6; attempt += 1) {
+    const stateBeforeRoll = rngState;
+    const roll = randomInt(stateBeforeRoll, 1, 6);
+    rngState = roll.state;
+    if (!rngStateByValue.has(roll.value)) rngStateByValue.set(roll.value, stateBeforeRoll);
+  }
+  assert.equal(rngStateByValue.size, 6);
+  const expectedByRoll = { 1: -6, 2: -4, 3: -2, 4: 2, 5: 4, 6: 6 };
+  for (let value = 1; value <= 6; value += 1) {
+    const engine = create('gambler', 4_910 + value);
+    engine.state.coins = 100;
+    engine.state.rngState = rngStateByValue.get(value);
+    assert.equal(engine.useActiveAbility(null, now + value), true);
+    assert.equal(engine.state.turn.gamblerAbilityRoll, value);
+    assert.equal(engine.state.turn.gamblerAbilityCoinDelta, expectedByRoll[value]);
+    assert.equal(engine.state.coins, 100 + expectedByRoll[value]);
+    engine.state.turn.activeAbilityUsed = false;
+    assert.equal(engine.activeAbilityAvailable(), false, 'the active roll is limited to once in the same course');
+    engine.state.chapterIndex += 1;
+    assert.equal(engine.activeAbilityAvailable(), true, 'a new course unlocks the active roll again');
+  }
+});
+
+test('a complete ten-player voyage can exercise every assigned active ability without getting stuck', () => {
+  const result = simulateGame({ playerCount: 10, seed: 97_003, useAbilities: true });
 
   assert.equal(result.completed, true);
   assert.equal(result.phase, 'complete');
   assert.equal(result.allActiveAbilitiesExercised, true);
-  assert.equal(result.exercisedAbilities.length, ROLES.length);
+  assert.equal(result.exercisedAbilities.length, 10);
   assert.equal(result.failedAbilityAttempts, 0);
   assert.equal(result.failedTransitions, 0);
   assert.equal(result.assignmentViolations, 0);

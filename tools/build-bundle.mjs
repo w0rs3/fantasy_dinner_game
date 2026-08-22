@@ -12,6 +12,7 @@ const modules = [
   'js/config.js',
   'js/core/random.js',
   'js/data/chapters.js',
+  'js/data/story-events.js',
   'js/data/i18n.js',
   'js/data/roles.js',
   'js/data/ingredients.js',
@@ -26,6 +27,7 @@ const modules = [
   'js/ui/welcome.js',
   'js/ui/game.js',
   'js/ui/overlays.js',
+  'js/ui/card-catalog.js',
   'js/app.js'
 ];
 

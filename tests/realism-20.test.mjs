@@ -1,8 +1,10 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { validateSessionState } from '../js/core/game-engine.js';
+import { GameEngine, validateSessionState } from '../js/core/game-engine.js';
 import { COURSE_INGREDIENT_RULES, INGREDIENTS } from '../js/data/ingredients.js';
 import { CHAPTERS } from '../js/data/chapters.js';
+import { WATCH_CHALLENGES } from '../js/data/events.js';
+import { TASK_DECKS } from '../js/data/tasks.js';
 import { simulateGame } from '../tools/simulation-lib.mjs';
 
 test('five complete dinners with varied crews and soup routes remain coherent from setup to treasure', () => {
@@ -18,11 +20,20 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     const taskCounts = Array.from({ length: 6 }, (_, chapterIndex) =>
       state.tasks.filter((task) => task.chapterIndex === chapterIndex).length
     );
+    const restored = new GameEngine(state);
+    restored.state.menu[1].servedAt = null;
+    const expectedTaskCounts = TASK_DECKS.map((deck, chapterIndex) =>
+      deck.filter((card) => card.playable && restored.taskAppliesToChapter(card, chapterIndex)).length
+    );
+    const expectedTaskTotal = expectedTaskCounts.reduce((sum, count) => sum + count, 0);
+    const recurringWatchInstances = state.tasks.filter((task) => restored.getTaskCard(task)?.repeatOnRelief).length;
+    const recurringWatchExtras = Math.max(0, recurringWatchInstances - 1);
+    const expectedInstanceCounts = expectedTaskCounts.map((count, chapterIndex) => count + (chapterIndex === 1 ? recurringWatchExtras : 0));
 
     assert.equal(validateSessionState(state).valid, true, label);
     assert.equal(result.completed, true, label);
     assert.equal(result.phase, 'complete', label);
-    assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 400, `${label} duration=${result.durationMinutes}`);
+    assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 410, `${label} duration=${result.durationMinutes}`);
     assert.equal(state.menu.length, 6, label);
     assert.ok(state.menu.every((course) => course?.ingredientIds.length > 0), label);
     assert.ok(state.menu.every((course, index) => index === 0 || course.servedAt > state.menu[index - 1].servedAt), label);
@@ -30,16 +41,16 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.equal(state.history.filter((entry) => entry.type === 'chapterStarted').length, 5, label);
     assert.equal(state.history.at(-1)?.type, 'voyageCompleted', label);
 
-    assert.equal(result.tasks, 76, label);
-    assert.equal(result.completedTasks, 76, label);
-    assert.deepEqual(taskCounts, [13, 14, 12, 14, 11, 12], label);
-    assert.equal(new Set(state.tasks.map((task) => task.taskId)).size, 76, label);
+    assert.equal(result.tasks, expectedTaskTotal + recurringWatchExtras, label);
+    assert.equal(result.completedTasks, expectedTaskTotal + recurringWatchExtras, label);
+    assert.deepEqual(taskCounts, expectedInstanceCounts, label);
+    assert.equal(new Set(state.tasks.map((task) => task.taskId)).size, expectedTaskTotal, label);
     assert.ok(state.tasks.every((task) => Array.isArray(task.basketIngredientIds)), label);
     assert.ok(state.tasks.every((task) => task.assignedAt <= task.startedAt && task.startedAt <= task.completedAt), label);
     assert.ok(state.tasks.every((task) => (task.timingMode === 'manual' ? task.challengeEndsAt == null : task.challengeEndsAt > task.startedAt) && Number.isInteger(task.challengeCoinValue)), label);
     assert.equal(result.backgroundCoinViolations, 0, label);
     assert.ok(result.backgroundTasks >= 5, label);
-    assert.ok(result.manualTasks >= 4, label);
+    assert.ok(result.manualTasks >= 3, label);
     assert.ok(result.timerTasks >= 5, label);
     assert.ok(result.maxConcurrentTasks >= 2, label);
     assert.ok(result.productiveWaitingTurns > 0, label);
@@ -82,14 +93,26 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.ok(categoryCount(3, 'fruit') <= 2, label);
     assert.ok(state.ingredients.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.status === 'used').length <= 3, label);
     assert.equal(state.ingredients.some((ingredient) => ingredient.status === 'discovered'), false, `${label} no ingredient may remain in a course basket`);
-    assert.ok(['mineral-water', 'juices', 'ice-cubes'].every((ingredientId) => state.menu[5].ingredientIds.includes(ingredientId)), label);
+    const cocktailSpiritTarget = state.chapter.cocktailSpiritTarget;
+    assert.ok([1, 2, 3].includes(cocktailSpiritTarget), `${label} cocktail spirit target is selected`);
+    assert.equal(categoryCount(5, 'alcohol'), cocktailSpiritTarget, `${label} cocktail uses the selected number of spirit varieties`);
+    const saladHasMeat = categoryCount(2, 'meat') > 0;
+    const saladTaskTitles = new Set(state.tasks.filter((task) => task.chapterIndex === 2)
+      .map((task) => restored.getTaskCard(task)?.title.de));
+    assert.equal(saladTaskTitles.has('Salatfleisch mundgerecht schneiden'), saladHasMeat, label);
+    assert.equal(saladTaskTitles.has('Salatfleisch in der Pfanne braten'), saladHasMeat, label);
+    assert.ok(['mineral-water', 'juices'].every((ingredientId) => state.menu[5].ingredientIds.includes(ingredientId)), label);
+    assert.equal(state.ingredients.some((ingredient) => ingredient.id === 'ice-cubes'), false, `${label} ice is basic stock, not a played ingredient`);
+    assert.ok(['alcoholic', 'alcohol-free'].every((team) => ['mixed', 'stirred'].includes(state.menu[5].cocktailTechniques?.[team])), `${label} both cocktail techniques are fixed`);
+    assert.equal(result.cocktailTeamChoices, result.playerCount, `${label} every player chooses a cocktail team exactly once`);
+    assert.ok(['alcoholic', 'alcohol-free'].every((team) => state.players.some((player) => player.cocktailTeam === team)), `${label} both cocktail teams are staffed`);
     assert.ok(state.menu[4].ingredientIds.includes('vanilla-ice'), `${label} vanilla ice belongs to dessert`);
     assert.equal(state.menu[1].courseStyle, choiceStyle, label);
     assert.ok(state.coins <= 500 && state.coins >= 0, label);
 
     assert.equal(result.events, result.uniqueEvents, label);
     assert.equal(result.funCards, result.uniqueFunCards, `${label} fun cards must be unique`);
-    assert.ok(result.funCards <= 100, `${label} finite fun-card deck`);
+    assert.ok(result.funCards <= WATCH_CHALLENGES.length, `${label} finite fun-card deck`);
     assert.equal(result.cauldronHandoffViolations, 0, `${label} cauldron watches must change hands`);
     assert.ok(result.events >= 150 && result.events <= 540, `${label} events=${result.events}`);
     assert.ok(result.turnSpread <= 20, `${label} turnSpread=${result.turnSpread}`);

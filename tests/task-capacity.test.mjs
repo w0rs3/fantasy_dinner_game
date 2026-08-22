@@ -164,7 +164,7 @@ test('players with running tasks are skipped and a turn resumes when somebody be
   assert.notEqual(engine.activePlayer.id, firstPlayerId);
   assert.notEqual(engine.activePlayer.id, currentId);
 
-  engine.state.players.slice(2).forEach((player) => {
+  engine.state.players.forEach((player) => {
     if (engine.isPlayerFreeForTask(player.id)) {
       engine.state.tasks.push({
         instanceId: `busy-${player.id}`, taskId: engine.state.tasks[0].taskId, chapterIndex: 0,
@@ -232,7 +232,10 @@ test('handover preview skips busy people and explains a completely occupied crew
   assert.doesNotMatch(preview, /Tablet weitergeben an Ben/);
 
   const taskId = engine.state.tasks[0].taskId;
-  engine.state.players.slice(2).forEach((player) => engine.state.tasks.push({
+  const alreadyBusy = new Set(engine.state.tasks
+    .filter((task) => ['queued', 'active', 'ready'].includes(task.status))
+    .flatMap((task) => task.assignedPlayerIds));
+  engine.state.players.filter((player) => !alreadyBusy.has(player.id)).forEach((player) => engine.state.tasks.push({
     instanceId: `preview-busy-${player.id}`, taskId, chapterIndex: 0,
     assignedPlayerIds: [player.id], status: 'active', assignedAt: now, startedAt: now,
     timingMode: 'challenge', challengeMinutes: 5, endAt: now + 300_000,

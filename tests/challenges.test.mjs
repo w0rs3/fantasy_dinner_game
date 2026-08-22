@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { GameEngine } from '../js/core/game-engine.js';
 import { renderGame } from '../js/ui/game.js';
 import { EVENT_DECKS, WATCH_CHALLENGES } from '../js/data/events.js';
+import { TASK_DECKS } from '../js/data/tasks.js';
 import { addOpeningTask } from './test-helpers.mjs';
 
 const now = 1_800_300_000_000;
@@ -148,6 +149,78 @@ test('short physical challenges remain immediate', () => {
   assert.equal(engine.state.activeChallenges.length, 0);
 });
 
+test('the audited challenge deck uses success and failure only for objectively failable cards', () => {
+  const skillChecks = WATCH_CHALLENGES.filter((challenge) => challenge.skillCheck);
+  const newDexterityIds = [
+    'skill-one-leg', 'skill-thumb-ladder', 'skill-paper-catch',
+    'skill-paper-balance', 'skill-opposite-feet', 'skill-opposite-circles'
+  ];
+
+  assert.equal(skillChecks.length, 15);
+  assert.ok(skillChecks.every((challenge) =>
+    challenge.flow === 'immediate' && !challenge.secret && challenge.successCoins === 3 && challenge.failureCoins === -2
+  ));
+  assert.ok(newDexterityIds.every((id) => {
+    const challenge = WATCH_CHALLENGES.find((entry) => entry.id === id);
+    return challenge?.skillCheck && challenge.dexterity && [15, 30].includes(challenge.durationSeconds);
+  }));
+  assert.equal(WATCH_CHALLENGES.find((challenge) => challenge.id === 'pirate-weather').skillCheck, false,
+    'a playful performance with no real failure condition remains a one-button challenge');
+});
+
+test('dexterity cards show exactly two result buttons and award their success score', () => {
+  const engine = startChallenge('skill-one-leg', 8_301);
+  const startedAt = engine.state.turn.watchStartedAt;
+  engine.state.coins = 10;
+  engine.activePlayer.roleId = 'cook';
+
+  assert.equal(engine.state.turn.watchEndsAt - startedAt, 15_000);
+  const html = renderGame(engine, 'de');
+  assert.match(html, /Geschicklichkeits-Challenge/);
+  assert.match(html, /15 Sekunden auf einem Bein/);
+  assert.equal((html.match(/data-action="resolve-watch-outcome"/g) ?? []).length, 2);
+  assert.match(html, /data-outcome="success"[^>]*>Hat geklappt · \+3 Münzen/);
+  assert.match(html, /data-outcome="failure"[^>]*>Gescheitert · −2 Münzen/);
+  assert.doesNotMatch(html, /data-action="complete-watch"/);
+  assert.equal(engine.completeWatchChallenge(now + 200), false, 'a scored challenge cannot bypass its result');
+
+  assert.equal(engine.resolveWatchChallengeOutcome('success', now + 300), true);
+  assert.equal(engine.state.coins, 13);
+  assert.equal(engine.state.turn.watchOutcome, 'success');
+  assert.equal(engine.state.turn.watchCoinDelta, 3);
+  assert.equal(engine.state.turn.outcomeCode, 'watchSuccess');
+  assert.match(renderGame(engine, 'de'), /Challenge geschafft · \+3 Münzen/);
+});
+
+test('failed challenges lose coins and preview lucky or unlucky passive modifiers', () => {
+  for (const [roleId, expectedLoss, expectedCoins] of [
+    ['lucky', 1, 9],
+    ['unlucky', 3, 7]
+  ]) {
+    const engine = startChallenge('skill-paper-balance', roleId === 'lucky' ? 8_302 : 8_303);
+    engine.state.coins = 10;
+    engine.activePlayer.roleId = roleId;
+    const html = renderGame(engine, 'de');
+    assert.match(html, new RegExp(`Gescheitert · −${expectedLoss} Münzen`));
+
+    assert.equal(engine.resolveWatchChallengeOutcome('failure', now + 500), true);
+    assert.equal(engine.state.coins, expectedCoins);
+    assert.equal(engine.state.turn.watchOutcome, 'failure');
+    assert.equal(engine.state.turn.watchCoinDelta, -expectedLoss);
+    assert.equal(engine.state.turn.outcomeCode, 'watchFailure');
+    assert.match(renderGame(engine, 'de'), new RegExp(`Challenge gescheitert · −${expectedLoss} Münzen`));
+  }
+});
+
+test('ordinary fun cards keep their single completion button after the audit', () => {
+  const engine = startChallenge('pirate-weather', 8_304);
+  const html = renderGame(engine, 'de');
+  assert.equal((html.match(/data-action="complete-watch"/g) ?? []).length, 1);
+  assert.doesNotMatch(html, /data-action="resolve-watch-outcome"/);
+  assert.equal(engine.completeWatchChallenge(now + 600), true);
+  assert.equal(engine.state.coins, 1);
+});
+
 test('one-minute kitchen-themed challenges never interrupt active kitchen work', () => {
   for (const id of ['clear-surface', 'sort-tools']) {
     const engine = startChallenge(id, id === 'clear-surface' ? 708 : 709);
@@ -187,6 +260,31 @@ test('conditional challenges enter the draw pool only after their real prerequis
   assert.equal(candidateIds().includes('timer-check'), true);
   openingTask.status = 'ready';
   assert.equal(candidateIds().includes('timer-check'), true, 'overtime is still a meaningful timer state');
+});
+
+test('the long main-course oven journey allows more fun cards and prefers available co-op challenges', () => {
+  const engine = GameEngine.create({ names, title: 'Oven interludes', defaultLanguage: 'de', seed: 7_181 }, now);
+  const ovenStart = TASK_DECKS[3].find((card) => card.questId === 'oven');
+  const cooperative = WATCH_CHALLENGES.find((challenge) => challenge.cooperative && !challenge.followUpOnly && !challenge.requirements.length);
+  const solo = WATCH_CHALLENGES.find((challenge) => !challenge.cooperative && !challenge.followUpOnly && challenge.id !== 'five-minute-break' && !challenge.requirements.length);
+
+  engine.state.chapterIndex = 3;
+  engine.state.chapter.stage = 'tasks';
+  engine.state.tasks = [{
+    instanceId: 'main-oven-started', taskId: ovenStart.id, chapterIndex: 3,
+    groupId: 'A', assignedPlayerIds: [engine.state.players[0].id], status: 'done',
+    assignedAt: now, startedAt: now, completedAt: now + 1
+  }];
+  engine.state.funCardQueue = [solo.id, cooperative.id];
+  engine.state.funCardsDrawn = [];
+  engine.state.chapter.funCardIdsDrawn = [];
+
+  assert.equal(engine.mainOvenJourneyStarted(), true);
+  assert.equal(engine.watchChallengeCandidates()[0].id, cooperative.id);
+  engine.state.chapter.funCardIdsDrawn = Array.from({ length: 16 }, (_, index) => `main-fun-${index}`);
+  assert.ok(engine.watchChallengeCandidates().length > 0, 'the main course remains playful beyond the normal per-course limit');
+  engine.state.chapter.funCardIdsDrawn = Array.from({ length: 24 }, (_, index) => `main-fun-${index}`);
+  assert.equal(engine.watchChallengeCandidates().length, 0);
 });
 
 test('a real break is only offered when every open kitchen task is completed', () => {
@@ -292,12 +390,30 @@ test('strange encounters offer accepting the challenge or losing coins instead o
   assert.equal(engine.state.coins, 15, 'declining the challenge costs exactly five coins');
 });
 
+test('ingredient-round fun choices offer one challenge or a five-coin loss without duplicate rewards', () => {
+  const engine = GameEngine.create({ names, title: 'Pantry choice', defaultLanguage: 'de', seed: 719 }, now);
+  const event = EVENT_DECKS[0].find((card) => card.archetype === 'pantry-mischief');
+  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'compliments');
+  assert.deepEqual(event.options, ['watchChallenge', 'coinLoss']);
+  engine.state.chapter.stage = 'ingredients';
+  engine.state.funCardQueue = [secret.id, ...engine.state.funCardQueue.filter((id) => id !== secret.id)];
+  engine.state.turn.currentEventId = event.id;
+  engine.state.turn.phase = 'event';
+
+  const html = renderGame(engine, 'de');
+  assert.match(html, new RegExp(`Challenge annehmen: Geheime Challenge nur für ${engine.activePlayer.name} ziehen · nicht vorlesen`));
+  assert.match(html, /Challenge ablehnen · −5 Münzen/);
+  assert.doesNotMatch(html, /\+2 Münzen|Gewinnt zwei Münzen/);
+  assert.equal((html.match(/data-action="resolve-choice"/g) ?? []).length, 2);
+});
+
 test('the portion captain uses a player choice instead of a challenge timer and remains visible for serving', () => {
   const engine = startChallenge('portion-captain', 717);
   const chosen = engine.state.players[3];
 
   const before = renderGame(engine, 'de');
   assert.match(before, /data-action="choose-watch-player"/);
+  assert.doesNotMatch(before, /Als Portionswache auswählen/);
   assert.match(before, /data-action="confirm-watch-player" disabled/);
   assert.doesNotMatch(before, /data-watch-timer|Challenge abgeschlossen/);
 
@@ -342,10 +458,54 @@ test('the complete fun-card deck is randomly shuffled per voyage and reproducibl
   const repeated = order(8_001);
   const second = order(8_002);
 
-  assert.equal(first.length, 100);
-  assert.equal(new Set(first).size, 100);
+  assert.equal(first.length, 139);
+  assert.equal(new Set(first).size, 139);
   assert.deepEqual(first, repeated, 'the same seed recreates the same shuffled deck');
   assert.notDeepEqual(first.slice(0, 20), second.slice(0, 20), 'different voyages receive different opening orders');
   assert.equal(new Set(Array.from({ length: 12 }, (_, index) => order(8_100 + index)
     .find((id) => !WATCH_CHALLENGES.find((challenge) => challenge.id === id)?.followUpOnly && id !== 'five-minute-break'))).size > 3, true);
+});
+
+test('co-op fun cards enter the pool only with enough task-free partners', () => {
+  const engine = GameEngine.create({ names, title: 'Co-op availability', defaultLanguage: 'de', seed: 8_201 }, now);
+  const pairCard = WATCH_CHALLENGES.find((challenge) => challenge.cooperative && challenge.partnerCount === 1);
+  const trioCard = WATCH_CHALLENGES.find((challenge) => challenge.cooperative && challenge.partnerCount === 2);
+  const otherPlayers = engine.state.players.filter((player) => player.id !== engine.activePlayer.id);
+  engine.state.funCardQueue = [trioCard.id, pairCard.id, ...engine.state.funCardQueue.filter((id) => ![trioCard.id, pairCard.id].includes(id))];
+  otherPlayers.slice(1).forEach((player, index) => engine.state.tasks.push({
+    instanceId: `busy-coop-${index}`, taskId: 'A1-03', chapterIndex: 0,
+    assignedPlayerIds: [player.id], status: 'active', assignedAt: now, startedAt: now
+  }));
+
+  let cooperativeIds = engine.watchChallengeCandidates().filter((challenge) => challenge.cooperative).map((challenge) => challenge.id);
+  assert.ok(cooperativeIds.includes(pairCard.id));
+  assert.equal(cooperativeIds.includes(trioCard.id), false);
+
+  engine.state.tasks.push({
+    instanceId: 'busy-last-partner', taskId: 'A1-03', chapterIndex: 0,
+    assignedPlayerIds: [otherPlayers[0].id], status: 'active', assignedAt: now, startedAt: now
+  });
+  cooperativeIds = engine.watchChallengeCandidates().filter((challenge) => challenge.cooperative).map((challenge) => challenge.id);
+  assert.deepEqual(cooperativeIds, []);
+});
+
+test('a co-op card names only free partners and renders its complete crew', () => {
+  const engine = GameEngine.create({ names, title: 'Co-op draw', defaultLanguage: 'de', seed: 8_202 }, now);
+  const trioCard = WATCH_CHALLENGES.find((challenge) => challenge.id === 'coop-three-voice-chorus');
+  engine.state.funCardQueue = [trioCard.id, ...engine.state.funCardQueue.filter((id) => id !== trioCard.id)];
+  assert.equal(engine.startWatchChallenge('watchChallenge', now + 100), true);
+  assert.equal(engine.currentWatchChallenge.id, trioCard.id);
+  assert.equal(engine.state.turn.watchPartnerPlayerIds.length, 2);
+  assert.equal(new Set(engine.state.turn.watchPartnerPlayerIds).size, 2);
+  assert.ok(engine.state.turn.watchPartnerPlayerIds.every((playerId) =>
+    playerId !== engine.activePlayer.id && engine.isPlayerFreeForTask(playerId)
+  ));
+
+  const partnerNames = engine.state.turn.watchPartnerPlayerIds
+    .map((playerId) => engine.state.players.find((player) => player.id === playerId).name);
+  const html = renderGame(engine, 'de');
+  assert.match(html, /Koop-Zeitfüller/);
+  assert.match(html, /Beteiligte/);
+  [engine.activePlayer.name, ...partnerNames].forEach((name) => assert.match(html, new RegExp(name)));
+  assert.doesNotMatch(html, /\{partner2?\}|\{activePlayer\}/);
 });

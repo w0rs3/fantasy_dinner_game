@@ -4,6 +4,9 @@ import { GameEngine } from '../js/core/game-engine.js';
 import { renderGame } from '../js/ui/game.js';
 import { renderPantry, renderTasks } from '../js/ui/overlays.js';
 import { EVENT_DECKS } from '../js/data/events.js';
+import { INGREDIENT_EFFECT_TEXT, SHOPPING_STAPLES } from '../js/data/ingredients.js';
+import { TASK_DECKS } from '../js/data/tasks.js';
+import { drawNextNonStoryEvent, resolvePendingLocationStories } from './test-helpers.mjs';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Ella', 'Finn', 'Greta', 'Hugo'];
 const now = 1_800_000_000_000;
@@ -28,6 +31,7 @@ function beginSecondCourse(engine) {
   assert.ok(engine.beginEvent(now + 1_010));
   assert.equal(engine.state.turn.phase, 'courseDecision');
   assert.equal(engine.chooseSoupStyle('cream', now + 1_020), true);
+  resolvePendingLocationStories(engine, now + 1_021);
 }
 
 test('every later course starts by clearing the previous table before ingredient selection', () => {
@@ -49,7 +53,40 @@ test('every later course starts by clearing the previous table before ingredient
   assert.equal(engine.state.chapter.stage, 'ingredients');
 });
 
-test('Tapas starts with fixed ingredients and the fun-card draw instead of a kitchen task', () => {
+test('required ingredients in their final eligible course are locked automatically when the ingredient round begins', () => {
+  const engine = create(7_005);
+  engine.state.chapterIndex = 1;
+  engine.state.turn.phase = 'eating';
+  assert.equal(engine.startNextChapter(now + 1_000), true);
+  assert.equal(engine.currentChapter.id, 'salad');
+  const expiringIds = engine.expiringIngredientCandidates().map((ingredient) => ingredient.id);
+  assert.ok(expiringIds.includes('lettuce'));
+  assert.ok(expiringIds.includes('croutons'));
+  const optionalIds = engine.state.ingredients.filter((ingredient) => !ingredient.essential).map((ingredient) => ingredient.id);
+  const ingredientCoinChangesBefore = engine.state.history.filter((entry) => entry.type === 'coinsChanged' && entry.data.source === 'ingredient').length;
+  const effectsBefore = engine.state.ingredientEffectStack.length;
+  const clearing = engine.state.tasks.find((task) => task.chapterIndex === 2 && engine.getTaskCard(task)?.questId === 'reset');
+
+  assert.equal(engine.completeTask(clearing.instanceId, now + 1_100), true);
+
+  assert.equal(engine.state.chapter.stage, 'ingredients');
+  assert.deepEqual(new Set(engine.state.chapter.autoLockedIngredientIds), new Set(expiringIds));
+  expiringIds.forEach((ingredientId) => {
+    const ingredient = engine.getIngredient(ingredientId);
+    assert.equal(ingredient.status, 'locked');
+    assert.equal(ingredient.chapterIndex, 2);
+    assert.equal(ingredient.basketCourseIndex, null);
+    assert.equal(ingredient.lockedBy, null);
+    assert.equal(ingredient.autoLockedChapterIndex, 2);
+  });
+  assert.ok(optionalIds.every((ingredientId) => engine.getIngredient(ingredientId).autoLockedChapterIndex == null), 'optional ingredients may remain unused');
+  assert.equal(engine.unlockedCourseIngredients().length, 0, 'automatic ingredients never enter the open basket');
+  assert.equal(engine.state.history.filter((entry) => entry.type === 'coinsChanged' && entry.data.source === 'ingredient').length, ingredientCoinChangesBefore, 'automatic locking does not trigger draw effects');
+  assert.equal(engine.state.ingredientEffectStack.length, effectsBefore, 'automatic locking does not store card effects');
+  assert.match(renderGame(engine, 'de'), /Automatisch festgelegt · letzter möglicher Gang/);
+});
+
+test('Tapas starts with fixed ingredients and its mandatory harbour story before the fun-card draw', () => {
   const engine = create();
 
   assert.equal(engine.state.chapter.stage, 'tasks');
@@ -61,7 +98,12 @@ test('Tapas starts with fixed ingredients and the fun-card draw instead of a kit
   const html = renderGame(engine, 'de');
   assert.match(html, /Nächste Karte ziehen/);
   assert.doesNotMatch(html, /Der Plan des Hafenmeisters/);
-  assert.equal(engine.beginEvent(now + 2_000)?.archetype, 'work-mischief');
+  const story = engine.beginEvent(now + 2_000);
+  assert.equal(story.storyKind, 'location');
+  assert.equal(story.locationIndex, 0);
+  assert.equal(engine.completeStoryCard(now + 2_001), true);
+  assert.equal(engine.endTurn(now + 2_002), true);
+  assert.equal(engine.beginEvent(now + 2_003)?.archetype, 'work-mischief');
 });
 
 test('the first three event cards are varied fun cards and later task stacks keep fun between jobs', () => {
@@ -83,6 +125,7 @@ test('the first three event cards are varied fun cards and later task stacks kee
 
 test('a new voyage actually draws three fun cards before its first possible work-order card', () => {
   const engine = create(91);
+  resolvePendingLocationStories(engine, now + 10);
   for (let index = 0; index < 3; index += 1) {
     const event = engine.beginEvent(now + index * 100);
     assert.equal(event.archetype, 'work-mischief', `card ${index + 1}`);
@@ -91,7 +134,11 @@ test('a new voyage actually draws three fun cards before its first possible work
     assert.equal(engine.endTurn(now + index * 100 + 2), true);
     assert.equal(engine.state.tasks.length, 0, `card ${index + 1} must not create a hidden task`);
   }
-  const fourth = engine.beginEvent(now + 400);
+  const memory = engine.beginEvent(now + 400);
+  assert.equal(memory.storyKind, 'quiz');
+  assert.equal(engine.answerStoryQuiz(memory.correctAnswerId, now + 401), true);
+  assert.equal(engine.endTurn(now + 402), true);
+  const fourth = drawNextNonStoryEvent(engine, now + 403);
   assert.equal(fourth.stage, 'tasks');
   assert.notEqual(fourth.archetype, 'work-mischief');
   assert.ok(['orders', 'duty', 'guild'].includes(fourth.archetype));
@@ -99,6 +146,7 @@ test('a new voyage actually draws three fun cards before its first possible work
 
 test('separate state decks never expose an impossible ingredient or task action', () => {
   const engine = create(72);
+  resolvePendingLocationStories(engine, now + 1_900);
   const taskEvent = engine.beginEvent(now + 2_000);
   assert.equal(taskEvent.stage, 'tasks');
   assert.ok((taskEvent.options ?? taskEvent.outcomes).every((action) => engine.actionAvailable(action)));
@@ -127,22 +175,26 @@ test('fun events can be drawn and resolved during ingredient rounds without chan
   assert.equal(event.stage, 'ingredients');
   assert.equal(event.archetype, 'pantry-mischief');
   assert.ok(event.options.includes('watchChallenge'));
-  assert.ok(event.options.includes('treasure'));
+  assert.ok(event.options.includes('coinLoss'));
+  assert.equal(event.options.includes('treasure'), false);
   assert.equal(event.options.includes('storyMoment'), false);
   assert.equal(engine.actionAvailable('watchChallenge'), true);
   const coinsBefore = engine.state.coins;
-  assert.equal(engine.resolveChoice('treasure', now + 3_200), true);
+  assert.equal(engine.resolveChoice('coinLoss', now + 3_200), true);
   assert.equal(engine.state.turn.phase, 'resolved');
-  assert.ok(engine.state.coins > coinsBefore);
+  assert.ok(engine.state.coins <= coinsBefore);
   assert.deepEqual(engine.courseIngredients().map((ingredient) => ingredient.id), basketBefore);
   assert.equal(engine.state.chapter.stage, 'ingredients');
 });
 
 test('fun events can also be drawn during task rounds and dice outcomes stay distinct', () => {
   const engine = create(723);
+  resolvePendingLocationStories(engine, now + 1_900);
   engine.state.chapter.stage = 'tasks';
   engine.state.turn.phase = 'draw';
-  engine.activeGroup.locationIndex = 1;
+  engine.activeGroup.locationProgress = 20;
+  engine.maybeAdvanceGroup(engine.activeGroup);
+  resolvePendingLocationStories(engine, now + 1_950);
   const queue = engine.eventQueue('tasks');
   const funIndex = queue.findIndex((eventId) => EVENT_DECKS[0].find((event) => event.id === eventId)?.archetype === 'work-mischief');
   assert.ok(funIndex >= 0);
@@ -152,6 +204,159 @@ test('fun events can also be drawn during task rounds and dice outcomes stay dis
   assert.equal(event.stage, 'tasks');
   assert.equal(new Set(event.outcomes).size, 3);
   assert.ok(event.outcomes.includes('watchChallenge'));
+});
+
+test('event chains remember every earlier card and cannot alternate forever', () => {
+  const engine = create(724);
+  resolvePendingLocationStories(engine, now - 10);
+  engine.state.chapter.stage = 'cooking';
+  engine.state.taskQueues[0] = [];
+  engine.state.tasks = TASK_DECKS[0].filter((card) => card.playable).map((card, index, cards) => ({
+    instanceId: `done-${index}`,
+    taskId: card.id,
+    chapterIndex: 0,
+    assignedPlayerIds: [],
+    status: index === cards.length - 1 ? 'active' : 'done',
+    assignedAt: now,
+    startedAt: now,
+    completedAt: now
+  }));
+  const watchCards = EVENT_DECKS[0].filter((event) => event.archetype === 'watch');
+  const chainDice = EVENT_DECKS[0].find((event) => event.type === 'dice' && event.outcomes?.includes('treasureAndChain'));
+  const exitCard = EVENT_DECKS[0].find((event) => event.stage === 'cooking' && event.archetype === 'mischief');
+  assert.ok(watchCards.length >= 2 && chainDice && exitCard);
+  engine.maybeAdvanceGroup(engine.activeGroup);
+  resolvePendingLocationStories(engine, now - 5);
+  engine.state.chapter.nextStoryQuizAt = Number.POSITIVE_INFINITY;
+  const activePlayerId = engine.activePlayer.id;
+  engine.state.eventQueues[0].cooking[engine.activeGroup.locationIndex] = [watchCards[0].id, chainDice.id, watchCards[1].id, exitCard.id];
+  engine.state.turn.phase = 'draw';
+
+  const first = engine.beginEvent(now + 1);
+  assert.equal(first.id, watchCards[0].id);
+  assert.equal(engine.resolveChoice('treasureAndChain', now + 2), true);
+  assert.equal(engine.endTurn(now + 3), 'chain');
+  assert.equal(engine.state.turn.chainDepth, 1);
+
+  const second = engine.beginEvent(now + 4);
+  assert.equal(second.id, chainDice.id, 'an available card with different controls is preferred over the same two choices again');
+  engine.rollDie(now + 5);
+  const chainOutcomeIndex = engine.currentEvent.outcomes.indexOf('treasureAndChain');
+  assert.ok(chainOutcomeIndex >= 0);
+  engine.state.turn.dieResult = [1, 3, 5][chainOutcomeIndex];
+  assert.equal(engine.confirmRoll(now + 6), true);
+  assert.equal(engine.state.turn.chainPending, true, 'a second chain result must not be silently converted into a turn end');
+  assert.equal(engine.endTurn(now + 7), 'chain');
+  assert.equal(engine.state.turn.chainDepth, 2);
+  assert.equal(engine.actionAvailable('treasureAndChain'), false, 'two follow-up cards are the hard limit for one event chain');
+  assert.equal(engine.state.turn.chainEventSignatures.length, 2);
+  assert.equal(new Set(engine.state.turn.chainEventSignatures).size, 2);
+
+  const third = engine.beginEvent(now + 8);
+  assert.equal(third.id, exitCard.id, 'the chain must not return to the watch template already used at its start');
+  assert.notEqual(third.archetype, first.archetype);
+  assert.notEqual(third.archetype, second.archetype);
+  assert.ok(!(third.options ?? third.outcomes ?? []).includes('treasureAndChain'));
+  assert.equal(engine.activePlayer.id, activePlayerId, 'the same turn and active player survive the whole event chain');
+});
+
+test('an exhausted chain ends cleanly instead of repeating its only remaining template', () => {
+  const engine = create(7241);
+  resolvePendingLocationStories(engine, now - 10);
+  engine.state.chapter.stage = 'cooking';
+  engine.state.taskQueues[0] = [];
+  engine.state.tasks = TASK_DECKS[0].filter((card) => card.playable).map((card, index, cards) => ({
+    instanceId: `chain-exhausted-${index}`,
+    taskId: card.id,
+    chapterIndex: 0,
+    assignedPlayerIds: [],
+    status: index === cards.length - 1 ? 'active' : 'done',
+    assignedAt: now,
+    startedAt: now,
+    completedAt: now
+  }));
+  engine.maybeAdvanceGroup(engine.activeGroup);
+  resolvePendingLocationStories(engine, now - 5);
+  engine.state.chapter.nextStoryQuizAt = Number.POSITIVE_INFINITY;
+  const repeatedDice = EVENT_DECKS[0].filter((event) =>
+    event.stage === 'cooking' && event.type === 'dice' && event.archetype === 'cache' && event.outcomes.includes('treasureAndChain')
+  );
+  assert.ok(repeatedDice.length >= 2);
+  engine.state.eventQueues[0].cooking = engine.state.eventQueues[0].cooking.map(() => []);
+  engine.state.eventQueues[0].cooking[engine.activeGroup.locationIndex] = [repeatedDice[0].id, repeatedDice[1].id];
+  engine.state.turn.phase = 'draw';
+
+  assert.equal(engine.beginEvent(now + 30).id, repeatedDice[0].id);
+  engine.rollDie(now + 31);
+  const chainOutcomeIndex = engine.currentEvent.outcomes.indexOf('treasureAndChain');
+  engine.state.turn.dieResult = [1, 3, 5][chainOutcomeIndex];
+  assert.equal(engine.confirmRoll(now + 32), true);
+  assert.equal(engine.endTurn(now + 33), 'chain');
+
+  const ended = engine.beginEvent(now + 34);
+  assert.deepEqual(ended, { fallback: true, action: 'chainComplete' });
+  assert.equal(engine.state.turn.phase, 'resolved');
+  assert.equal(engine.currentEvent, null);
+  assert.match(renderGame(engine, 'de'), /Die Ereigniskette endet, bevor sich eine Karte oder Auswahl wiederholt/);
+});
+
+test('a chained draw skips the same dice-event template and its identical outcome pool', () => {
+  const engine = create(725);
+  resolvePendingLocationStories(engine, now - 10);
+  engine.state.chapter.stage = 'cooking';
+  engine.state.taskQueues[0] = [];
+  engine.state.tasks = TASK_DECKS[0].filter((card) => card.playable).map((card, index, cards) => ({
+    instanceId: `chain-done-${index}`,
+    taskId: card.id,
+    chapterIndex: 0,
+    assignedPlayerIds: [],
+    status: index === cards.length - 1 ? 'active' : 'done',
+    assignedAt: now,
+    startedAt: now,
+    completedAt: now
+  }));
+  engine.maybeAdvanceGroup(engine.activeGroup);
+  resolvePendingLocationStories(engine, now - 5);
+  engine.state.chapter.nextStoryQuizAt = Number.POSITIVE_INFINITY;
+  const repeatedDice = EVENT_DECKS[0].filter((event) =>
+    event.stage === 'cooking' && event.type === 'dice' && event.archetype === 'cache' && event.outcomes.includes('treasureAndChain')
+  );
+  const visiblyDifferent = EVENT_DECKS[0].find((event) => event.stage === 'cooking' && event.archetype === 'watch');
+  assert.ok(repeatedDice.length >= 2 && visiblyDifferent);
+  engine.state.eventQueues[0].cooking[engine.activeGroup.locationIndex] = [
+    repeatedDice[0].id,
+    repeatedDice[1].id,
+    visiblyDifferent.id
+  ];
+  engine.state.turn.phase = 'draw';
+
+  assert.equal(engine.beginEvent(now + 20).id, repeatedDice[0].id);
+  assert.ok(engine.rollDie(now + 21));
+  const chainOutcomeIndex = engine.currentEvent.outcomes.indexOf('treasureAndChain');
+  engine.state.turn.dieResult = [1, 3, 5][chainOutcomeIndex];
+  assert.equal(engine.confirmRoll(now + 22), true);
+  assert.equal(engine.endTurn(now + 23), 'chain');
+
+  const chained = engine.beginEvent(now + 24);
+  assert.equal(chained.id, visiblyDifferent.id);
+  assert.notEqual(chained.archetype, repeatedDice[0].archetype);
+  assert.notDeepEqual(chained.options ?? chained.outcomes, repeatedDice[0].outcomes);
+});
+
+test('loading a voyage removes drawn and duplicate event IDs from every queue', () => {
+  const engine = create(726);
+  const snapshot = engine.snapshot();
+  const queue = snapshot.eventQueues[0].cooking[0];
+  const drawnId = queue[0];
+  const duplicateId = queue[1];
+  snapshot.eventsDrawn.push(drawnId);
+  queue.unshift(drawnId, duplicateId);
+
+  const restored = new GameEngine(snapshot);
+  const queuedIds = Object.values(restored.state.eventQueues[0]).flat(2);
+  assert.equal(queuedIds.includes(drawnId), false);
+  assert.equal(queuedIds.filter((eventId) => eventId === duplicateId).length, 1);
+  assert.equal(new Set(queuedIds).size, queuedIds.length);
 });
 
 test('saved voyages receive missing ingredient fun events without restoring cards already drawn', () => {
@@ -198,24 +403,132 @@ test('ingredients must be discovered and locked before the work-order deck can a
   assert.equal(engine.state.chapter.stage, 'tasks');
   assert.equal(engine.state.tasks.filter((task) => task.chapterIndex === chapterIndex && engine.getTaskCard(task)?.questId !== 'reset').length, 0);
   engine.state.turn.phase = 'draw';
-  const event = engine.beginEvent(now + 4_000);
+  const event = drawNextNonStoryEvent(engine, now + 4_000);
   assert.equal(event.stage, 'tasks');
   assert.ok((event.options ?? event.outcomes).every((action) => engine.actionAvailable(action)));
 });
 
-test('course baskets can be edited and the pantry shows global, basket, and locked states', () => {
+test('the main course exposes parallel preparation lines before every selected ingredient enters the roasting bag', () => {
+  const engine = create(7_403);
+  const selectedIds = ['beef', 'potatoes', 'carrots', 'apples', 'nuts'];
+  engine.state.chapterIndex = 3;
+  engine.state.chapter.stage = 'tasks';
+  engine.state.turn.phase = 'draw';
+  engine.state.tasks = [];
+  engine.state.ingredients.forEach((ingredient) => {
+    if (selectedIds.includes(ingredient.id)) {
+      ingredient.status = 'locked';
+      ingredient.chapterIndex = 3;
+      ingredient.basketCourseIndex = null;
+    } else if (ingredient.essential) {
+      ingredient.status = 'used';
+      ingredient.chapterIndex = ingredient.courseTags.includes('tapas') ? 0 : 2;
+      ingredient.basketCourseIndex = null;
+    }
+  });
+  engine.reconcileTaskQueue(3);
+
+  const questIds = new Set(engine.taskCardCandidates().map((card) => card.questId));
+  assert.ok(['meat', 'vegetables', 'fruit', 'sauce', 'preheat'].every((questId) => questIds.has(questId)), 'all five preparation jobs can be dealt independently');
+  assert.equal(questIds.has('assembly'), false, 'the roasting bag waits for preparation');
+
+  const fillCard = TASK_DECKS[3].find((card) => card.title.de === 'Das große Feuerpaket befüllen');
+  assert.deepEqual(engine.reserveTaskBasket(fillCard, 'main-fill').sort(), [...selectedIds].sort(), 'the roasting bag receives meat, vegetables, fruit, nuts, and other selected components');
+});
+
+test('a completed ingredient target switches decks before another card is drawn', () => {
+  const engine = create(7_406);
+  const selectedIds = new Set(['beef', 'potatoes', 'carrots', 'asparagus', 'onions', 'garlic', 'mustard', 'apples', 'nuts', 'seeds', 'kohlrabi']);
+  engine.state.chapterIndex = 3;
+  engine.state.chapter.stage = 'ingredients';
+  engine.state.turn.phase = 'draw';
+  engine.state.tasks = [];
+  engine.state.ingredients.forEach((ingredient) => {
+    if (selectedIds.has(ingredient.id)) {
+      ingredient.status = 'locked';
+      ingredient.chapterIndex = 3;
+      ingredient.basketCourseIndex = null;
+    } else if (ingredient.essential) {
+      ingredient.status = 'used';
+      ingredient.chapterIndex = ingredient.courseTags.includes('tapas') ? 0 : 2;
+      ingredient.basketCourseIndex = null;
+    }
+  });
+
+  assert.equal(engine.ingredientsLockedForCourse(), true);
+  const event = drawNextNonStoryEvent(engine, now + 1);
+  assert.equal(engine.state.chapter.stage, 'tasks');
+  assert.equal(event.stage, 'tasks');
+  assert.equal(engine.state.turn.phase, 'event');
+});
+
+test('loading the main-course roasting bag automatically opens one unassigned baking task that gates the finish', () => {
+  const engine = create(7_404);
+  const main = TASK_DECKS[3];
+  const completedCards = main.filter((card) => card.playable && card.blueprintIndex <= 7);
+  engine.state.chapterIndex = 3;
+  engine.state.chapter.stage = 'tasks';
+  engine.state.turn.phase = 'draw';
+  engine.state.tasks = completedCards.map((card, index) => ({
+    instanceId: `main-complete-${index}`,
+    taskId: card.id,
+    chapterIndex: 3,
+    locationIndex: 0,
+    groupId: engine.activeGroup.id,
+    coreKey: null,
+    assignedPlayerIds: [engine.state.players[index % engine.state.players.length].id],
+    status: 'done',
+    assignedAt: now + index,
+    startedAt: now + index,
+    endAt: null,
+    readyAt: null,
+    completedAt: now + index + 1,
+    timingMode: card.timingMode,
+    challengeMinutes: card.challengeMinutes,
+    backgroundMinutes: card.backgroundMinutes,
+    challengeEndsAt: null,
+    taskAbilityAdjustments: [],
+    taskCoinAdjustment: 0,
+    basketIngredientIds: []
+  }));
+  engine.state.taskQueues[3] = [];
+
+  engine.reconcileTaskQueue(3, false, now + 100);
+
+  const bakingCard = main.find((card) => card.title.de === 'Bratschlauch backen lassen');
+  const bakingTask = engine.state.tasks.find((task) => task.taskId === bakingCard.id);
+  assert.ok(bakingTask, 'the baking task appears immediately after the roasting bag was loaded');
+  assert.equal(bakingTask.status, 'active');
+  assert.deepEqual(bakingTask.assignedPlayerIds, []);
+  assert.equal(bakingTask.endAt, null);
+  assert.equal(engine.taskCardCandidates().some((card) => card.id === bakingCard.id), false, 'the automatic task is never dealt as a player card');
+  assert.equal(engine.state.players.every((player) => engine.isPlayerFreeForTask(player.id)), true, 'the shared oven status occupies no player');
+
+  const tasksHtml = renderTasks(engine, 'de');
+  assert.match(tasksHtml, /Bratschlauch backen lassen/);
+  assert.match(tasksHtml, /Gemeinsamer Status · niemandem zugewiesen/);
+  assert.match(tasksHtml, />Backen ist fertig</);
+
+  const restCard = main.find((card) => card.title.de === 'Ruhe vor dem Festmahl');
+  assert.equal(engine.taskCardCandidates().some((card) => card.id === restCard.id), false, 'finishing work stays locked while the bag bakes');
+  assert.equal(engine.completeTask(bakingTask.instanceId, now + 45 * 60_000), true);
+  assert.equal(engine.taskCardCandidates().some((card) => card.id === restCard.id), true, 'confirming the finished bake unlocks the next step');
+});
+
+test('course baskets are card-driven while the pantry shows global, basket, and locked states', () => {
   const engine = create(74);
   beginSecondCourse(engine);
   assert.equal(engine.prepareIngredientChoice(null, 'ability', { count: 2 }), true);
   const basketIngredientId = engine.state.turn.pendingIngredientIds[0];
   const offeredIngredient = engine.getIngredient(basketIngredientId);
   let game = renderGame(engine, 'de');
-  assert.match(game, /0\/6 Pflichtzutaten/);
+  assert.match(game, /0\/5 Pflichtzutaten/);
   assert.match(game, /Vor dem Wechsel zu den Aufgaben muss der offene Korb leer sein/);
   const choiceButton = game.match(new RegExp(`<button[^>]+data-ingredient-id="${basketIngredientId}"[\\s\\S]*?<\\/button>`))?.[0] ?? '';
   assert.match(choiceButton, new RegExp(`>${offeredIngredient.name.de}<`));
   assert.doesNotMatch(choiceButton, /<small>|wesentlich|optional/);
   assert.ok(!choiceButton.includes(offeredIngredient.suggestedQuantity.de));
+  assert.ok(game.includes(INGREDIENT_EFFECT_TEXT[offeredIngredient.effect].de), 'ingredient choices explain their game effect');
 
   assert.equal(engine.chooseIngredient(basketIngredientId, now + 2_000), true);
   const basketIngredient = engine.getIngredient(basketIngredientId);
@@ -224,14 +537,23 @@ test('course baskets can be edited and the pantry shows global, basket, and lock
   assert.equal(basketIngredient.basketCourseIndex, 1);
   game = renderGame(engine, 'de');
   assert.ok(!game.includes(basketIngredient.suggestedQuantity.de), 'the game basket should only show the ingredient name');
+  assert.ok(game.includes(INGREDIENT_EFFECT_TEXT[basketIngredient.effect].de), 'the open basket keeps the ingredient effect visible');
+  assert.match(game, /Pflichtzutaten ohne späteren möglichen Gang werden zu Rundenbeginn automatisch festgelegt/);
+  assert.doesNotMatch(game, /data-action="(?:lock|remove)-basket-ingredient"/, 'the draft basket is informational and cannot bypass ingredient cards');
+  assert.doesNotMatch(game, /data-action="assign-cocktail-ingredient"/, 'cocktail assignment cannot be changed manually in the draft basket');
 
   let pantry = renderPantry(engine, 'de');
   assert.match(pantry, /im Gangkorb/);
   assert.match(pantry, /global verfügbar/);
   assert.ok(pantry.includes(untouched.name.de));
+  assert.ok(SHOPPING_STAPLES.every((staple) => pantry.includes(staple.name.de)), 'the active-game ingredient list keeps every shopping staple visible');
+  assert.match(pantry, /Hauptgang · Backschlauch/);
   assert.ok(pantry.includes(basketIngredient.suggestedQuantity.de), 'the separate ingredient list keeps its quantity recommendation');
+  assert.doesNotMatch(pantry, /data-action="(?:lock|remove)-basket-ingredient"/, 'the separate ingredient list is informational and does not edit the course basket');
   assert.equal(engine.lockIngredientFromBasket(basketIngredient.id, now + 3_000), true);
   assert.equal(basketIngredient.status, 'locked');
+  game = renderGame(engine, 'de');
+  assert.ok(game.includes(INGREDIENT_EFFECT_TEXT[basketIngredient.effect].de), 'locked course ingredients keep the ingredient effect visible');
   pantry = renderPantry(engine, 'de');
   assert.match(pantry, /fest zugeordnet/);
 

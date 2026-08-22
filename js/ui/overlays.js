@@ -1,5 +1,5 @@
 import { CHAPTERS } from '../data/chapters.js';
-import { INGREDIENTS, INGREDIENT_EFFECT_TEXT, suggestQuantity } from '../data/ingredients.js';
+import { INGREDIENTS, INGREDIENT_EFFECT_TEXT, SHOPPING_STAPLES, suggestQuantity } from '../data/ingredients.js';
 import { formatDate, formatDuration } from '../data/i18n.js';
 import { getElapsedSeconds, getRemainingSeconds, getTaskTimerProgress } from '../core/timers.js';
 import { avatar, escapeHtml, statusTag, t, tx } from './helpers.js';
@@ -62,13 +62,23 @@ export function renderTasks(engine, language) {
       ${tasks.length ? `<ul class="task-list">${tasks.map((instance) => {
         const card = engine.getTaskCard(instance);
         const assigned = instance.assignedPlayerIds.map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name).filter(Boolean);
+        const unassigned = card.unassigned || assigned.length === 0;
         const remaining = getRemainingSeconds(instance);
         const elapsed = getElapsedSeconds(instance);
         const timingMode = instance.timingMode ?? card.timingMode ?? 'challenge';
+        const cauldronWatch = engine.isCauldronWatch(instance);
+        const canRelieveCauldron = cauldronWatch && engine.canRelieveCauldronWatch(instance);
         const timerMinutes = timingMode === 'background'
           ? (instance.backgroundMinutes || card.backgroundMinutes)
           : timingMode === 'manual' ? 0 : (instance.challengeMinutes || card.challengeMinutes);
         const timerProgress = getTaskTimerProgress(instance);
+        const taskAbilityTags = (instance.taskAbilityAdjustments ?? []).map((adjustment) => {
+          const owner = engine.state.players.find((player) => player.id === adjustment.playerId);
+          const role = getRole(adjustment.roleId);
+          const time = `${adjustment.timeMinutes > 0 ? '+' : '−'}${Math.abs(adjustment.timeMinutes)} min`;
+          const coins = `${adjustment.coinDelta > 0 ? '+' : '−'}${Math.abs(adjustment.coinDelta)} ${language === 'de' ? 'Münzwertung' : 'coin score'}`;
+          return statusTag(`${escapeHtml(owner?.name ?? t(role.name, language))} · ${t(role.name, language)}: ${time} · ${coins}`, adjustment.roleId === 'lucky' ? 'green' : 'coral');
+        }).join('');
         return `<li class="task-item" data-status="${instance.status}">
           <div class="card-row">
             <div><p class="eyebrow">${t(CHAPTERS[instance.chapterIndex].course, language)} · ${t(card.questName, language)} · ${language === 'de' ? 'Schritt' : 'step'} ${engine.questStepNumber(card)}</p><h3>${t(card.title, language)}</h3></div>
@@ -77,23 +87,31 @@ export function renderTasks(engine, language) {
           <p>${t(card.instruction, language)}</p>
           ${renderTaskBasket(engine, instance, language)}
           <div class="stat-strip">
-            ${statusTag(`${tx('assignedTo', language)}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
-            ${statusTag(card.people[0] === card.people[1] ? `${card.people[0]} ♙` : `${card.people[0]}–${card.people[1]} ♙`)}
+            ${unassigned
+              ? statusTag(language === 'de' ? 'Gemeinsamer Status · niemandem zugewiesen' : 'Shared status · assigned to nobody', 'blue')
+              : statusTag(`${tx('assignedTo', language)}: ${assigned.map(escapeHtml).join(', ')}`, 'blue')}
+            ${unassigned ? '' : statusTag(card.people[0] === card.people[1] ? `${card.people[0]} ♙` : `${card.people[0]}–${card.people[1]} ♙`)}
             ${timingMode === 'manual'
               ? statusTag(language === 'de' ? 'Nach Gargrad · kein Spieltimer' : 'By doneness · no game timer', 'blue')
               : timingMode === 'background'
                 ? statusTag(`${timerMinutes} min ${language === 'de' ? 'Hintergrundzeit · ohne Münzdruck' : 'background time · no coin pressure'}`, 'blue')
                 : statusTag(`${timerMinutes} min ${language === 'de' ? 'Arbeits-Challenge' : 'work challenge'}`, 'gold')}
-            ${instance.challengeResult && !['background', 'manual'].includes(instance.challengeResult) ? statusTag(t({ de: { veryFast: 'Blitzschnell · +2', onTime: 'Rechtzeitig · +1', late: 'Verspätet · −2', veryLate: 'Stark verspätet · −5' }[instance.challengeResult], en: { veryFast: 'Lightning fast · +2', onTime: 'On time · +1', late: 'Late · −2', veryLate: 'Very late · −5' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
+            ${instance.challengeResult && !['background', 'manual'].includes(instance.challengeResult) ? statusTag(t({ de: { veryFast: 'Blitzschnell', onTime: 'Rechtzeitig', late: 'Verspätet', veryLate: 'Stark verspätet' }[instance.challengeResult], en: { veryFast: 'Lightning fast', onTime: 'On time', late: 'Late', veryLate: 'Very late' }[instance.challengeResult] }, language), instance.challengeCoinValue >= 0 ? 'green' : 'coral') : ''}
+            ${taskAbilityTags}
             ${instance.status === 'done' && instance.startedAt ? statusTag(`${language === 'de' ? 'Dauer' : 'Duration'}: ${formatDuration(elapsed)}`, 'blue') : ''}
             ${taskCoinTag(instance, language)}
           </div>
           ${instance.endAt ? `<div class="card-row"><span class="timer" data-task-timer="${escapeHtml(instance.instanceId)}" data-overdue="${remaining < 0}">${formatDuration(remaining)}</span><span class="muted" data-task-timer-caption="${escapeHtml(instance.instanceId)}">${taskTimerCaption(instance, timingMode, remaining, language)}</span></div><div class="progress-track"><span data-task-progress="${escapeHtml(instance.instanceId)}" style="--progress:${timerProgress}%"></span></div>` : ''}
+          ${cauldronWatch && ['active', 'ready'].includes(instance.status) ? `<div class="card-effect"><strong>${language === 'de' ? 'Gargradentscheidung am Kessel' : 'Cauldron doneness decision'}</strong><br>${language === 'de' ? 'Prüft die Suppe. Ist sie noch nicht fertig, legt „Kesselwache ablösen“ dieselbe Karte wieder oben auf den Aufgabenstapel. Das kann ohne feste Obergrenze wiederholt werden.' : 'Check the soup. If it is not ready, “Relieve cauldron watch” returns this same card to the top of the task deck. This can repeat without a fixed limit.'}</div>` : ''}
           <div class="button-row" style="margin-top:.8rem">
-            ${instance.status === 'queued' ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${timingMode === 'manual' ? (language === 'de' ? 'Aufgabe beginnen' : 'Start task') : timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
-            ${['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${tx('completeTask', language)}</button>` : ''}
+            ${instance.status === 'queued' && !card.automatic ? `<button class="secondary-button" type="button" data-action="start-task" data-task-id="${escapeHtml(instance.instanceId)}">${timingMode === 'manual' ? (language === 'de' ? 'Aufgabe beginnen' : 'Start task') : timingMode === 'background' ? (language === 'de' ? 'Hintergrundtimer starten' : 'Start background timer') : (language === 'de' ? 'Arbeits-Challenge starten' : 'Start work challenge')}</button>` : ''}
+            ${cauldronWatch && ['active', 'ready'].includes(instance.status)
+              ? `<button class="primary-button" type="button" data-action="resolve-cauldron-watch" data-decision="soupReady" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Suppe ist fertig' : 'Soup is ready'}</button>
+                 <button class="secondary-button" type="button" data-action="resolve-cauldron-watch" data-decision="relieve" data-task-id="${escapeHtml(instance.instanceId)}" ${canRelieveCauldron ? '' : 'disabled'}>${language === 'de' ? 'Kesselwache ablösen' : 'Relieve cauldron watch'}</button>`
+              : !cauldronWatch && ['queued', 'active', 'ready'].includes(instance.status) ? `<button class="primary-button" type="button" data-action="complete-task" data-task-id="${escapeHtml(instance.instanceId)}">${card.completionLabel ? t(card.completionLabel, language) : tx('completeTask', language)}</button>` : ''}
             ${engine.canUndoTaskCompletion(instance.instanceId) ? `<button class="quiet-button" type="button" data-action="undo-task" data-task-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Haken zurücknehmen' : 'Undo completion'}</button>` : ''}
           </div>
+          ${cauldronWatch && ['active', 'ready'].includes(instance.status) && !canRelieveCauldron ? `<small class="muted">${language === 'de' ? 'Ablösung ist möglich, sobald eine andere Person keine laufende Aufgabe hat.' : 'Relief becomes available once another player has no running task.'}</small>` : ''}
         </li>`;
       }).join('')}</ul>` : `<div class="empty-state"><h2>${tx('noTasks', language)}</h2></div>`}
     </section>`;
@@ -118,13 +136,11 @@ export function renderPantry(engine, language) {
         : ingredient.status === 'locked'
           ? (language === 'de' ? 'fest zugeordnet' : 'locked into course')
           : tx(ingredient.status, language);
-    const canEditBasket = isBasket && ingredient.chapterIndex === engine.state.chapterIndex && engine.state.chapter.stage === 'ingredients';
     return `<li class="ingredient-item">
       <strong>${t(ingredient.name, language)}</strong>${statusTag(label, tone)}
       <small>${tx('quantitySuggestion', language)}: ${t(ingredient.suggestedQuantity, language)} · ${ingredient.essential ? tx('required', language) : tx('optional', language)}</small>
       <small>${language === 'de' ? 'Mögliche Gänge' : 'Possible courses'}: ${escapeHtml(courseTagNames(ingredient))}</small>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : ''}
-      ${canEditBasket ? `<div class="button-row"><button class="secondary-button" type="button" data-action="lock-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Fest zuordnen' : 'Lock into course'}</button><button class="quiet-button" type="button" data-action="remove-basket-ingredient" data-ingredient-id="${escapeHtml(ingredient.id)}">${language === 'de' ? 'Zurücklegen' : 'Return'}</button></div>` : ''}
     </li>`;
   };
   return `
@@ -134,6 +150,7 @@ export function renderPantry(engine, language) {
         <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
       </div>
       <div class="content-grid">
+        ${renderShoppingStaples(engine.state.players.length, language)}
         ${CHAPTERS.map((chapter, chapterIndex) => {
           const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === chapterIndex);
           return `<section class="panel">
@@ -161,6 +178,20 @@ const INGREDIENT_GROUPS = Object.freeze([
   { id: 'drinks', de: 'Cocktails & Getränke', en: 'Cocktails & drinks' }
 ]);
 
+function renderShoppingStaples(playerCount, language) {
+  const mainCourse = CHAPTERS.find((chapter) => chapter.id === 'main');
+  return `<section class="panel ingredient-global" data-shopping-staples>
+    <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Einkaufsrelevanter Grundvorrat' : 'Shopping staples'}</p><h2>${language === 'de' ? 'Hauptgang · Backschlauch' : 'Main course · roasting bag'}</h2></div>${statusTag(String(SHOPPING_STAPLES.length), 'gold')}</div>
+    <p class="muted">${language === 'de' ? 'Diese Dinge werden nicht erspielt, müssen aber vor dem Spiel eingekauft beziehungsweise geprüft werden.' : 'These items are not played as ingredient cards, but must be bought or checked before the game.'}</p>
+    <ul class="ingredient-list">${SHOPPING_STAPLES.map((staple) => `<li class="ingredient-item">
+      <strong>${t(staple.name, language)}</strong>${statusTag(language === 'de' ? 'Grundvorrat · verbindlich' : 'staple · required', 'blue')}
+      <small>${tx('quantitySuggestion', language)}: ${escapeHtml(suggestQuantity(staple, playerCount, language))}</small>
+      <small>${language === 'de' ? 'Verwendung' : 'Used for'}: ${t(mainCourse.course, language)}</small>
+      <small class="ingredient-effect">${t(staple.note, language)}</small>
+    </li>`).join('')}</ul>
+  </section>`;
+}
+
 export function renderIngredientGuide(playerCount, language) {
   const crewSize = Math.min(10, Math.max(6, Number(playerCount) || 6));
   return `
@@ -176,6 +207,7 @@ export function renderIngredientGuide(playerCount, language) {
         ${statusTag(`${crewSize} ${language === 'de' ? 'Personen' : 'players'}`, 'gold')}
       </div>
       <div class="content-grid">
+        ${renderShoppingStaples(crewSize, language)}
         ${INGREDIENT_GROUPS.map((group) => {
           const ingredients = INGREDIENTS.filter((ingredient) => ingredient.category === group.id);
           return `<section class="panel">
@@ -202,19 +234,23 @@ export function renderCrew(engine, language) {
           const role = getRole(player.roleId);
           const isActive = index === engine.state.activePlayerIndex;
           const passiveDisabled = !engine.isPassiveEnabled(player);
+          const taskAbilityArmed = ['lucky', 'unlucky'].includes(role.id) && player.pendingTaskAbility?.roleId === role.id;
+          const activeUsedThisCourse = role.id === 'gambler' && Boolean(player.passiveUsedByChapter[`gambler-active-${engine.state.chapterIndex}`]);
           const openTasks = engine.openTasksForPlayer(player.id);
           const cocktailTeam = player.cocktailTeam === 'alcoholic'
             ? (language === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
-            : (language === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free');
+            : player.cocktailTeam === 'alcohol-free'
+              ? (language === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free')
+              : (language === 'de' ? 'Cocktail-Team: noch offen' : 'Cocktail team: not chosen yet');
           const taskAvailability = openTasks.length
             ? statusTag(language === 'de' ? 'Aufgabe läuft' : 'task in progress', 'coral')
             : statusTag(language === 'de' ? 'frei für neue Aufgabe' : 'free for a new task', 'green');
           return `<article class="role-card" data-active="${isActive}">
-            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : ''} ${statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability} ${statusTag(cocktailTeam, player.cocktailTeam === 'alcoholic' ? 'coral' : 'green')}</span></div>
+            <div class="card-row">${avatar(player)}<span>${isActive ? statusTag(tx('activePlayer', language), 'gold') : ''} ${statusTag(`${player.turns} ${language === 'de' ? 'Züge' : 'turns'}`)} ${taskAvailability} ${statusTag(cocktailTeam, player.cocktailTeam === 'alcoholic' ? 'coral' : player.cocktailTeam === 'alcohol-free' ? 'green' : 'gold')}</span></div>
             <p class="eyebrow" style="margin-top:1rem">${role.icon} ${t(role.name, language)}</p>
             <h2>${escapeHtml(player.name)}</h2>
             <div class="role-ability"><strong>${tx('rolePassive', language)} ${passiveDisabled ? statusTag(language === 'de' ? 'nächster Zug pausiert' : 'paused next turn', 'coral') : ''}</strong><p><b>${t(role.passive, language)}</b></p><p class="muted">${t(role.passiveUsage, language)}</p></div>
-            <div class="role-ability"><strong>${tx('roleActive', language)} · ${player.activeUsesRemaining} ${tx('usesLeft', language)}${isActive && engine.state.turn.activeAbilityUsed ? ` · ${language === 'de' ? 'in diesem Zug genutzt' : 'used this turn'}` : ''}</strong><p><b>${t(role.active, language)}</b></p><p class="muted">${t(role.activeUsage, language)}</p></div>
+            <div class="role-ability"><strong>${tx('roleActive', language)} · ${player.activeUsesRemaining} ${tx('usesLeft', language)}${isActive && engine.state.turn.activeAbilityUsed ? ` · ${language === 'de' ? 'in diesem Zug genutzt' : 'used this turn'}` : ''} ${taskAbilityArmed ? statusTag(language === 'de' ? 'für nächste passende Aufgabe vorgemerkt' : 'armed for next eligible task', 'blue') : ''} ${activeUsedThisCourse ? statusTag(language === 'de' ? 'in diesem Gang genutzt' : 'used this course') : ''}</strong><p><b>${t(role.active, language)}</b></p><p class="muted">${t(role.activeUsage, language)}</p></div>
             <div class="field" style="margin-top:.8rem">
               <label for="language-${escapeHtml(player.id)}">${language === 'de' ? 'Spielersprache' : 'Player language'}</label>
               <select id="language-${escapeHtml(player.id)}" data-action="player-language" data-player-id="${escapeHtml(player.id)}">
@@ -313,8 +349,8 @@ export function renderRules(language) {
     ['3. Aktive Person entscheidet und arbeitet mit', 'Die Crew darf beraten; die aktive Person trifft die endgültige Wahl. Erzeugt ihr Zug eine Küchenaufgabe, gehört sie immer selbst zur ausführenden Besetzung. Für weitere Plätze werden freie Personen mit den meisten bisherigen Zügen bevorzugt; bei manchen Karten darf die aktive Person den fairen Vorschlag ändern.'],
     ['4. Gemischte, aber fachlich abhängige Questlinien', 'Jeder Gang nach den Tapas beginnt mit einem Abräumauftrag für den vorigen Tisch; erst danach öffnet sich die Zutatenwahl. Im Auftragsstapel liegen zunächst nur die Startkarten der Questlinien. Ein erledigter Schritt mischt seinen Nachfolger in die obersten drei Positionen. Servieraufträge werden erst freigegeben, wenn sämtliche Zubereitungsreihen fertig sind; Aufräumarbeiten folgen erst nach dem vollständigen Servieren. Spaßkarten bleiben dazwischen erhalten.'],
     ['5. Challenge, Hintergrundzeit oder Gargrad', 'Kurze Handgriffe haben Münz-Challenges: sehr schnell +2, rechtzeitig +1, verspätet −2, deutlich verspätet −5. Feste Ruhe-, Koch- und Kühlzeiten können als unbewertete Hintergrundtimer laufen. Back- und Bratschritte mit unklarem Garzeitpunkt haben keinen Spieltimer und werden nach dem tatsächlichen Gargrad abgehakt. Jede offene Aufgabe kann jederzeit in der Aufgabenliste erledigt werden.'],
-    ['6. Orte automatisch bereisen', 'Jede abgeschlossene Ortsaktion bewegt die gesamte Crew sichtbar voran. Nach genug Aktionen zieht sie automatisch gemeinsam zum nächsten Ort.'],
-    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Die Suppe wird zuerst als klar oder cremig festgelegt; Brühe und Sahne sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
+    ['6. Orte nach Gangfortschritt bereisen', 'Abräumen, verbindlich festgelegte Zutaten und tatsächlich abgeschlossene Gangaufgaben bestimmen gemeinsam den Fortschritt. Die sechs Locations wechseln an festen Fortschrittsschwellen; die letzte beginnt erst bei ungefähr 83 Prozent. Spaßkarten und bloße Übergaben bewegen die Route nicht.'],
+    ['7. Zutaten improvisieren', 'Nur Tapas sind festgelegt. Alle anderen Zutaten starten global mit Gang-Tags. Beginnt der letzte mögliche Gang einer noch verfügbaren Pflichtzutat, wird sie sofort automatisch für diesen Gang festgelegt; optionale Zutaten bleiben frei. Die Suppe wird zuerst als klar oder cremig festgelegt. Zu Beginn der Cocktail-Zutatenrunde legt die aktive Person verbindlich eine, zwei oder drei Spirituosensorten für den alkoholischen Cocktail fest. Brühe, Sahne, Essig, frische Kräuter und andere Mittel zum Abschmecken sind Grundvorrat, keine Spielzutaten. Beim Erreichen der festen Zielzahl gehen übrige Korbzutaten automatisch global zurück. Jede Pflichtzutat wird genau einmal verwendet.'],
     ['8. Sicher arbeiten', 'Befolgt Packungs- und Gerätehinweise. Trennt rohes Fleisch von verzehrfertigen Lebensmitteln und reinigt danach Hände, Geräte und Flächen. Gart Fleisch vollständig und gleichmäßig; prüft im Zweifel mit einem sauberen Fleischthermometer mindestens 70 °C für zwei Minuten an allen Stellen. Bei Unsicherheit hat Sicherheit Vorrang vor der Karte.'],
     ['9. Münzen, Effekte und geheime Folgen', '500 Münzen entsprechen der vollständigen Süßigkeitenbeute; bei 250 Münzen wird die Hälfte verteilt. Verluste können den Stand bis auf null senken. Zutateneffekte werden für die ziehende Person gespeichert. Aktive Fähigkeiten gelten einmal pro Zug. Gegenkarten zu geheimen Flüchen erscheinen zufällig drei bis fünf Züge später und müssen vor Gangende aufgelöst werden.']
   ] : [
@@ -323,8 +359,8 @@ export function renderRules(language) {
     ['3. The active player decides and participates', 'The crew may discuss; the active player makes the final choice. If their turn creates a kitchen task, they are always part of its assigned crew. Free players with the most completed turns are preferred for extra places; on some cards the active player may change that fair suggestion.'],
     ['4. Shuffled but practical quest dependencies', 'Every course after Tapas starts with a job clearing the previous table; ingredient selection opens only afterwards. The work stack initially contains only quest-line starts, and each completed step shuffles its successor into the top three positions. Serving unlocks only after every preparation line is complete; cleanup follows only after serving is finished. Fun cards remain between work events.'],
     ['5. Challenge, background time, or doneness', 'Short hands-on jobs are scored: very fast +2, on time +1, late −2, very late −5. Fixed resting, cooking, and chilling periods may use unscored background timers. Baking and frying steps with uncertain timing have no game timer and are checked off by actual doneness. Every open job can be completed from the task list at any time.'],
-    ['6. Travel automatically', 'Every resolved location action visibly advances the whole crew. After enough actions, everyone moves to the next location together.'],
-    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. Soup is first chosen as clear or cream; stock and cream are pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
+    ['6. Travel by course progress', 'Clearing, locked ingredients, and actually completed course jobs determine progress together. The six locations change at fixed progress thresholds, with the final one starting around 83 percent. Fun cards and handovers alone do not move the route.'],
+    ['7. Improvise with ingredients', 'Only Tapas are fixed. Every other ingredient starts globally with course tags. When an available required ingredient enters its final eligible course, it is immediately locked into that course; optional ingredients remain free. Soup is first chosen as clear or cream. At the start of the cocktail ingredient round, the active player locks in whether the alcoholic cocktail will use one, two, or three spirit varieties. Stock, cream, vinegar, fresh herbs, and other final-seasoning supplies are shared pantry staples, not played ingredients. When the target count is locked, basket leftovers automatically return globally. Every essential ingredient is used exactly once.'],
     ['8. Work safely', 'Follow packaging and appliance instructions. Separate raw meat from ready-to-eat food, then clean hands, equipment, and surfaces. Cook meat thoroughly and evenly; if in doubt, verify at least 70 °C for two minutes throughout. Safety overrides every card.'],
     ['9. Coins, effects, and secret follow-ups', '500 coins equal the complete sweet reward; 250 coins mean half is shared. Losses can reduce the balance to zero. Ingredient effects are stored for the player who drew them. Active abilities are once per turn. Counter-cards to secret curses appear randomly three to five turns later and must resolve before the course ends.']
   ];

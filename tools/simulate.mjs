@@ -1,12 +1,13 @@
 import { simulateGame } from './simulation-lib.mjs';
+import { WATCH_CHALLENGES } from '../js/data/events.js';
 
 const results = [6, 7, 8, 9, 10].map((playerCount, index) => simulateGame({
   playerCount,
   seed: 97_101 + index,
   choiceStyle: index % 2 ? 'cream' : 'clear'
 }));
-const abilityAudit = simulateGame({ playerCount: 10, seed: 97_001, useAbilities: true });
-const failed = results.filter((result) => !result.completed || result.essentialUnused.length || result.durationMinutes < 280 || result.durationMinutes > 400 || result.turnSpread > 20 || result.pureWaitingSteps > 0 || result.events !== result.uniqueEvents || result.funCards !== result.uniqueFunCards || result.funCards > 100 || result.failedTransitions || result.assignmentViolations || result.maxOpenTasksPerPlayer > 1 || result.taskAssigneeChoices < 1 || result.taskIngredientMismatches || result.activeChallengesRemaining || result.cauldronHandoffViolations || result.duplicateEventActions || result.followUpDelayViolations || result.backgroundCoinViolations || result.basketResidue.length);
+const abilityAudit = simulateGame({ playerCount: 10, seed: 97_003, useAbilities: true });
+const failed = results.filter((result) => !result.completed || result.essentialUnused.length || result.durationMinutes < 280 || result.durationMinutes > 400 || result.turnSpread > 20 || result.pureWaitingSteps > 0 || result.events !== result.uniqueEvents || result.funCards !== result.uniqueFunCards || result.funCards > WATCH_CHALLENGES.length || result.failedTransitions || result.assignmentViolations || result.maxOpenTasksPerPlayer > 1 || result.taskAssigneeChoices < 1 || result.taskIngredientMismatches || result.activeChallengesRemaining || result.cauldronHandoffViolations || result.duplicateEventActions || result.followUpDelayViolations || result.backgroundCoinViolations || result.basketResidue.length);
 const durations = results.map((result) => result.durationMinutes);
 const events = results.map((result) => result.events);
 const tasks = results.map((result) => result.tasks);

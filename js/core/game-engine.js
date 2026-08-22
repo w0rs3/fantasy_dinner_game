@@ -4,6 +4,7 @@ import { CHAPTERS, EXPECTED_SESSION_MINUTES } from '../data/chapters.js';
 import { EVENT_DECKS, EVENT_STAGES, WATCH_CHALLENGES } from '../data/events.js';
 import { COURSE_INGREDIENT_RULES, INGREDIENTS, buildIngredientPlan } from '../data/ingredients.js';
 import { ROLES, getRole } from '../data/roles.js';
+import { LOCATION_STORY_CARDS, STORY_QUIZ_CARDS, locationStoryCard, storyCardById, storyLocationKey } from '../data/story-events.js';
 import { TASK_DECKS, getPlayableQuestLines } from '../data/tasks.js';
 
 const clone = (value) => typeof structuredClone === 'function'
@@ -12,10 +13,28 @@ const clone = (value) => typeof structuredClone === 'function'
 
 const TASK_ASSIGNEE_CHOICE_INTERVAL = 3;
 const MAX_INGREDIENTS_PER_TURN = 2;
-const MAX_FUN_CARDS_PER_CHAPTER = 16;
-const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth']);
+const DEFAULT_FUN_CARDS_PER_CHAPTER = 16;
+const MAIN_FUN_CARDS_PER_CHAPTER = 24;
+const MAX_EVENT_CHAIN_DEPTH = 2;
+const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
 const CURRENT_INGREDIENT_IDS = new Set(CURRENT_INGREDIENTS_BY_ID.keys());
+const STORED_INGREDIENT_EFFECTS = Object.freeze({
+  doubleDie: { bonus: 'doubleNextDie', trigger: 'dice' },
+  rerollDie: { bonus: 'rerollNext', trigger: 'dice' },
+  adjustDie: { bonus: 'adjustNext', trigger: 'dice' },
+  ignoreEvent: { bonus: 'ignoreNextEvent', trigger: 'event' },
+  revealEvent: { bonus: 'revealNextEvent', trigger: 'event' },
+  nextPlayer: { bonus: 'revealNextEvent', trigger: 'event' },
+  replaceEvent: { bonus: 'replaceNextEvent', trigger: 'event' },
+  ignoreIngredient: { bonus: 'ignoreNextIngredientEffect', trigger: 'ingredient' },
+  repeatNextIngredient: { bonus: 'repeatNextIngredientEffect', trigger: 'ingredient' },
+  replaceIngredient: { bonus: 'replaceNextIngredient', trigger: 'ingredient' }
+});
+const LEGACY_STORED_EFFECT_ORDER = Object.freeze([
+  'doubleDie', 'rerollDie', 'adjustDie', 'ignoreEvent', 'revealEvent', 'replaceEvent',
+  'ignoreIngredient', 'repeatNextIngredient', 'replaceIngredient'
+]);
 
 function supportedIngredientPlan(ingredients) {
   if (!Array.isArray(ingredients)) return false;
@@ -39,7 +58,17 @@ function chapterState(playerIds, chapterIndex = 0) {
     queuedChallenges: [],
     scheduledChallenges: [],
     funCardIdsDrawn: [],
+    storyQuizIdsDrawn: [],
+    nextStoryQuizAt: 4,
     portionCaptainPlayerId: null,
+    soupReady: false,
+    cauldronWatchIntervals: 0,
+    cauldronPreviousPlayerIds: [],
+    cocktailTeamSelectionPlayerIds: [],
+    cocktailTeamSelectionIndex: 0,
+    cocktailTechniques: { alcoholic: null, 'alcohol-free': null },
+    cocktailSpiritTarget: null,
+    autoLockedIngredientIds: [],
     courseStyle: chapterIndex === 1 ? null : 'not-required',
     stage: chapterIndex === 0 ? 'tasks' : 'clearing'
   };
@@ -52,6 +81,14 @@ function freshTurn() {
     dieResult: null,
     chainPending: false,
     chainDepth: 0,
+    eventChoiceSignature: null,
+    previousEventChoiceSignature: null,
+    eventSignature: null,
+    previousEventSignature: null,
+    previousEventId: null,
+    chainEventIds: [],
+    chainEventSignatures: [],
+    chainEventChoiceSignatures: [],
     pendingIngredientIds: [],
     pendingContext: null,
     previousPhase: null,
@@ -61,17 +98,53 @@ function freshTurn() {
     watchChallengeIndex: null,
     watchChallengeId: null,
     watchTargetPlayerId: null,
+    watchPartnerPlayerIds: [],
+    pendingCocktailTeam: null,
+    courseDecisionType: null,
     watchStartedAt: null,
     watchEndsAt: null,
+    watchOutcome: null,
+    watchCoinDelta: null,
+    watchCoinApplied: null,
     pendingTaskAssignment: null,
     assignedTaskId: null,
     resolvedTaskId: null,
     resolvedIngredientId: null,
+    resolvedIngredientEffect: null,
+    resolvedIngredientEffectMode: null,
     resolvedPreviousIngredientId: null,
+    ingredientEffectConsumedForChoice: false,
     taskBriefingEndsTurn: true,
     activeAbilityUsed: false,
+    gamblerLossRoll: null,
+    gamblerAbilityRoll: null,
+    gamblerAbilityCoinDelta: null,
+    storyAnswerId: null,
+    storyAnswerCorrect: null,
+    storyCoinDelta: null,
+    coinChangeRequested: null,
+    coinChangeModified: null,
+    coinChangeApplied: null,
     ingredientsAddedThisTurn: 0,
     tasksAssignedThisTurn: 0
+  };
+}
+
+function continuedTurnContext(turn, rememberCurrentEvent = true) {
+  const currentEventId = rememberCurrentEvent ? turn.currentEventId : null;
+  const currentEventSignature = rememberCurrentEvent ? turn.eventSignature : null;
+  const currentChoiceSignature = rememberCurrentEvent ? turn.eventChoiceSignature : null;
+  return {
+    chainDepth: turn.chainDepth,
+    previousEventId: currentEventId ?? turn.previousEventId,
+    previousEventSignature: currentEventSignature ?? turn.previousEventSignature,
+    previousEventChoiceSignature: currentChoiceSignature ?? turn.previousEventChoiceSignature,
+    chainEventIds: [...new Set([...(turn.chainEventIds ?? []), currentEventId].filter(Boolean))],
+    chainEventSignatures: [...new Set([...(turn.chainEventSignatures ?? []), currentEventSignature].filter(Boolean))],
+    chainEventChoiceSignatures: [...new Set([...(turn.chainEventChoiceSignatures ?? []), currentChoiceSignature].filter(Boolean))],
+    activeAbilityUsed: turn.activeAbilityUsed,
+    ingredientsAddedThisTurn: turn.ingredientsAddedThisTurn,
+    tasksAssignedThisTurn: turn.tasksAssignedThisTurn
   };
 }
 
@@ -96,8 +169,19 @@ function reconcileEventQueues(chapterIndex, chapterQueues, drawnEventIds = []) {
         [...(chapterQueues?.[stage]?.[locationIndex] ?? [])]
       )
     ]));
-  const queued = new Set(EVENT_STAGES.flatMap((stage) => result[stage].flat()));
   const drawn = new Set(drawnEventIds);
+  const queued = new Set();
+  EVENT_STAGES.forEach((stage) => {
+    result[stage].forEach((queue, locationIndex) => {
+      result[stage][locationIndex] = queue.filter((eventId) => {
+        const event = eventById(eventId);
+        if (!event || event.chapterId !== CHAPTERS[chapterIndex].id || event.stage !== stage ||
+          event.locationIndex !== locationIndex || drawn.has(eventId) || queued.has(eventId)) return false;
+        queued.add(eventId);
+        return true;
+      });
+    });
+  });
   EVENT_DECKS[chapterIndex].forEach((event) => {
     if (queued.has(event.id) || drawn.has(event.id)) return;
     result[event.stage][event.locationIndex].unshift(event.id);
@@ -131,6 +215,8 @@ function ensureNames(names) {
 }
 
 function eventById(id) {
+  const storyCard = storyCardById(id);
+  if (storyCard) return storyCard;
   for (const deck of EVENT_DECKS) {
     const card = deck.find((entry) => entry.id === id);
     if (card) return card;
@@ -186,8 +272,12 @@ export class GameEngine {
       );
       const card = taskById(task.taskId);
       if (card && task.status !== 'done') {
+        task.taskAbilityAdjustments ??= [];
         task.timingMode = card.timingMode ?? 'challenge';
-        task.challengeMinutes = card.challengeMinutes ?? 0;
+        const taskTimeAdjustment = task.taskAbilityAdjustments.reduce((total, adjustment) => total + (Number(adjustment.timeMinutes) || 0), 0);
+        task.challengeMinutes = task.timingMode === 'challenge' && card.challengeMinutes > 0
+          ? Math.max(1, card.challengeMinutes + taskTimeAdjustment)
+          : card.challengeMinutes ?? 0;
         task.backgroundMinutes = card.backgroundMinutes ?? 0;
         const timerMinutes = task.timingMode === 'background'
           ? task.backgroundMinutes
@@ -201,6 +291,7 @@ export class GameEngine {
     });
     this.state.menu.forEach((course) => {
       course.ingredientIds = course.ingredientIds.filter((ingredientId) => !RETIRED_INGREDIENT_IDS.has(ingredientId));
+      if (course.chapterId === 'cocktails') course.cocktailTechniques ??= { alcoholic: null, 'alcohol-free': null };
     });
     const currentCourseId = CHAPTERS[this.state.chapterIndex].id;
     this.state.turn.pendingIngredientIds = this.state.turn.pendingIngredientIds.filter((ingredientId) => {
@@ -233,13 +324,48 @@ export class GameEngine {
     this.state.chapter.queuedChallenges ??= [];
     this.state.chapter.scheduledChallenges ??= [];
     this.state.chapter.funCardIdsDrawn ??= [];
+    this.state.chapter.storyQuizIdsDrawn ??= [];
+    this.state.chapter.nextStoryQuizAt ??= 4;
     this.state.chapter.portionCaptainPlayerId ??= null;
+    this.state.chapter.soupReady ??= false;
+    this.state.chapter.cauldronWatchIntervals ??= 0;
+    this.state.chapter.cauldronPreviousPlayerIds ??= [];
+    this.state.chapter.cocktailTeamSelectionPlayerIds ??= [];
+    this.state.chapter.cocktailTeamSelectionIndex ??= 0;
+    this.state.chapter.cocktailTechniques ??= { alcoholic: null, 'alcohol-free': null };
+    if (!Number.isInteger(this.state.chapter.cocktailSpiritTarget) && currentCourseId === 'cocktails') {
+      const fixedSpiritCount = this.state.ingredients.filter((ingredient) =>
+        ingredient.chapterIndex === this.state.chapterIndex && ingredient.category === 'alcohol' && ['locked', 'used'].includes(ingredient.status)
+      ).length;
+      this.state.chapter.cocktailSpiritTarget = fixedSpiritCount ? Math.min(3, fixedSpiritCount) : null;
+    } else this.state.chapter.cocktailSpiritTarget ??= null;
+    this.state.chapter.autoLockedIngredientIds ??= [];
     this.state.chapter.courseStyle ??= this.state.chapterIndex === 1 ? null : 'not-required';
+    if (this.state.chapter.stage === 'ingredients') {
+      this.autoLockExpiringIngredients(this.state.updatedAt ?? Date.now());
+    }
     for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
       this.reconcileTaskQueue(chapterIndex);
     }
     this.state.activeChallenges ??= [];
     this.state.funCardsDrawn ??= [];
+    this.state.visitedLocationIds = [...new Set((this.state.visitedLocationIds ?? []).filter((key) =>
+      /^\d+:\d+$/.test(key)
+    ))];
+    const knownLocationStoryIds = new Set(LOCATION_STORY_CARDS.map((card) => card.id));
+    this.state.pendingLocationStoryIds = [...new Set((this.state.pendingLocationStoryIds ?? []).filter((id) =>
+      knownLocationStoryIds.has(id) && !(this.state.eventsDrawn ?? []).includes(id)
+    ))];
+    const knownStoryQuizIds = new Set(STORY_QUIZ_CARDS.map((card) => card.id));
+    const drawnStoryQuizIds = new Set((this.state.eventsDrawn ?? []).filter((id) => knownStoryQuizIds.has(id)));
+    const retainedStoryQuizIds = [...new Set((this.state.storyQuizQueue ?? []).filter((id) =>
+      knownStoryQuizIds.has(id) && !drawnStoryQuizIds.has(id)
+    ))];
+    const missingStoryQuizIds = STORY_QUIZ_CARDS.map((card) => card.id)
+      .filter((id) => !drawnStoryQuizIds.has(id) && !retainedStoryQuizIds.includes(id));
+    const shuffledMissingStoryQuizzes = shuffle(missingStoryQuizIds, this.state.rngState || 1);
+    this.state.rngState = shuffledMissingStoryQuizzes.state;
+    this.state.storyQuizQueue = [...retainedStoryQuizIds, ...shuffledMissingStoryQuizzes.value];
     const knownFunCardIds = new Set(WATCH_CHALLENGES.map((challenge) => challenge.id));
     const retainedFunCardIds = [...new Set((this.state.funCardQueue ?? []).filter((id) => knownFunCardIds.has(id)))];
     const missingFunCardIds = WATCH_CHALLENGES.map((challenge) => challenge.id)
@@ -254,25 +380,71 @@ export class GameEngine {
       ? (validBusyAnchor ? this.state.busyAfterPlayerIndex : this.state.activePlayerIndex)
       : null;
     this.state.busyReason ??= this.state.turn.phase === 'crewBusy' ? 'allPlayersBusy' : null;
+    const hadSharedEffectStack = Array.isArray(this.state.ingredientEffectStack);
+    const migratedEffectStack = [];
     this.state.players.forEach((player, index) => {
-      player.ingredientBonuses ??= freshBonuses();
-      player.cocktailTeam ??= index % 2 === 0 ? 'alcoholic' : 'alcohol-free';
+      const personalStack = Array.isArray(player.ingredientEffectStack) ? player.ingredientEffectStack : [];
+      const personalBonuses = { ...freshBonuses(), ...(player.ingredientBonuses ?? {}) };
+      if (!hadSharedEffectStack && personalStack.length) {
+        personalStack.forEach((entry) => migratedEffectStack.push({
+          ...entry,
+          storedByPlayerId: entry.storedByPlayerId ?? player.id
+        }));
+      } else if (!hadSharedEffectStack) {
+        LEGACY_STORED_EFFECT_ORDER.forEach((effect) => {
+          const bonus = STORED_INGREDIENT_EFFECTS[effect].bonus;
+          for (let count = 0; count < (Number(personalBonuses[bonus]) || 0); count += 1) {
+            migratedEffectStack.push({
+              id: `legacy-${player.id}-${effect}-${count + 1}`,
+              effect,
+              ingredientId: null,
+              storedByPlayerId: player.id,
+              storedAt: this.state.updatedAt ?? this.state.startedAt
+            });
+          }
+        });
+      }
+      delete player.ingredientEffectStack;
+      delete player.ingredientBonuses;
+      if (!['alcoholic', 'alcohol-free'].includes(player.cocktailTeam)) player.cocktailTeam = null;
+      player.passiveUsedByChapter ??= {};
+      player.pendingTaskAbility ??= null;
+      player.activeUsesRemaining ??= getRole(player.roleId)?.uses ?? 0;
     });
-    if (this.state.bonuses && Object.values(this.state.bonuses).some((value) => Number(value) > 0)) {
-      Object.entries(this.state.bonuses).forEach(([key, value]) => {
-        if (key in this.activePlayer.ingredientBonuses) this.activePlayer.ingredientBonuses[key] += Number(value) || 0;
+    if (!hadSharedEffectStack) {
+      migratedEffectStack.sort((left, right) => (Number(left.storedAt) || 0) - (Number(right.storedAt) || 0));
+      this.state.ingredientEffectStack = migratedEffectStack;
+      LEGACY_STORED_EFFECT_ORDER.forEach((effect) => {
+        const config = STORED_INGREDIENT_EFFECTS[effect];
+        for (let count = 0; count < (Number(this.state.bonuses?.[config.bonus]) || 0); count += 1) {
+          this.state.ingredientEffectStack.push({
+            id: `legacy-crew-${effect}-${count + 1}`,
+            effect,
+            ingredientId: null,
+            storedByPlayerId: null,
+            storedAt: this.state.updatedAt ?? this.state.startedAt
+          });
+        }
       });
-      this.state.bonuses = freshBonuses();
     }
+    this.state.ingredientEffectStack ??= [];
+    this.state.ingredientBonuses = freshBonuses();
+    this.state.ingredientEffectStack.forEach((entry) => {
+      const config = STORED_INGREDIENT_EFFECTS[entry.effect];
+      if (config) this.state.ingredientBonuses[config.bonus] += 1;
+    });
+    this.state.bonuses = freshBonuses();
     this.state.turn.activeAbilityUsed ??= false;
+    this.state.turn.watchPartnerPlayerIds ??= [];
+    this.state.groups.forEach((group) => {
+      const legacyLocationProgress = group.progressMode !== 'course';
+      this.syncGroupLocation(group, this.state.updatedAt ?? Date.now(), { rebase: legacyLocationProgress, log: false });
+      this.registerLocationVisit(this.state.chapterIndex, group.locationIndex, this.state.updatedAt ?? Date.now(), { log: false });
+    });
   }
 
   static create(setup, now = Date.now()) {
     const names = ensureNames(setup.names ?? []);
-    const requestedCocktailTeams = Array.isArray(setup.cocktailTeams) ? setup.cocktailTeams : [];
-    const cocktailTeams = names.map((_, index) => ['alcoholic', 'alcohol-free'].includes(requestedCocktailTeams[index])
-      ? requestedCocktailTeams[index]
-      : index % 2 === 0 ? 'alcoholic' : 'alcohol-free');
     let rngState = Number(setup.seed) || (now >>> 0) || 1;
     const roleResult = shuffle(ROLES, rngState);
     rngState = roleResult.state;
@@ -283,13 +455,13 @@ export class GameEngine {
         id: `player-${index + 1}`,
         name,
         roleId: role.id,
-        cocktailTeam: cocktailTeams[index],
+        cocktailTeam: null,
         language: setup.defaultLanguage === 'en' ? 'en' : 'de',
         turns: 0,
         taskMarkers: 0,
         activeUsesRemaining: role.uses,
         passiveUsedByChapter: {},
-        ingredientBonuses: freshBonuses()
+        pendingTaskAbility: null
       };
     });
 
@@ -351,6 +523,9 @@ export class GameEngine {
     const funCardDeck = shuffle(WATCH_CHALLENGES.map((challenge) => challenge.id), rngState);
     rngState = funCardDeck.state;
 
+    const storyQuizDeck = shuffle(STORY_QUIZ_CARDS.map((card) => card.id), rngState);
+    rngState = storyQuizDeck.state;
+
     const state = {
       version: STATE_VERSION,
       appVersion: APP_VERSION,
@@ -379,6 +554,7 @@ export class GameEngine {
         playerIds: players.map((player) => player.id),
         locationIndex: 0,
         locationProgress: 0,
+        progressMode: 'course',
         completedLocations: [],
         finished: false
       }],
@@ -387,6 +563,9 @@ export class GameEngine {
       taskQueues,
       ingredientQueues,
       eventsDrawn: [],
+      pendingLocationStoryIds: [],
+      visitedLocationIds: [],
+      storyQuizQueue: storyQuizDeck.value,
       funCardQueue: funCardDeck.value,
       funCardsDrawn: [],
       discardedEvents: [],
@@ -396,10 +575,18 @@ export class GameEngine {
       coinGoal: COIN_GOAL,
       lastIngredientId: null,
       previousIngredientId: null,
+      ingredientEffectStack: [],
+      ingredientBonuses: freshBonuses(),
       bonuses: freshBonuses(),
       activeChallenges: [],
       turnsElapsed: 0,
-      menu: CHAPTERS.map((chapter) => ({ chapterId: chapter.id, servedAt: null, ingredientIds: [], courseStyle: null })),
+      menu: CHAPTERS.map((chapter) => ({
+        chapterId: chapter.id,
+        servedAt: null,
+        ingredientIds: [],
+        courseStyle: null,
+        cocktailTechniques: chapter.id === 'cocktails' ? { alcoholic: null, 'alcohol-free': null } : null
+      })),
       history: []
     };
 
@@ -421,8 +608,90 @@ export class GameEngine {
   }
 
   get activeBonuses() {
-    this.activePlayer.ingredientBonuses ??= freshBonuses();
-    return this.activePlayer.ingredientBonuses;
+    this.state.ingredientBonuses ??= freshBonuses();
+    return this.state.ingredientBonuses;
+  }
+
+  storedIngredientEffects() {
+    this.state.ingredientEffectStack ??= [];
+    return this.state.ingredientEffectStack;
+  }
+
+  ingredientEffectTrigger(effect) {
+    return STORED_INGREDIENT_EFFECTS[effect]?.trigger ?? null;
+  }
+
+  currentIngredientEffectTrigger() {
+    if (this.state.turn.phase === 'rolled') return 'dice';
+    if (this.state.turn.phase === 'ingredientChoice') return 'ingredient';
+    if (this.state.turn.phase === 'draw') return 'event';
+    return null;
+  }
+
+  nextStoredIngredientEffect(trigger = null) {
+    const stack = this.storedIngredientEffects();
+    const queued = stack.find((entry) => {
+      if (trigger && this.ingredientEffectTrigger(entry.effect) !== trigger) return false;
+      return entry.effect !== 'nextPlayer' || !entry.targetPlayerId || entry.targetPlayerId === this.activePlayer.id;
+    });
+    if (queued) return queued;
+    if (stack.length) return null;
+    const legacyEffect = LEGACY_STORED_EFFECT_ORDER.find((effect) => {
+      const config = STORED_INGREDIENT_EFFECTS[effect];
+      return (!trigger || config.trigger === trigger) && (Number(this.activeBonuses[config.bonus]) || 0) > 0;
+    });
+    return legacyEffect ? { id: null, effect: legacyEffect, ingredientId: null, legacy: true } : null;
+  }
+
+  storeIngredientEffect(ingredient, effect, times = 1, now = Date.now()) {
+    const config = STORED_INGREDIENT_EFFECTS[effect];
+    if (!config) return false;
+    const targetPlayerIndex = effect === 'nextPlayer'
+      ? this.nextFreePlayerIndex(this.state.activePlayerIndex)
+      : null;
+    const targetPlayerId = targetPlayerIndex == null ? null : this.state.players[targetPlayerIndex]?.id ?? null;
+    for (let count = 0; count < times; count += 1) {
+      const stack = this.storedIngredientEffects();
+      stack.push({
+        id: `ingredient-effect-${this.activePlayer.id}-${this.state.history.length}-${stack.length + 1}`,
+        effect,
+        ingredientId: ingredient?.id ?? null,
+        storedByPlayerId: this.activePlayer.id,
+        targetPlayerId,
+        storedAt: now
+      });
+      this.activeBonuses[config.bonus] += 1;
+      this.log('ingredientEffectStored', {
+        effect,
+        ingredientId: ingredient?.id ?? null,
+        playerId: this.activePlayer.id,
+        targetPlayerId,
+        stackPosition: stack.length
+      }, now);
+    }
+    return true;
+  }
+
+  consumeStoredIngredientEffect(effect, trigger, now = Date.now()) {
+    const config = STORED_INGREDIENT_EFFECTS[effect];
+    if (!config || config.trigger !== trigger) return null;
+    const candidate = this.nextStoredIngredientEffect(trigger);
+    if (!candidate || candidate.effect !== effect) return null;
+    if (!candidate.legacy) {
+      const stack = this.storedIngredientEffects();
+      const index = stack.findIndex((entry) => entry.id === candidate.id);
+      if (index < 0) return null;
+      stack.splice(index, 1);
+    }
+    this.activeBonuses[config.bonus] = Math.max(0, this.activeBonuses[config.bonus] - 1);
+    this.log('ingredientEffectConsumed', {
+      effect,
+      ingredientId: candidate.ingredientId ?? null,
+      playerId: this.activePlayer.id,
+      storedByPlayerId: candidate.storedByPlayerId ?? null,
+      trigger
+    }, now);
+    return candidate;
   }
 
   get currentChapter() {
@@ -431,7 +700,7 @@ export class GameEngine {
 
   get currentEvent() {
     const event = eventById(this.state.turn.currentEventId);
-    return event ? this.contextualizeEvent(event) : null;
+    return event?.storyKind ? event : event ? this.contextualizeEvent(event) : null;
   }
 
   get currentWatchChallenge() {
@@ -439,17 +708,29 @@ export class GameEngine {
       ? WATCH_CHALLENGES.find((entry) => entry.id === this.state.turn.watchChallengeId)
       : this.state.turn.watchChallengeIndex == null ? null : WATCH_CHALLENGES[this.state.turn.watchChallengeIndex];
     if (!challenge) return null;
-    return this.personalizeWatchChallenge(challenge, this.state.turn.watchTargetPlayerId);
+    return this.personalizeWatchChallenge(
+      challenge,
+      this.state.turn.watchTargetPlayerId,
+      this.state.turn.watchPartnerPlayerIds
+    );
   }
 
-  personalizeWatchChallenge(challenge, targetPlayerId = null) {
+  personalizeWatchChallenge(challenge, targetPlayerId = null, partnerPlayerIds = []) {
     if (!challenge) return null;
     const target = this.state.players.find((player) => player.id === targetPlayerId) ?? this.activePlayer;
+    const partners = partnerPlayerIds
+      .map((playerId) => this.state.players.find((player) => player.id === playerId))
+      .filter(Boolean);
+    const firstPartner = partners[0] ?? target;
+    const secondPartner = partners[1] ?? firstPartner;
     const replaceNames = (value) => value
       .replaceAll('{activePlayer}', this.activePlayer.name)
-      .replaceAll('{targetPlayer}', target.name);
+      .replaceAll('{targetPlayer}', target.name)
+      .replaceAll('{partner2}', secondPartner.name)
+      .replaceAll('{partner}', firstPartner.name);
     return {
       ...challenge,
+      partnerPlayerIds: partners.map((player) => player.id),
       de: replaceNames(challenge.de),
       en: replaceNames(challenge.en),
       title: {
@@ -550,6 +831,7 @@ export class GameEngine {
     });
     this.state.chapter.stage = 'tasks';
     this.state.turn = freshTurn();
+    this.syncCourseLocations(now);
     this.log('chapterStageChanged', { chapterIndex: 0, stage: 'tasks', automatic: true, openingFunCards: 3 }, now);
     return true;
   }
@@ -570,6 +852,16 @@ export class GameEngine {
     return Math.max(...ingredient.courseTags.map((tag) => CHAPTERS.findIndex((chapter) => chapter.id === tag)));
   }
 
+  courseCategoryLimitAllows(ingredient, excludingIngredientId = null) {
+    const limit = this.courseRule()?.categoryLimits?.[ingredient?.category];
+    if (limit == null) return true;
+    const alreadyChosen = this.courseIngredients().filter((entry) =>
+      entry.id !== excludingIngredientId && entry.category === ingredient.category &&
+      ['discovered', 'locked', 'used'].includes(entry.status)
+    ).length;
+    return alreadyChosen < limit;
+  }
+
   ingredientAllowedInCurrentCourse(ingredient) {
     if (!ingredient?.courseTags.includes(this.currentChapter.id)) return false;
     const plannedEssential = this.requiredCourseIngredients().filter((entry) =>
@@ -580,12 +872,10 @@ export class GameEngine {
       !entry.essential && ['discovered', 'locked', 'used'].includes(entry.status)
     ).length;
     if (!ingredient.essential && plannedOptional >= (this.courseRule().optionalLimit ?? 0)) return false;
-    const limit = this.courseRule()?.categoryLimits?.[ingredient.category];
-    if (limit == null) return true;
-    const alreadyChosen = this.courseIngredients().filter((entry) =>
-      entry.category === ingredient.category && ['discovered', 'locked'].includes(entry.status)
-    ).length;
-    return alreadyChosen < limit;
+    if (this.currentChapter.id === 'cocktails' && ingredient.category === 'alcohol' &&
+      Number.isInteger(this.state.chapter.cocktailSpiritTarget) &&
+      this.courseCategoryCount('alcohol') >= this.state.chapter.cocktailSpiritTarget) return false;
+    return this.courseCategoryLimitAllows(ingredient);
   }
 
   courseCategoryCount(category, statuses = ['discovered', 'locked', 'used']) {
@@ -606,6 +896,35 @@ export class GameEngine {
       ingredient.courseTags.includes(this.currentChapter.id) &&
       this.ingredientLastCourseIndex(ingredient) <= this.state.chapterIndex
     );
+  }
+
+  autoLockExpiringIngredients(now = Date.now()) {
+    if (this.state.chapter.stage !== 'ingredients' || this.state.chapterIndex === 0) return [];
+    const expiring = this.expiringIngredientCandidates();
+    if (!expiring.length) return [];
+
+    expiring.forEach((ingredient) => {
+      ingredient.status = 'locked';
+      ingredient.chapterIndex = this.state.chapterIndex;
+      ingredient.basketCourseIndex = null;
+      ingredient.basketTaskId = null;
+      ingredient.lockedAt = now;
+      ingredient.lockedBy = null;
+      ingredient.autoLockedChapterIndex = this.state.chapterIndex;
+      if (this.currentChapter.id === 'cocktails') {
+        ingredient.cocktailUse = this.defaultCocktailUseForIngredient(ingredient);
+      }
+    });
+    const ingredientIds = expiring.map((ingredient) => ingredient.id);
+    this.state.chapter.autoLockedIngredientIds = [...new Set([
+      ...(this.state.chapter.autoLockedIngredientIds ?? []),
+      ...ingredientIds
+    ])];
+    this.log('ingredientsAutoLockedForLastCourse', {
+      chapterIndex: this.state.chapterIndex,
+      ingredientIds
+    }, now);
+    return ingredientIds;
   }
 
   futureCourseHasCapacity(chapterIndex, excludingIngredientId = null) {
@@ -722,9 +1041,191 @@ export class GameEngine {
     if (this.currentChapter.id !== 'cocktails') return true;
     const fixed = this.courseIngredients().filter((ingredient) => ['locked', 'used'].includes(ingredient.status));
     const validUses = new Set(['alcoholic', 'alcohol-free', 'shared']);
+    const spiritTarget = this.state.chapter.cocktailSpiritTarget;
+    const spiritCount = fixed.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.cocktailUse === 'alcoholic').length;
     return fixed.length > 0 && fixed.every((ingredient) => validUses.has(ingredient.cocktailUse)) &&
-      fixed.some((ingredient) => ingredient.category === 'alcohol' && ingredient.cocktailUse === 'alcoholic') &&
+      Number.isInteger(spiritTarget) && spiritTarget >= 1 && spiritTarget <= 3 && spiritCount === spiritTarget &&
       fixed.some((ingredient) => ingredient.cocktailUse === 'alcohol-free' && !['alcohol', 'drinks'].includes(ingredient.category));
+  }
+
+  cocktailTeamsReady() {
+    const teams = this.state.players.map((player) => player.cocktailTeam);
+    return teams.every((team) => ['alcoholic', 'alcohol-free'].includes(team)) &&
+      teams.includes('alcoholic') && teams.includes('alcohol-free');
+  }
+
+  availableCocktailTeamChoices() {
+    if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'teamSelection' ||
+      this.state.turn.phase !== 'cocktailTeamChoice') return [];
+    const order = this.state.chapter.cocktailTeamSelectionPlayerIds ?? [];
+    const selectionIndex = this.state.chapter.cocktailTeamSelectionIndex ?? 0;
+    if (order[selectionIndex] !== this.activePlayer.id || this.activePlayer.cocktailTeam) return [];
+    const remainingAfterChoice = Math.max(0, order.length - selectionIndex - 1);
+    return ['alcoholic', 'alcohol-free'].filter((choice) => {
+      const assignedAfterChoice = this.state.players.map((player) =>
+        player.id === this.activePlayer.id ? choice : player.cocktailTeam
+      );
+      return ['alcoholic', 'alcohol-free'].every((team) =>
+        assignedAfterChoice.includes(team) || remainingAfterChoice > 0
+      );
+    });
+  }
+
+  startCocktailTeamSelection(now = Date.now()) {
+    if (this.currentChapter.id !== 'cocktails' || !['clearing', 'teamSelection'].includes(this.state.chapter.stage)) return false;
+    const clearingCards = TASK_DECKS[this.state.chapterIndex].filter((card) => card.playable && card.questId === 'reset');
+    const clearingComplete = clearingCards.length > 0 && clearingCards.every((card) =>
+      this.state.tasks.some((instance) => instance.chapterIndex === this.state.chapterIndex && instance.taskId === card.id && instance.status === 'done')
+    );
+    if (!clearingComplete) return false;
+
+    if (!(this.state.chapter.cocktailTeamSelectionPlayerIds ?? []).length) {
+      const startIndex = this.state.activePlayerIndex;
+      this.state.chapter.cocktailTeamSelectionPlayerIds = Array.from({ length: this.state.players.length }, (_, offset) =>
+        this.state.players[(startIndex + offset) % this.state.players.length].id
+      );
+      this.state.chapter.cocktailTeamSelectionIndex = 0;
+      this.state.players.forEach((player) => { player.cocktailTeam = null; });
+      this.log('cocktailTeamSelectionStarted', {
+        playerIds: this.state.chapter.cocktailTeamSelectionPlayerIds
+      }, now);
+    }
+
+    const playerId = this.state.chapter.cocktailTeamSelectionPlayerIds[this.state.chapter.cocktailTeamSelectionIndex];
+    const playerIndex = this.state.players.findIndex((player) => player.id === playerId);
+    if (playerIndex < 0) return false;
+    this.state.chapter.stage = 'teamSelection';
+    this.state.activePlayerIndex = playerIndex;
+    this.state.turn = { ...freshTurn(), phase: 'cocktailTeamChoice' };
+    return true;
+  }
+
+  chooseCocktailTeam(team, now = Date.now()) {
+    if (!this.availableCocktailTeamChoices().includes(team)) return false;
+    const order = this.state.chapter.cocktailTeamSelectionPlayerIds;
+    const selectionIndex = this.state.chapter.cocktailTeamSelectionIndex;
+    const player = this.activePlayer;
+    player.cocktailTeam = team;
+    this.log('cocktailTeamChosen', {
+      playerId: player.id,
+      team,
+      selectionNumber: selectionIndex + 1,
+      totalSelections: order.length
+    }, now);
+    this.state.chapter.cocktailTeamSelectionIndex += 1;
+
+    if (this.state.chapter.cocktailTeamSelectionIndex < order.length) {
+      const nextPlayerId = order[this.state.chapter.cocktailTeamSelectionIndex];
+      this.state.activePlayerIndex = this.state.players.findIndex((candidate) => candidate.id === nextPlayerId);
+      this.state.turn = { ...freshTurn(), phase: 'cocktailTeamChoice' };
+      return true;
+    }
+
+    if (!this.cocktailTeamsReady()) return false;
+    const nextPlayerId = order[0];
+    this.state.activePlayerIndex = this.state.players.findIndex((candidate) => candidate.id === nextPlayerId);
+    this.state.chapter.stage = 'ingredients';
+    this.state.turn = freshTurn();
+    this.autoLockExpiringIngredients(now);
+    this.startCocktailSpiritCountChoice(now);
+    this.log('cocktailTeamSelectionCompleted', {
+      alcoholicPlayerIds: this.cocktailTeamMembers('alcoholic').map((member) => member.id),
+      alcoholFreePlayerIds: this.cocktailTeamMembers('alcohol-free').map((member) => member.id)
+    }, now);
+    this.log('chapterStageChanged', {
+      chapterIndex: this.state.chapterIndex,
+      stage: 'ingredients',
+      afterCocktailTeamSelection: true
+    }, now);
+    this.syncCourseLocations(now);
+    return true;
+  }
+
+  startCocktailSpiritCountChoice(now = Date.now()) {
+    if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
+      Number.isInteger(this.state.chapter.cocktailSpiritTarget)) return false;
+    this.state.turn.phase = 'courseDecision';
+    this.state.turn.courseDecisionType = 'cocktailSpiritCount';
+    this.state.turn.pendingCocktailTeam = null;
+    this.log('cocktailSpiritCountChoiceStarted', {}, now);
+    return true;
+  }
+
+  availableCocktailSpiritCounts() {
+    if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients') return [];
+    const remainingSpiritVarieties = this.state.ingredients.filter((ingredient) =>
+      ingredient.category === 'alcohol' && ingredient.courseTags.includes('cocktails') &&
+      (ingredient.status === 'available' || ingredient.chapterIndex === this.state.chapterIndex)
+    ).length;
+    return Array.from({ length: Math.min(3, remainingSpiritVarieties) }, (_, index) => index + 1);
+  }
+
+  chooseCocktailSpiritCount(count, now = Date.now()) {
+    const spiritCount = Number(count);
+    if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
+      this.state.turn.phase !== 'courseDecision' || this.state.turn.courseDecisionType !== 'cocktailSpiritCount' ||
+      !this.availableCocktailSpiritCounts().includes(spiritCount)) return false;
+    this.state.chapter.cocktailSpiritTarget = spiritCount;
+    this.state.turn = freshTurn();
+    this.log('cocktailSpiritCountChosen', { count: spiritCount }, now);
+    this.syncCourseLocations(now);
+    return true;
+  }
+
+  cocktailTechniqueForTeam(team, chapterIndex = this.state.chapterIndex) {
+    if (!['alcoholic', 'alcohol-free'].includes(team)) return null;
+    const techniques = chapterIndex === this.state.chapterIndex
+      ? this.state.chapter.cocktailTechniques
+      : this.state.menu?.[chapterIndex]?.cocktailTechniques;
+    return techniques?.[team] ?? null;
+  }
+
+  cocktailTechniquesReady() {
+    if (this.currentChapter.id !== 'cocktails') return true;
+    return ['alcoholic', 'alcohol-free'].every((team) =>
+      ['mixed', 'stirred'].includes(this.cocktailTechniqueForTeam(team))
+    );
+  }
+
+  nextCocktailTechniqueTeam() {
+    return ['alcoholic', 'alcohol-free'].find((team) => !this.cocktailTechniqueForTeam(team)) ?? null;
+  }
+
+  startCocktailTechniqueChoice(now = Date.now()) {
+    if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
+      !this.ingredientsLockedForCourse() || !this.cocktailCompositionReady()) return false;
+    const team = this.nextCocktailTechniqueTeam();
+    if (!team) return false;
+    this.state.turn.phase = 'courseDecision';
+    this.state.turn.courseDecisionType = 'cocktailTechnique';
+    this.state.turn.pendingCocktailTeam = team;
+    this.log('cocktailTechniqueChoiceStarted', { team }, now);
+    return true;
+  }
+
+  chooseCocktailTechnique(team, technique, now = Date.now()) {
+    if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
+      this.state.turn.phase !== 'courseDecision' || this.state.turn.courseDecisionType !== 'cocktailTechnique' ||
+      this.state.turn.pendingCocktailTeam !== team ||
+      !['alcoholic', 'alcohol-free'].includes(team) || !['mixed', 'stirred'].includes(technique)) return false;
+    this.state.chapter.cocktailTechniques[team] = technique;
+    this.state.menu[this.state.chapterIndex].cocktailTechniques = clone(this.state.chapter.cocktailTechniques);
+    this.log('cocktailTechniqueChosen', { team, technique }, now);
+
+    const nextTeam = this.nextCocktailTechniqueTeam();
+    if (nextTeam) {
+      this.state.turn.pendingCocktailTeam = nextTeam;
+      this.state.turn.courseDecisionType = 'cocktailTechnique';
+      this.log('cocktailTechniqueChoiceStarted', { team: nextTeam }, now);
+      return true;
+    }
+
+    this.state.chapter.stage = 'tasks';
+    this.reconcileTaskQueue(this.state.chapterIndex, true, now);
+    this.state.turn = freshTurn();
+    this.log('chapterStageChanged', { chapterIndex: this.state.chapterIndex, stage: 'tasks', afterCocktailTechniques: true }, now);
+    this.syncCourseLocations(now);
+    return true;
   }
 
   setCocktailIngredientUse(ingredientId, use, now = Date.now()) {
@@ -745,24 +1246,41 @@ export class GameEngine {
         this.state.tasks.some((instance) => instance.chapterIndex === this.state.chapterIndex && instance.taskId === card.id && instance.status === 'done')
       );
       if (clearingComplete) {
+        if (this.currentChapter.id === 'cocktails' && !this.cocktailTeamsReady()) {
+          const started = this.startCocktailTeamSelection(now);
+          this.syncCourseLocations(now);
+          return started;
+        }
         this.state.chapter.stage = 'ingredients';
+        this.autoLockExpiringIngredients(now);
         this.log('chapterStageChanged', { chapterIndex: this.state.chapterIndex, stage: 'ingredients', afterTableClearing: true }, now);
         if (this.state.chapterIndex === 3) this.secureTreasurerIngredient(now);
+        this.syncCourseLocations(now);
         return true;
       }
+      this.syncCourseLocations(now);
       return false;
     }
-    const ingredientChoiceInProgress = ['event', 'ingredientChoice', 'effectChoice'].includes(this.state.turn.phase);
+    const ingredientChoiceInProgress = ['event', 'ingredientChoice', 'effectChoice', 'courseDecision'].includes(this.state.turn.phase);
     if (this.state.chapter.stage === 'ingredients' && !ingredientChoiceInProgress && this.ingredientsLockedForCourse() && this.cocktailCompositionReady()) {
+      if (this.currentChapter.id === 'cocktails' && !this.cocktailTechniquesReady()) {
+        const started = this.startCocktailTechniqueChoice(now);
+        this.syncCourseLocations(now);
+        return started;
+      }
       this.state.chapter.stage = 'tasks';
+      this.reconcileTaskQueue(this.state.chapterIndex, true, now);
       this.log('chapterStageChanged', { chapterIndex: this.state.chapterIndex, stage: 'tasks' }, now);
+      this.syncCourseLocations(now);
       return true;
     }
     if (this.state.chapter.stage === 'tasks' && !this.hasUnassignedCourseTasks()) {
       this.state.chapter.stage = 'cooking';
       this.log('chapterStageChanged', { chapterIndex: this.state.chapterIndex, stage: 'cooking' }, now);
+      this.syncCourseLocations(now);
       return true;
     }
+    this.syncCourseLocations(now);
     return false;
   }
 
@@ -770,6 +1288,7 @@ export class GameEngine {
     const requirementMet = (requirement) => {
       const requiredCard = TASK_DECKS[this.state.chapterIndex]
         .find((candidate) => candidate.blueprintIndex === requirement.requiredBlueprintIndex);
+      if (requiredCard?.repeatOnRelief && !this.state.chapter.soupReady) return false;
       if (requiredCard && !this.taskAppliesToCourse(requiredCard)) return true;
       const prerequisite = this.state.tasks.find((instance) => {
         if (instance.chapterIndex !== this.state.chapterIndex) return false;
@@ -797,16 +1316,39 @@ export class GameEngine {
 
   taskAppliesToChapter(card, chapterIndex) {
     const style = this.courseStyleForChapter(chapterIndex);
-    return !card?.courseStyles?.length || style == null || card.courseStyles.includes(style);
+    const soupReady = chapterIndex === this.state.chapterIndex
+      ? this.state.chapter.soupReady
+      : Boolean(this.state.menu?.[chapterIndex]?.servedAt);
+    if (soupReady && card?.chapterId === 'soup' && card.questId === 'cauldron' && card.timingMode === 'background') return false;
+    const styleApplies = !card?.courseStyles?.length || style == null || card.courseStyles.includes(style);
+    if (!styleApplies) return false;
+    const requirement = card?.ingredientRequirement;
+    if (!requirement) return true;
+    const requiredIds = new Set(requirement.ids ?? []);
+    const requiredCategories = new Set(requirement.categories ?? []);
+    const excludedIds = new Set(requirement.excludeIds ?? []);
+    return this.state.ingredients.some((ingredient) =>
+      ingredient.chapterIndex === chapterIndex && ['discovered', 'locked', 'used'].includes(ingredient.status) &&
+      !excludedIds.has(ingredient.id) && (requiredIds.has(ingredient.id) || requiredCategories.has(ingredient.category))
+    );
   }
 
   nextAvailableQuestCards(chapterIndex = this.state.chapterIndex) {
     const instances = this.state.tasks.filter((instance) => instance.chapterIndex === chapterIndex);
-    const byTaskId = new Map(instances.map((instance) => [instance.taskId, instance]));
+    const byTaskId = new Map();
+    instances.forEach((instance) => {
+      if (!byTaskId.has(instance.taskId)) byTaskId.set(instance.taskId, []);
+      byTaskId.get(instance.taskId).push(instance);
+    });
     return getPlayableQuestLines(chapterIndex).flatMap((line) => {
       const applicableLine = line.filter((card) => this.taskAppliesToChapter(card, chapterIndex));
       for (const card of applicableLine) {
-        const instance = byTaskId.get(card.id);
+        const cardInstances = byTaskId.get(card.id) ?? [];
+        if (card.repeatOnRelief) {
+          if (cardInstances.some((instance) => ['queued', 'active', 'ready'].includes(instance.status))) return [];
+          return [card];
+        }
+        const instance = cardInstances.at(-1);
         if (!instance) return [card];
         if (instance.status !== 'done') return [];
       }
@@ -824,9 +1366,12 @@ export class GameEngine {
 
   reconcileTaskQueue(chapterIndex = this.state.chapterIndex, randomizeMissing = false, now = Date.now()) {
     const desiredCards = this.nextAvailableQuestCards(chapterIndex);
-    const desiredIds = new Set(desiredCards.map((card) => card.id));
+    const automaticCards = chapterIndex === this.state.chapterIndex
+      ? desiredCards.filter((card) => card.automatic && this.taskAppliesToCourse(card) && this.taskPrerequisitesMet(card))
+      : [];
+    const desiredIds = new Set(desiredCards.filter((card) => !card.automatic).map((card) => card.id));
     const queue = [...new Set((this.state.taskQueues[chapterIndex] ?? []).filter((taskId) => desiredIds.has(taskId)))];
-    const missingCards = desiredCards.filter((card) => !queue.includes(card.id));
+    const missingCards = desiredCards.filter((card) => !card.automatic && !queue.includes(card.id));
     missingCards.forEach((card) => {
       if (randomizeMissing) {
         const insertion = randomInt(this.state.rngState, 0, Math.min(2, queue.length));
@@ -843,7 +1388,39 @@ export class GameEngine {
       }
     });
     this.state.taskQueues[chapterIndex] = queue;
+    automaticCards.forEach((card) => this.startAutomaticTask(card, now));
     return missingCards;
+  }
+
+  startAutomaticTask(card, now = Date.now()) {
+    if (!card?.automatic || card.chapterId !== this.currentChapter.id ||
+      this.state.tasks.some((instance) => instance.chapterIndex === this.state.chapterIndex && instance.taskId === card.id)) return null;
+    const instance = {
+      instanceId: createId('task'),
+      taskId: card.id,
+      chapterIndex: this.state.chapterIndex,
+      locationIndex: this.activeGroup.locationIndex,
+      groupId: this.activeGroup.id,
+      coreKey: null,
+      assignedPlayerIds: [],
+      status: 'active',
+      assignedAt: now,
+      startedAt: now,
+      endAt: null,
+      readyAt: null,
+      completedAt: null,
+      timingMode: card.timingMode ?? 'manual',
+      baseChallengeMinutes: 0,
+      challengeMinutes: 0,
+      backgroundMinutes: 0,
+      challengeEndsAt: null,
+      taskAbilityAdjustments: [],
+      taskCoinAdjustment: 0,
+      basketIngredientIds: this.reserveTaskBasket(card, null)
+    };
+    this.state.tasks.push(instance);
+    this.log('automaticTaskStarted', { taskId: card.id, instanceId: instance.instanceId, assignedPlayerIds: [] }, now);
+    return instance;
   }
 
   openTasksForPlayer(playerId, excludingInstanceId = null) {
@@ -866,6 +1443,21 @@ export class GameEngine {
     return group.playerIds
       .map((playerId) => this.state.players.find((player) => player.id === playerId))
       .filter((player) => player && this.isPlayerFreeForTask(player.id));
+  }
+
+  availableCoopPartners(group = this.activeGroup) {
+    const freeIds = new Set(this.freePlayersForTask(group).map((player) => player.id));
+    const ordered = [];
+    for (let offset = 1; offset < this.state.players.length; offset += 1) {
+      const player = this.state.players[(this.state.activePlayerIndex + offset) % this.state.players.length];
+      if (player?.id !== this.activePlayer.id && group.playerIds.includes(player.id) && freeIds.has(player.id)) ordered.push(player);
+    }
+    return ordered;
+  }
+
+  coopPartnerPlayerIds(challenge, group = this.activeGroup) {
+    if (!challenge?.cooperative) return [];
+    return this.availableCoopPartners(group).slice(0, challenge.partnerCount).map((player) => player.id);
   }
 
   cocktailTeamForTask(card) {
@@ -930,6 +1522,7 @@ export class GameEngine {
 
   taskHandoffAllowed(card, group = this.activeGroup) {
     if (card?.chapterId !== 'soup' || card.questId !== 'cauldron' || card.timingMode !== 'background') return true;
+    if (card.repeatOnRelief && (this.state.chapter.cauldronPreviousPlayerIds ?? []).includes(this.activePlayer.id)) return false;
     const previous = this.state.tasks
       .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
       .map((instance) => ({ instance, card: this.getTaskCard(instance) }))
@@ -937,6 +1530,84 @@ export class GameEngine {
       .sort((a, b) => this.questStepNumber(b.card) - this.questStepNumber(a.card))[0];
     if (!previous || !group.playerIds.includes(this.activePlayer.id)) return true;
     return !previous.instance.assignedPlayerIds.includes(this.activePlayer.id);
+  }
+
+  isCauldronWatch(instanceOrId) {
+    const instance = typeof instanceOrId === 'string'
+      ? this.state.tasks.find((candidate) => candidate.instanceId === instanceOrId)
+      : instanceOrId;
+    const card = instance ? this.getTaskCard(instance) : null;
+    return this.isCauldronWatchCard(card);
+  }
+
+  isCauldronWatchCard(card) {
+    return Boolean(card?.chapterId === 'soup' && card.questId === 'cauldron' && card.timingMode === 'background' && card.repeatOnRelief);
+  }
+
+  recurringTaskCardAvailable(card) {
+    if (!card?.repeatOnRelief || this.state.chapter.soupReady) return false;
+    return !this.state.tasks.some((instance) => instance.chapterIndex === this.state.chapterIndex &&
+      instance.taskId === card.id && ['queued', 'active', 'ready'].includes(instance.status));
+  }
+
+  cauldronReliefCandidates(instanceOrId) {
+    const instance = typeof instanceOrId === 'string'
+      ? this.state.tasks.find((candidate) => candidate.instanceId === instanceOrId)
+      : instanceOrId;
+    if (!instance || !this.isCauldronWatch(instance)) return [];
+    const group = this.state.groups.find((candidate) => candidate.id === instance.groupId) ?? this.activeGroup;
+    const currentWatch = new Set(instance.assignedPlayerIds);
+    return group.playerIds
+      .map((playerId) => this.state.players.find((player) => player.id === playerId))
+      .filter((player) => player && !currentWatch.has(player.id) && this.isPlayerFreeForTask(player.id, instance.instanceId))
+      .sort((a, b) => this.taskAssignmentPriority(a, b));
+  }
+
+  canRelieveCauldronWatch(instanceOrId) {
+    const instance = typeof instanceOrId === 'string'
+      ? this.state.tasks.find((candidate) => candidate.instanceId === instanceOrId)
+      : instanceOrId;
+    if (!instance || !['active', 'ready'].includes(instance.status) || !this.isCauldronWatch(instance)) return false;
+    return this.cauldronReliefCandidates(instance).length > 0;
+  }
+
+  completeCauldronWatch(instanceId, decision, now = Date.now()) {
+    const instance = this.state.tasks.find((candidate) => candidate.instanceId === instanceId);
+    if (!instance || !['active', 'ready'].includes(instance.status) || !this.isCauldronWatch(instance) ||
+      !['soupReady', 'relieve'].includes(decision)) return false;
+
+    if (decision === 'soupReady') {
+      this.state.chapter.soupReady = true;
+      this.state.chapter.cauldronPreviousPlayerIds = [];
+      if (!this.completeTask(instanceId, now)) {
+        this.state.chapter.soupReady = false;
+        return false;
+      }
+      this.log('cauldronWatchDecision', {
+        instanceId,
+        decision,
+        interval: instance.watchInterval ?? this.state.chapter.cauldronWatchIntervals
+      }, now);
+      return true;
+    }
+
+    const previousPlayerIds = [...instance.assignedPlayerIds];
+    const nextPlayerIds = this.cauldronReliefCandidates(instance).map((player) => player.id);
+    if (!nextPlayerIds.length) return false;
+    this.state.chapter.cauldronPreviousPlayerIds = previousPlayerIds;
+    if (!this.completeTask(instanceId, now)) return false;
+    const card = this.getTaskCard(instance);
+    const queue = this.state.taskQueues[this.state.chapterIndex];
+    this.state.taskQueues[this.state.chapterIndex] = [card.id, ...queue.filter((taskId) => taskId !== card.id)];
+    this.log('cauldronWatchRequeued', {
+      instanceId,
+      taskId: card.id,
+      previousPlayerIds,
+      eligibleNextPlayerIds: nextPlayerIds,
+      completedInterval: instance.watchInterval ?? this.state.chapter.cauldronWatchIntervals,
+      stackPosition: 0
+    }, now);
+    return true;
   }
 
   taskCardCandidates(peopleMode = null, group = this.activeGroup) {
@@ -947,10 +1618,10 @@ export class GameEngine {
       .filter(Number.isInteger));
     return queue
       .map((taskId) => taskById(taskId))
-      .filter((card) => card?.playable && this.taskAppliesToCourse(card) && this.taskPrerequisitesMet(card))
+      .filter((card) => card?.playable && !card.automatic && this.taskAppliesToCourse(card) && this.taskPrerequisitesMet(card))
       .filter((card) => this.state.chapter.stage === 'clearing' ? card.questId === 'reset' : card.questId !== 'reset')
       .filter((card) => this.taskHandoffAllowed(card, group))
-      .filter((card) => !usedBlueprints.has(card.blueprintIndex))
+      .filter((card) => !usedBlueprints.has(card.blueprintIndex) || this.recurringTaskCardAvailable(card))
       .filter((card) => peopleMode !== 'team' || card.people[1] > card.people[0])
       .filter((card) => peopleMode !== 'single' || card.people[0] === 1)
       .filter((card) => this.requiredPeopleForTask(card, peopleMode) <= this.eligibleFreePlayersForTask(card, group).length);
@@ -964,6 +1635,9 @@ export class GameEngine {
   }
 
   hasUnassignedCourseTasks() {
+    const recurringWatch = TASK_DECKS[this.state.chapterIndex].find((card) => this.isCauldronWatchCard(card));
+    if (recurringWatch && this.recurringTaskCardAvailable(recurringWatch) &&
+      this.state.tasks.some((instance) => instance.chapterIndex === this.state.chapterIndex && instance.taskId === recurringWatch.id)) return true;
     const assignedTaskIds = new Set(this.state.tasks
       .filter((instance) => instance.chapterIndex === this.state.chapterIndex)
       .map((instance) => instance.taskId));
@@ -1003,12 +1677,12 @@ export class GameEngine {
       case 'treasureAndWatch': return ['ingredients', 'tasks', 'cooking'].includes(this.currentEventStage()) &&
         this.watchChallengeCandidates(actionCode).length > 0;
       case 'fiveMinuteBreak': return ['ingredients', 'cooking'].includes(this.currentEventStage()) && !this.hasOpenTasks() &&
-        this.state.chapter.funCardIdsDrawn.length < MAX_FUN_CARDS_PER_CHAPTER &&
+        this.state.chapter.funCardIdsDrawn.length < this.funCardLimit() &&
         !this.state.funCardsDrawn.includes('five-minute-break');
       case 'treasure':
-      case 'coinLoss':
+      case 'coinLoss': return true;
       case 'chain':
-      case 'treasureAndChain': return true;
+      case 'treasureAndChain': return this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH;
       default: return false;
     }
   }
@@ -1056,11 +1730,12 @@ export class GameEngine {
     const offset = actionCode === 'watchChallengeAlt' ? 1 : 0;
     const challenge = candidates[offset % candidates.length];
     const targetPlayerId = this.state.players[(this.state.activePlayerIndex + 1) % this.state.players.length].id;
-    return this.personalizeWatchChallenge(challenge, targetPlayerId);
+    return this.personalizeWatchChallenge(challenge, targetPlayerId, this.coopPartnerPlayerIds(challenge));
   }
 
   challengeRequirementsMet(challenge) {
     if (!challenge) return false;
+    if (challenge.cooperative && this.availableCoopPartners().length < challenge.partnerCount) return false;
     const openChapterTasks = this.state.tasks.filter((instance) =>
       instance.chapterIndex === this.state.chapterIndex && ['queued', 'active', 'ready'].includes(instance.status)
     );
@@ -1080,8 +1755,21 @@ export class GameEngine {
     });
   }
 
+  funCardLimit() {
+    return this.currentChapter.id === 'main' ? MAIN_FUN_CARDS_PER_CHAPTER : DEFAULT_FUN_CARDS_PER_CHAPTER;
+  }
+
+  mainOvenJourneyStarted() {
+    if (this.currentChapter.id !== 'main') return false;
+    return this.state.tasks.some((instance) => {
+      if (instance.chapterIndex !== this.state.chapterIndex || instance.startedAt == null) return false;
+      const card = this.getTaskCard(instance);
+      return card?.questId === 'oven';
+    });
+  }
+
   watchChallengeCandidates(actionCode = 'watchChallenge') {
-    if (this.state.chapter.funCardIdsDrawn.length >= MAX_FUN_CARDS_PER_CHAPTER) return [];
+    if (this.state.chapter.funCardIdsDrawn.length >= this.funCardLimit()) return [];
     const roundKey = String(this.state.chapter.round);
     const used = new Set(this.state.chapter.challengeIdsByRound[roundKey] ?? []);
     const active = new Set(this.state.activeChallenges.map((instance) => instance.challengeId));
@@ -1092,7 +1780,12 @@ export class GameEngine {
       .filter((entry) => entry && !entry.followUpOnly && entry.id !== 'five-minute-break' && !active.has(entry.id) &&
         !drawn.has(entry.id) && this.challengeRequirementsMet(entry));
     const pool = available.filter((entry) => !used.has(entry.id));
-    return pool.length ? pool : available;
+    const candidates = pool.length ? pool : available;
+    if (!this.mainOvenJourneyStarted()) return candidates;
+    return [
+      ...candidates.filter((entry) => entry.cooperative),
+      ...candidates.filter((entry) => !entry.cooperative)
+    ];
   }
 
   log(type, data = {}, timestamp = Date.now()) {
@@ -1153,20 +1846,138 @@ export class GameEngine {
   }
 
   nextEventPreview() {
+    const pendingStory = this.pendingLocationStoryForCurrentChapter();
+    if (pendingStory && this.state.turn.phase === 'draw') return pendingStory;
     const scout = this.activePlayer.roleId === 'scout' && this.isPassiveEnabled(this.activePlayer);
-    if ((!scout && this.activeBonuses.revealNextEvent <= 0) || this.state.turn.phase !== 'draw') return null;
+    const storedEffect = this.nextStoredIngredientEffect('event');
+    const revealsEvent = ['revealEvent', 'nextPlayer'].includes(storedEffect?.effect);
+    if ((!scout && !revealsEvent) || this.state.turn.phase !== 'draw') return null;
     const queue = this.eventQueue();
     const event = eventById(queue[0]);
     return event ? this.contextualizeEvent(event) : null;
   }
 
-  beginEvent(now = Date.now()) {
+  registerLocationVisit(chapterIndex, locationIndex, now = Date.now(), { log = true } = {}) {
+    const card = locationStoryCard(chapterIndex, locationIndex);
+    if (!card) return false;
+    const key = storyLocationKey(chapterIndex, locationIndex);
+    const firstVisit = !this.state.visitedLocationIds.includes(key);
+    if (firstVisit) this.state.visitedLocationIds.push(key);
+    const storyAlreadyKnown = this.state.eventsDrawn.includes(card.id) || this.state.pendingLocationStoryIds.includes(card.id);
+    if (!storyAlreadyKnown) this.state.pendingLocationStoryIds.push(card.id);
+    if (firstVisit && log) {
+      this.log('storyLocationVisited', { chapterIndex, locationIndex, locationKey: key, storyCardId: card.id }, now);
+    }
+    return firstVisit || !storyAlreadyKnown;
+  }
+
+  pendingLocationStoryForCurrentChapter() {
+    const id = this.state.pendingLocationStoryIds.find((storyId) =>
+      storyCardById(storyId)?.chapterIndex === this.state.chapterIndex
+    );
+    return id ? storyCardById(id) : null;
+  }
+
+  storyQuizPrerequisitesMet(card) {
+    if (!card || card.storyKind !== 'quiz') return false;
+    const requirements = card.requirements ?? {};
+    const visited = new Set(this.state.visitedLocationIds);
+    const drawn = new Set(this.state.eventsDrawn);
+    return (requirements.storyIds ?? []).every((id) => drawn.has(id)) &&
+      (requirements.visitedLocationIds ?? []).every((id) => visited.has(id)) &&
+      (requirements.unvisitedLocationIds ?? []).every((id) => !visited.has(id));
+  }
+
+  eligibleStoryQuiz() {
+    const quizId = this.state.storyQuizQueue.find((id) => this.storyQuizPrerequisitesMet(storyCardById(id)));
+    return quizId ? storyCardById(quizId) : null;
+  }
+
+  storyQuizDue() {
+    return this.state.turn.chainDepth === 0 &&
+      (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < 3 &&
+      this.state.chapter.eventsResolved >= this.state.chapter.nextStoryQuizAt;
+  }
+
+  openStoryCard(card, now = Date.now()) {
+    if (!card || this.state.turn.phase !== 'draw') return null;
+    if (card.storyKind === 'location') {
+      const pendingIndex = this.state.pendingLocationStoryIds.indexOf(card.id);
+      if (pendingIndex < 0) return null;
+      this.state.pendingLocationStoryIds.splice(pendingIndex, 1);
+    } else if (card.storyKind === 'quiz') {
+      if (!this.storyQuizPrerequisitesMet(card)) return null;
+      const quizIndex = this.state.storyQuizQueue.indexOf(card.id);
+      if (quizIndex < 0) return null;
+      this.state.storyQuizQueue.splice(quizIndex, 1);
+      this.state.chapter.storyQuizIdsDrawn.push(card.id);
+      const nextQuiz = randomInt(this.state.rngState, 5, 8);
+      this.state.rngState = nextQuiz.state;
+      this.state.chapter.nextStoryQuizAt = this.state.chapter.eventsResolved + nextQuiz.value;
+    } else return null;
+    this.state.turn.currentEventId = card.id;
+    this.state.turn.phase = 'event';
+    if (!this.state.eventsDrawn.includes(card.id)) this.state.eventsDrawn.push(card.id);
+    this.state.turn.eventChoiceSignature = card.storyKind === 'quiz' ? `story-quiz:${card.id}` : `story-location:${card.id}`;
+    this.state.turn.eventSignature = this.state.turn.eventChoiceSignature;
+    this.log('storyCardDrawn', {
+      eventId: card.id,
+      storyKind: card.storyKind,
+      mandatory: Boolean(card.mandatory),
+      playerId: this.activePlayer.id
+    }, now);
+    return card;
+  }
+
+  completeStoryCard(now = Date.now()) {
+    const card = this.currentEvent;
+    if (this.state.turn.phase !== 'event' || card?.storyKind !== 'location') return false;
+    this.state.turn.outcomeCode = 'storyRead';
+    this.state.turn.phase = 'resolved';
+    this.markEventResolved(card, now);
+    this.log('locationStoryRead', { eventId: card.id, locationKey: card.locationKey }, now);
+    this.evaluateChapter(now);
+    return true;
+  }
+
+  answerStoryQuiz(answerId, now = Date.now()) {
+    const card = this.currentEvent;
+    if (this.state.turn.phase !== 'event' || card?.storyKind !== 'quiz' ||
+      !card.answers.some((answer) => answer.id === answerId)) return false;
+    const correct = answerId === card.correctAnswerId;
+    const requestedCoins = correct ? 3 : -3;
+    this.addCoins(requestedCoins, 'storyQuiz', now, { skipRoleModifiers: true });
+    this.state.turn.storyAnswerId = answerId;
+    this.state.turn.storyAnswerCorrect = correct;
+    this.state.turn.storyCoinDelta = requestedCoins;
+    this.state.turn.outcomeCode = correct ? 'storyQuizCorrect' : 'storyQuizWrong';
+    this.state.turn.phase = 'resolved';
+    this.markEventResolved(card, now);
+    this.log('storyQuizAnswered', { eventId: card.id, answerId, correct, coins: requestedCoins }, now);
+    return true;
+  }
+
+  beginEvent(now = Date.now(), skipStoredIngredientEffect = false) {
     if (this.state.status !== 'active' || this.state.turn.phase !== 'draw') return null;
     if (this.state.chapterIndex === 1 && !this.state.chapter.courseStyle) {
       this.state.turn.phase = 'courseDecision';
       this.log('soupStyleChoiceStarted', {}, now);
       return { courseDecision: 'soupStyle' };
     }
+    if (this.currentChapter.id === 'cocktails' && this.state.chapter.stage === 'ingredients' &&
+      !Number.isInteger(this.state.chapter.cocktailSpiritTarget)) {
+      this.startCocktailSpiritCountChoice(now);
+      return { courseDecision: 'cocktailSpiritCount' };
+    }
+    if (this.currentChapter.id === 'cocktails' && this.state.chapter.stage === 'ingredients' &&
+      this.ingredientsLockedForCourse() && this.cocktailCompositionReady() && !this.cocktailTechniquesReady()) {
+      this.startCocktailTechniqueChoice(now);
+      return { courseDecision: 'cocktailTechnique', team: this.state.turn.pendingCocktailTeam };
+    }
+    // A target can become complete between two cards, for example through an
+    // automatically locked final-course ingredient. Move to the matching deck
+    // before drawing so an exhausted ingredient round cannot strand a die card.
+    this.updateChapterStage(now);
     const group = this.activeGroup;
     this.evaluateChapter(now);
     if (this.state.turn.phase === 'chapterReady') return null;
@@ -1181,20 +1992,67 @@ export class GameEngine {
       this.startWatchChallenge('watchChallenge', now, { mandatoryFollowUp: true });
       return this.currentWatchChallenge;
     }
+    const pendingStory = this.pendingLocationStoryForCurrentChapter();
+    if (pendingStory && this.state.turn.chainDepth === 0) return this.openStoryCard(pendingStory, now);
+    if (this.storyQuizDue()) {
+      const storyQuiz = this.eligibleStoryQuiz();
+      if (storyQuiz) return this.openStoryCard(storyQuiz, now);
+    }
     const stage = this.currentEventStage();
     const stageQueues = this.state.eventQueues[this.state.chapterIndex][stage];
     const preferredQueue = this.eventQueue(stage, group);
+    const alreadyDrawn = new Set(this.state.eventsDrawn);
     const appropriate = (eventId) => {
       const candidate = eventById(eventId);
-      return !(stage === 'cooking' && this.hasUnassignedCourseTasks() && candidate?.archetype === 'watch');
+      return !alreadyDrawn.has(eventId) &&
+        !(stage === 'cooking' && this.hasUnassignedCourseTasks() && candidate?.archetype === 'watch');
     };
+    const controlSignature = (event) => event
+      ? `${event.type}:${[...new Set(event.options ?? event.outcomes ?? [])].sort().join('|')}`
+      : null;
+    const eventSignature = (event) => event
+      ? `${event.archetype ?? ''}:${event.funVariant ?? ''}`
+      : null;
+    const candidateSignatures = (eventId) => {
+      const candidate = eventById(eventId);
+      const contextualized = candidate ? this.contextualizeEvent(candidate) : null;
+      return { controls: controlSignature(contextualized), event: eventSignature(contextualized) };
+    };
+    const findQueue = (predicate) => {
+      if (preferredQueue.some(predicate)) return preferredQueue;
+      return stageQueues.find((locationQueue) => locationQueue.some(predicate)) ?? null;
+    };
+    const chainActive = this.state.turn.chainDepth > 0;
+    const chainEventSignatures = new Set([
+      ...(this.state.turn.chainEventSignatures ?? []),
+      this.state.turn.previousEventSignature
+    ].filter(Boolean));
+    const chainChoiceSignatures = new Set([
+      ...(this.state.turn.chainEventChoiceSignatures ?? []),
+      this.state.turn.previousEventChoiceSignature
+    ].filter(Boolean));
     let queue = preferredQueue;
-    let eventIndex = queue.findIndex(appropriate);
+    const fullyDistinct = (eventId) => {
+      if (!appropriate(eventId) || eventId === this.state.turn.previousEventId) return false;
+      const signatures = candidateSignatures(eventId);
+      return !chainEventSignatures.has(signatures.event) && !chainChoiceSignatures.has(signatures.controls);
+    };
+    const visiblyDistinct = (eventId) => {
+      if (!appropriate(eventId) || eventId === this.state.turn.previousEventId) return false;
+      return !chainEventSignatures.has(candidateSignatures(eventId).event);
+    };
+    queue = findQueue(fullyDistinct) ?? findQueue(visiblyDistinct) ?? (chainActive ? null : findQueue(appropriate)) ?? preferredQueue;
+    let eventIndex = queue.findIndex(fullyDistinct);
+    if (eventIndex < 0) eventIndex = queue.findIndex(visiblyDistinct);
+    if (eventIndex < 0 && !chainActive) eventIndex = queue.findIndex(appropriate);
     if (eventIndex < 0) {
-      queue = stageQueues.find((locationQueue) => locationQueue.some(appropriate)) ?? preferredQueue;
-      eventIndex = queue.findIndex(appropriate);
-    }
-    if (eventIndex < 0) {
+      if (chainActive) {
+        this.state.turn.chainPending = false;
+        this.state.turn.outcomeCode = 'chainComplete';
+        this.state.turn.phase = 'resolved';
+        this.log('eventChainCompleted', { playerId: this.activePlayer.id, chainDepth: this.state.turn.chainDepth, reason: 'noDistinctEvent' }, now);
+        return { fallback: true, action: 'chainComplete' };
+      }
       if (stage === 'ingredients') {
         if (this.unlockedCourseIngredients().length) {
           this.lockLastIngredient(now);
@@ -1233,22 +2091,23 @@ export class GameEngine {
     this.state.turn.currentEventId = eventId;
     this.state.turn.phase = 'event';
     this.state.eventsDrawn.push(eventId);
+    this.state.turn.eventChoiceSignature = controlSignature(this.currentEvent);
+    this.state.turn.eventSignature = eventSignature(this.currentEvent);
     this.log('eventDrawn', { eventId, stage, playerId: this.activePlayer.id, groupId: group.id }, now);
 
-    if (this.activeBonuses.revealNextEvent > 0) this.activeBonuses.revealNextEvent -= 1;
+    const storedEventEffect = skipStoredIngredientEffect ? null : this.nextStoredIngredientEffect('event');
+    if (storedEventEffect) this.consumeStoredIngredientEffect(storedEventEffect.effect, 'event', now);
 
-    if (this.activeBonuses.replaceNextEvent > 0) {
-      this.activeBonuses.replaceNextEvent -= 1;
+    if (storedEventEffect?.effect === 'replaceEvent') {
       if (this.state.eventsDrawn.at(-1) === eventId) this.state.eventsDrawn.pop();
       queue.push(eventId);
       this.log('eventReplacedByIngredient', { eventId }, now);
       this.state.turn.currentEventId = null;
       this.state.turn.phase = 'draw';
-      return this.beginEvent(now);
+      return this.beginEvent(now, true);
     }
 
-    if (this.activeBonuses.ignoreNextEvent > 0) {
-      this.activeBonuses.ignoreNextEvent -= 1;
+    if (storedEventEffect?.effect === 'ignoreEvent') {
       this.state.turn.outcomeCode = 'ignored';
       this.state.turn.phase = 'resolved';
       this.log('eventIgnoredByBonus', { eventId }, now);
@@ -1257,11 +2116,12 @@ export class GameEngine {
     return this.currentEvent;
   }
 
-  completeWatchChallenge(now = Date.now()) {
+  completeWatchChallenge(now = Date.now(), outcome = null) {
     if (this.state.turn.phase !== 'watch' || !this.currentWatchChallenge) return false;
     const challenge = this.currentWatchChallenge;
     if (challenge.playerSelection && !this.state.turn.watchTargetPlayerId) return false;
     if (challenge.flow === 'ongoing' || (challenge.secret && this.state.turn.watchStartedAt == null)) return false;
+    if (challenge.skillCheck && !['success', 'failure'].includes(outcome)) return false;
     this.state.chapter.watchChallenges += 1;
     if (challenge.followUpOnly) {
       const curse = this.state.activeChallenges.find((instance) => {
@@ -1270,13 +2130,34 @@ export class GameEngine {
       });
       if (curse) this.completeActiveChallenge(curse, 'followUp', now);
     }
-    if (challenge.coins) this.addCoins(challenge.coins, 'challenge', now);
+    const requestedCoins = challenge.skillCheck
+      ? (outcome === 'success' ? challenge.successCoins : challenge.failureCoins)
+      : challenge.coins;
+    const appliedCoins = requestedCoins ? this.addCoins(requestedCoins, 'challenge', now) : 0;
+    const modifiedCoins = requestedCoins ? (this.state.lastCoinChange?.modifiedAmount ?? requestedCoins) : 0;
     if (challenge.followUpId) this.scheduleFollowUp(challenge, this.activePlayer.id, now);
-    this.state.turn.outcomeCode = 'watchComplete';
+    this.state.turn.watchOutcome = challenge.skillCheck ? outcome : null;
+    this.state.turn.watchCoinDelta = modifiedCoins;
+    this.state.turn.watchCoinApplied = appliedCoins;
+    this.state.turn.outcomeCode = challenge.skillCheck
+      ? (outcome === 'success' ? 'watchSuccess' : 'watchFailure')
+      : 'watchComplete';
     this.state.turn.phase = 'resolved';
-    this.log('watchChallengeCompleted', { challengeId: challenge.id, coins: challenge.coins }, now);
+    this.log('watchChallengeCompleted', {
+      challengeId: challenge.id,
+      coins: modifiedCoins,
+      requestedCoins,
+      appliedCoins,
+      outcome: challenge.skillCheck ? outcome : null,
+      skillCheck: challenge.skillCheck
+    }, now);
     if (this.currentEvent) this.markEventResolved(this.currentEvent, now);
     return true;
+  }
+
+  resolveWatchChallengeOutcome(outcome, now = Date.now()) {
+    if (!this.currentWatchChallenge?.skillCheck || !['success', 'failure'].includes(outcome)) return false;
+    return this.completeWatchChallenge(now, outcome);
   }
 
   selectWatchChallengePlayer(playerId) {
@@ -1325,7 +2206,7 @@ export class GameEngine {
     const challenge = this.currentWatchChallenge;
     if (this.state.turn.phase !== 'watch' || !challenge?.secret || challenge.flow !== 'immediate' || this.state.turn.watchStartedAt != null) return false;
     this.state.turn.watchStartedAt = now;
-    this.state.turn.watchEndsAt = now + challenge.minutes * 60_000;
+    this.state.turn.watchEndsAt = now + challenge.durationSeconds * 1000;
     this.log('watchChallengeActionStarted', { challengeId: challenge.id, playerId: this.activePlayer.id }, now);
     return true;
   }
@@ -1372,8 +2253,7 @@ export class GameEngine {
   }
 
   rerollDieWithIngredient(now = Date.now()) {
-    if (this.state.turn.phase !== 'rolled' || this.activeBonuses.rerollNext <= 0) return null;
-    this.activeBonuses.rerollNext -= 1;
+    if (this.state.turn.phase !== 'rolled' || !this.consumeStoredIngredientEffect('rerollDie', 'dice', now)) return null;
     const roll = randomInt(this.state.rngState, 1, 6);
     this.state.rngState = roll.state;
     this.state.turn.dieResult = roll.value;
@@ -1382,8 +2262,8 @@ export class GameEngine {
   }
 
   adjustDieWithIngredient(amount, now = Date.now()) {
-    if (this.state.turn.phase !== 'rolled' || this.activeBonuses.adjustNext <= 0 || ![-1, 1].includes(Number(amount))) return false;
-    this.activeBonuses.adjustNext -= 1;
+    if (this.state.turn.phase !== 'rolled' || ![-1, 1].includes(Number(amount)) ||
+      !this.consumeStoredIngredientEffect('adjustDie', 'dice', now)) return false;
     this.state.turn.dieResult = Math.max(1, Math.min(6, this.state.turn.dieResult + Number(amount)));
     this.log('dieAdjustedByIngredient', { amount: Number(amount), value: this.state.turn.dieResult }, now);
     return true;
@@ -1393,10 +2273,20 @@ export class GameEngine {
     const event = this.currentEvent;
     if (!event || event.type !== 'dice' || this.state.turn.phase !== 'rolled') return false;
     let value = this.state.turn.dieResult;
-    if (this.activeBonuses.doubleNextDie > 0) {
-      value = Math.min(6, value * (2 ** this.activeBonuses.doubleNextDie));
-      this.activeBonuses.doubleNextDie = 0;
+    const storedDiceEffect = this.nextStoredIngredientEffect('dice');
+    if (storedDiceEffect?.effect === 'doubleDie' && this.consumeStoredIngredientEffect('doubleDie', 'dice', now)) {
+      value = Math.min(6, value * 2);
       this.state.turn.dieResult = value;
+    } else if (['rerollDie', 'adjustDie'].includes(storedDiceEffect?.effect)) {
+      const skippedEffect = this.consumeStoredIngredientEffect(storedDiceEffect.effect, 'dice', now);
+      if (skippedEffect) {
+        this.log('ingredientEffectSkipped', {
+          effect: skippedEffect.effect,
+          ingredientId: skippedEffect.ingredientId ?? null,
+          playerId: this.activePlayer.id,
+          reason: 'rollConfirmedWithoutUse'
+        }, now);
+      }
     }
     const outcomeIndex = value <= 2 ? 0 : value <= 4 ? 1 : 2;
     const actionCode = event.outcomes[outcomeIndex] ?? this.fallbackActions(event.stage)[0];
@@ -1436,7 +2326,7 @@ export class GameEngine {
       case 'fiveMinuteBreak': return this.startWatchChallenge('fiveMinuteBreak', now);
       case 'treasureAndChain':
         this.addCoins(COIN_VALUES.event, 'event', now);
-        if (this.state.turn.chainDepth < 1) this.state.turn.chainPending = true;
+        if (this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH) this.state.turn.chainPending = true;
         break;
       case 'treasureAndTask':
         this.addCoins(COIN_VALUES.event, 'event', now);
@@ -1448,8 +2338,7 @@ export class GameEngine {
         this.startWatchChallenge('watchChallenge', now);
         return true;
       case 'chain':
-        if (this.state.turn.chainDepth < 1) this.state.turn.chainPending = true;
-        else this.addCoins(COIN_VALUES.event, 'event', now);
+        if (this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH) this.state.turn.chainPending = true;
         break;
       case 'swapIngredient': this.swapLastIngredient(now); break;
       default: throw new Error(`Unknown action: ${actionCode}`);
@@ -1459,7 +2348,7 @@ export class GameEngine {
 
   startWatchChallenge(actionCode = 'watchChallenge', now = Date.now(), logData = {}) {
     if (actionCode === 'fiveMinuteBreak' && this.hasOpenTasks()) return false;
-    if (actionCode === 'fiveMinuteBreak' && this.state.chapter.funCardIdsDrawn.length >= MAX_FUN_CARDS_PER_CHAPTER) return false;
+    if (actionCode === 'fiveMinuteBreak' && this.state.chapter.funCardIdsDrawn.length >= this.funCardLimit()) return false;
     const event = this.currentEvent;
     const drawn = new Set(this.state.funCardsDrawn);
     let challenge;
@@ -1470,7 +2359,9 @@ export class GameEngine {
       while (this.state.chapter.queuedChallenges.length && !challenge) {
         const queued = this.state.chapter.queuedChallenges.shift();
         if (drawn.has(queued.id)) continue;
-        challenge = WATCH_CHALLENGES.find((entry) => entry.id === queued.id);
+        const queuedChallenge = WATCH_CHALLENGES.find((entry) => entry.id === queued.id);
+        if (queuedChallenge?.cooperative && !this.challengeRequirementsMet(queuedChallenge)) continue;
+        challenge = queuedChallenge;
         targetPlayerId = queued.targetPlayerId;
       }
     }
@@ -1489,19 +2380,91 @@ export class GameEngine {
     this.state.turn.watchChallengeId = challenge.id;
     this.state.turn.watchChallengeIndex = WATCH_CHALLENGES.findIndex((entry) => entry.id === challenge.id);
     this.state.turn.watchTargetPlayerId = challenge.playerSelection ? null : targetPlayerId;
+    this.state.turn.watchPartnerPlayerIds = this.coopPartnerPlayerIds(challenge);
     this.state.turn.watchStartedAt = challenge.playerSelection || (challenge.secret && !challenge.mandatory) ? null : now;
-    this.state.turn.watchEndsAt = challenge.playerSelection || (challenge.secret && !challenge.mandatory) ? null : now + challenge.minutes * 60_000;
+    this.state.turn.watchEndsAt = challenge.playerSelection || (challenge.secret && !challenge.mandatory) ? null : now + challenge.durationSeconds * 1000;
     this.state.turn.phase = 'watch';
-    this.log('watchChallengeStarted', { challengeId: challenge.id, playerId: this.activePlayer.id, eventId: event?.id ?? null, ...logData }, now);
+    this.log('watchChallengeStarted', {
+      challengeId: challenge.id,
+      playerId: this.activePlayer.id,
+      partnerPlayerIds: this.state.turn.watchPartnerPlayerIds,
+      eventId: event?.id ?? null,
+      ...logData
+    }, now);
     return true;
   }
 
-  addCoins(amount = 1, source = 'event', now = Date.now()) {
+  coinLossPreview(amount = COIN_VALUES.coinLoss) {
+    const requestedAmount = Number(amount) || 0;
+    const player = this.activePlayer;
+    if (requestedAmount >= 0 || !player || !this.isPassiveEnabled(player)) {
+      return { amount: requestedAmount, dice: false };
+    }
+    if (player.roleId === 'gambler' && requestedAmount === COIN_VALUES.coinLoss) {
+      return { amount: null, dice: true, minimumLoss: 1, maximumLoss: 6 };
+    }
+    if (player.roleId === 'lucky') return { amount: Math.min(0, requestedAmount + 1), dice: false };
+    if (player.roleId === 'unlucky') return { amount: requestedAmount - 1, dice: false };
+    return { amount: requestedAmount, dice: false };
+  }
+
+  addCoins(amount = 1, source = 'event', now = Date.now(), options = {}) {
+    const requestedAmount = Number(amount) || 0;
+    let modifiedAmount = requestedAmount + (Number(options.taskCoinAdjustment) || 0);
+    const skipRoleModifiers = options.skipRoleModifiers || source === 'taskUndo';
+    let gamblerRoll = null;
+    const affectedPlayers = source === 'task'
+      ? [...new Set(options.playerIds ?? [])]
+        .map((playerId) => this.state.players.find((player) => player.id === playerId))
+        .filter(Boolean)
+      : [this.activePlayer].filter(Boolean);
+
+    if (!skipRoleModifiers && source === 'event' && requestedAmount === COIN_VALUES.coinLoss) {
+      const gambler = affectedPlayers.find((player) => player.roleId === 'gambler' && this.isPassiveEnabled(player));
+      if (gambler) {
+        const roll = randomInt(this.state.rngState, 1, 6);
+        this.state.rngState = roll.state;
+        gamblerRoll = roll.value;
+        modifiedAmount = -roll.value;
+        this.state.turn.gamblerLossRoll = roll.value;
+        this.log('gamblerLossRolled', { playerId: gambler.id, value: roll.value, source }, now);
+      }
+    }
+
+    const passiveAdjustments = [];
+    if (!skipRoleModifiers && modifiedAmount < 0) {
+      affectedPlayers.forEach((player) => {
+        if (!this.isPassiveEnabled(player)) return;
+        if (player.roleId === 'lucky') passiveAdjustments.push({ playerId: player.id, roleId: player.roleId, amount: 1 });
+        if (player.roleId === 'unlucky') passiveAdjustments.push({ playerId: player.id, roleId: player.roleId, amount: -1 });
+      });
+      modifiedAmount = Math.min(0, modifiedAmount + passiveAdjustments.reduce((total, adjustment) => total + adjustment.amount, 0));
+    }
+
     const before = this.state.coins;
-    this.state.coins = Math.max(0, Math.min(this.state.coinGoal, before + amount));
+    this.state.coins = Math.max(0, Math.min(this.state.coinGoal, before + modifiedAmount));
     const applied = this.state.coins - before;
     this.state.chapter.coinsEarned += applied;
-    this.log('coinsChanged', { amount: applied, requestedAmount: amount, source, total: this.state.coins }, now);
+    this.state.lastCoinChange = {
+      requestedAmount,
+      modifiedAmount,
+      appliedAmount: applied,
+      source,
+      gamblerRoll,
+      passiveAdjustments
+    };
+    this.state.turn.coinChangeRequested = requestedAmount;
+    this.state.turn.coinChangeModified = modifiedAmount;
+    this.state.turn.coinChangeApplied = applied;
+    this.log('coinsChanged', {
+      amount: applied,
+      requestedAmount,
+      modifiedAmount,
+      source,
+      total: this.state.coins,
+      gamblerRoll,
+      passiveAdjustments
+    }, now);
     return applied;
   }
 
@@ -1531,11 +2494,12 @@ export class GameEngine {
       this.state.turn.previousPhase = this.state.turn.phase;
     }
 
+    this.state.turn.ingredientEffectConsumedForChoice = false;
     let count = options.all ? candidates.length : Math.max(2, Number(options.count) || 2);
     const player = this.activePlayer;
-    if (player.roleId === 'merchant' && this.isPassiveEnabled(player)) count = Math.max(count, 2);
-    if (this.activeBonuses.replaceNextIngredient > 0) {
-      this.activeBonuses.replaceNextIngredient -= 1;
+    if (context === 'event' && player.roleId === 'merchant' && this.isPassiveEnabled(player)) count = Math.max(count, 3);
+    if (this.consumeStoredIngredientEffect('replaceIngredient', 'ingredient', now)) {
+      this.state.turn.ingredientEffectConsumedForChoice = true;
       count += 1;
       this.log('ingredientReplacementOffered', { category }, now);
     }
@@ -1569,6 +2533,10 @@ export class GameEngine {
     }
     const ingredient = this.state.ingredients.find((entry) => entry.id === ingredientId);
     if (!ingredient || ingredient.status !== 'available') return false;
+    // Revalidate a pending choice at commit time. A category limit may have
+    // become full since the alternatives were prepared (for example through
+    // another ingredient effect or a restored UI state).
+    if (!this.courseIngredientCandidates().some((entry) => entry.id === ingredientId)) return false;
     if (ignoreEffect && !this.canCookIgnoreIngredientEffect(ingredientId)) return false;
 
     const previousIngredientId = this.state.lastIngredientId;
@@ -1581,22 +2549,31 @@ export class GameEngine {
     this.state.lastIngredientId = ingredient.id;
     this.state.turn.ingredientsAddedThisTurn = (this.state.turn.ingredientsAddedThisTurn ?? 0) + 1;
     this.state.turn.pendingIngredientIds = [];
+    this.state.turn.resolvedIngredientId = ingredient.id;
+    this.state.turn.resolvedIngredientEffect = ingredient.effect;
     this.log('ingredientDiscovered', { ingredientId, chapterIndex: this.state.chapterIndex }, now);
 
     if (ignoreEffect) {
       const key = `cook-ignore-${this.state.chapterIndex}`;
       this.activePlayer.passiveUsedByChapter[key] = true;
+      this.state.turn.resolvedIngredientEffectMode = 'ignored';
       this.log('ingredientEffectIgnoredByCook', { ingredientId }, now);
-    } else if (ingredient.effect && this.activeBonuses.ignoreNextIngredientEffect > 0) {
-      this.activeBonuses.ignoreNextIngredientEffect -= 1;
+    } else if (ingredient.effect && !this.state.turn.ingredientEffectConsumedForChoice &&
+      this.nextStoredIngredientEffect('ingredient')?.effect === 'ignoreIngredient' &&
+      this.consumeStoredIngredientEffect('ignoreIngredient', 'ingredient', now)) {
+      this.state.turn.ingredientEffectConsumedForChoice = true;
+      this.state.turn.resolvedIngredientEffectMode = 'ignored';
       this.log('ingredientEffectIgnoredByBonus', { ingredientId }, now);
     } else if (ingredient.effect) {
       let times = 1;
-      if (this.activeBonuses.repeatNextIngredientEffect > 0 && ingredient.effect !== 'repeatNextIngredient') {
-        this.activeBonuses.repeatNextIngredientEffect -= 1;
+      if (!this.state.turn.ingredientEffectConsumedForChoice && ingredient.effect !== 'repeatNextIngredient' &&
+        this.nextStoredIngredientEffect('ingredient')?.effect === 'repeatNextIngredient' &&
+        this.consumeStoredIngredientEffect('repeatNextIngredient', 'ingredient', now)) {
+        this.state.turn.ingredientEffectConsumedForChoice = true;
         times = 2;
       }
       this.applyIngredientEffect(ingredient, now, { times, previousIngredientId });
+      this.state.turn.resolvedIngredientEffectMode = STORED_INGREDIENT_EFFECTS[ingredient.effect] ? 'stored' : 'immediate';
     }
 
     this.continueIngredientFlow(now);
@@ -1607,17 +2584,23 @@ export class GameEngine {
     if (!ingredient?.effect) return false;
     this.log('ingredientEffectApplied', { ingredientId: ingredient.id, effect: ingredient.effect, times }, now);
     switch (ingredient.effect) {
-      case 'doubleDie': this.activeBonuses.doubleNextDie += times; break;
-      case 'rerollDie': this.activeBonuses.rerollNext += times; break;
-      case 'adjustDie': this.activeBonuses.adjustNext += times; break;
-      case 'ignoreEvent': this.activeBonuses.ignoreNextEvent += times; break;
-      case 'ignoreIngredient': this.activeBonuses.ignoreNextIngredientEffect += times; break;
-      case 'repeatNextIngredient': this.activeBonuses.repeatNextIngredientEffect += times; break;
-      case 'replaceIngredient': this.activeBonuses.replaceNextIngredient += times; break;
-      case 'revealEvent': this.activeBonuses.revealNextEvent += times; break;
-      case 'chain': this.state.turn.chainPending = true; break;
-      case 'extraTurn': this.state.turn.chainPending = true; break;
-      case 'nextPlayer': this.activeBonuses.revealNextEvent += times; break;
+      case 'doubleDie':
+      case 'rerollDie':
+      case 'adjustDie':
+      case 'ignoreEvent':
+      case 'ignoreIngredient':
+      case 'repeatNextIngredient':
+      case 'replaceIngredient':
+      case 'revealEvent':
+      case 'nextPlayer':
+        this.storeIngredientEffect(ingredient, ingredient.effect, times, now);
+        break;
+      case 'coins3': this.addCoins(3 * times, 'ingredient', now); break;
+      case 'coins5': this.addCoins(5 * times, 'ingredient', now); break;
+      case 'chain':
+      case 'extraTurn':
+        if (this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH) this.state.turn.chainPending = true;
+        break;
       case 'drawIngredient':
         for (let index = 0; index < times; index += 1) this.queueIngredientDraw();
         break;
@@ -1644,7 +2627,7 @@ export class GameEngine {
         break;
       case 'replaceEvent':
         if (this.state.turn.ingredientFlow?.context === 'event' && this.currentEvent) this.state.turn.ingredientFlow.replaceCurrentEvent = true;
-        else this.activeBonuses.replaceNextEvent += times;
+        else this.storeIngredientEffect(ingredient, ingredient.effect, times, now);
         break;
       case 'shuffleEvents': {
         const queue = this.eventQueue(this.currentEvent?.stage ?? this.currentEventStage());
@@ -1671,7 +2654,8 @@ export class GameEngine {
     if (pending.code === 'disablePassive') {
       const player = this.state.players.find((candidate) => candidate.id === option);
       if (!player) return false;
-      player.passiveDisabledThroughTurn = player.turns + 1;
+      const turnsUntilEnabled = player.id === this.activePlayer.id ? 2 : 1;
+      player.passiveDisabledThroughTurn = player.turns + turnsUntilEnabled;
       this.log('passiveDisabled', { playerId: player.id, throughTurn: player.passiveDisabledThroughTurn }, now);
     } else if (pending.code === 'swapTopCards') {
       this.swapTopIngredientCards(option);
@@ -1692,12 +2676,9 @@ export class GameEngine {
       const queue = this.eventQueue(this.currentEvent.stage);
       if (this.state.eventsDrawn.at(-1) === eventId) this.state.eventsDrawn.pop();
       queue.push(eventId);
-      const chainDepth = this.state.turn.chainDepth;
-      const activeAbilityUsed = this.state.turn.activeAbilityUsed;
-      const ingredientsAddedThisTurn = this.state.turn.ingredientsAddedThisTurn;
-      const tasksAssignedThisTurn = this.state.turn.tasksAssignedThisTurn;
+      const turnContext = continuedTurnContext(this.state.turn);
       this.log('eventReplacedByIngredient', { eventId }, now);
-      this.state.turn = { ...freshTurn(), chainDepth, activeAbilityUsed, ingredientsAddedThisTurn, tasksAssignedThisTurn };
+      this.state.turn = { ...freshTurn(), ...turnContext };
       this.beginEvent(now);
       return true;
     }
@@ -1753,7 +2734,17 @@ export class GameEngine {
     const ingredient = this.state.ingredients.find((entry) => entry.id === this.state.lastIngredientId && entry.status === 'discovered')
       ?? [...this.unlockedCourseIngredients()].sort((a, b) => (b.discoveredAt ?? 0) - (a.discoveredAt ?? 0))[0];
     if (!ingredient) return false;
+    // The ingredient itself is already in the basket, so exclude it while
+    // checking whether a different ingredient has filled this category.
+    if (!this.courseCategoryLimitAllows(ingredient, ingredient.id)) return false;
     if (this.currentChapter.id === 'cocktails') {
+      if (ingredient.category === 'alcohol') {
+        const spiritTarget = this.state.chapter.cocktailSpiritTarget;
+        const otherFixedSpirits = this.courseIngredients().filter((entry) =>
+          entry.id !== ingredient.id && entry.category === 'alcohol' && ['locked', 'used'].includes(entry.status)
+        ).length;
+        if (!Number.isInteger(spiritTarget) || otherFixedSpirits >= spiritTarget) return false;
+      }
       const use = cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
       if (!['alcoholic', 'alcohol-free', 'shared'].includes(use) || (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
       ingredient.cocktailUse = use;
@@ -1794,6 +2785,7 @@ export class GameEngine {
     this.reconcileTaskQueue(this.state.chapterIndex, true, now);
     this.state.turn = freshTurn();
     this.log('soupStyleChosen', { style, removedTaskIds: removed }, now);
+    this.syncCourseLocations(now);
     return true;
   }
 
@@ -1838,7 +2830,10 @@ export class GameEngine {
       seasoning: ['vegetable', 'pantry'], garnish: ['pantry', 'dessert'],
       hotplate: ['vegetable', 'pantry'], blender: ['vegetable', 'pantry'],
       oven: this.state.chapterIndex === 3 ? ['vegetable', 'meat', 'fruit', 'pantry'] : [],
-      assembly: ['vegetable', 'fruit', 'dessert', 'pantry'], cold: ['dessert', 'fruit', 'drinks'],
+      assembly: card?.chapterId === 'main'
+        ? ['vegetable', 'meat', 'fruit', 'pantry']
+        : ['vegetable', 'fruit', 'dessert', 'pantry'],
+      cold: ['dessert', 'fruit', 'drinks'],
       alcoholic: ['alcohol', 'drinks', 'fruit'], 'alcohol-free': ['drinks', 'fruit'],
       mixing: ['fruit', 'drinks'], sauce: ['fruit', 'pantry'], quality: [],
       'cold-prep': [], serving: [], cleanup: [], safety: []
@@ -1849,12 +2844,19 @@ export class GameEngine {
   reserveTaskBasket(card, instanceId) {
     const explicit = new Set(card.ingredientTags ?? []);
     const categories = new Set(this.ingredientCategoriesForTask(card));
+    const requirement = card.ingredientRequirement;
+    const requirementIds = new Set(requirement?.ids ?? []);
+    const requirementCategories = new Set(requirement?.categories ?? []);
+    const excludedRequirementIds = new Set(requirement?.excludeIds ?? []);
+    const matchesRequirement = (ingredient) => !excludedRequirementIds.has(ingredient.id) &&
+      (requirementIds.has(ingredient.id) || requirementCategories.has(ingredient.category));
     const finalServing = card.area === 'serving' && (card.prerequisites?.length ?? 0) > 0;
     const cocktailTeam = this.cocktailTeamForTask(card);
     const candidates = this.courseIngredients().filter((ingredient) => {
       if (!['locked', 'used'].includes(ingredient.status)) return false;
       if (cocktailTeam && ![cocktailTeam, 'shared'].includes(ingredient.cocktailUse)) return false;
-      return explicit.has(ingredient.id) || finalServing || (!explicit.size && categories.has(ingredient.category));
+      return explicit.has(ingredient.id) || finalServing ||
+        (!explicit.size && (requirement ? matchesRequirement(ingredient) : categories.has(ingredient.category)));
     });
     return candidates.map((ingredient) => ingredient.id);
   }
@@ -1921,6 +2923,32 @@ export class GameEngine {
     return this.briefTask(instance, true, now);
   }
 
+  consumeTaskAbilityAdjustments(card, assignedPlayerIds, now = Date.now()) {
+    if ((card.timingMode ?? 'challenge') !== 'challenge' || !(card.challengeMinutes > 0)) return [];
+    const adjustments = [];
+    assignedPlayerIds.forEach((playerId) => {
+      const player = this.state.players.find((candidate) => candidate.id === playerId);
+      const pending = player?.pendingTaskAbility;
+      if (!player || !pending) return;
+      const config = pending.roleId === 'lucky'
+        ? { timeMinutes: 2, coinDelta: -2 }
+        : pending.roleId === 'unlucky' && card.challengeMinutes > 2
+          ? { timeMinutes: -2, coinDelta: 2 }
+          : null;
+      if (!config) return;
+      adjustments.push({
+        playerId,
+        roleId: pending.roleId,
+        timeMinutes: config.timeMinutes,
+        coinDelta: config.coinDelta,
+        armedAt: pending.armedAt
+      });
+      player.pendingTaskAbility = null;
+      this.log('taskAbilityConsumed', { playerId, roleId: pending.roleId, taskId: card.id, ...config }, now);
+    });
+    return adjustments;
+  }
+
   assignTask({ card = null, group = this.activeGroup, coreKey = null, peopleMode = null, playerIds = null, now = Date.now() } = {}) {
     let selected = card;
     let selectedFromQueue = false;
@@ -1947,6 +2975,9 @@ export class GameEngine {
       queue.splice(queue.indexOf(selected.id), 1);
     }
     const assignedPlayerIds = selectedPlayerIds ?? this.recommendedTaskPlayers(selected, group, peopleMode).map((player) => player.id);
+    const taskAbilityAdjustments = this.consumeTaskAbilityAdjustments(selected, assignedPlayerIds, now);
+    const taskTimeAdjustment = taskAbilityAdjustments.reduce((total, adjustment) => total + adjustment.timeMinutes, 0);
+    const taskCoinAdjustment = taskAbilityAdjustments.reduce((total, adjustment) => total + adjustment.coinDelta, 0);
     const instance = {
       instanceId: createId('task'),
       taskId: selected.id,
@@ -1962,18 +2993,35 @@ export class GameEngine {
       readyAt: null,
       completedAt: null,
       timingMode: selected.timingMode ?? 'challenge',
-      challengeMinutes: selected.challengeMinutes ?? 0,
+      baseChallengeMinutes: selected.challengeMinutes ?? 0,
+      challengeMinutes: (selected.timingMode ?? 'challenge') === 'challenge' && selected.challengeMinutes > 0
+        ? Math.max(1, selected.challengeMinutes + taskTimeAdjustment)
+        : selected.challengeMinutes ?? 0,
       backgroundMinutes: selected.backgroundMinutes ?? 0,
+      taskAbilityAdjustments,
+      taskCoinAdjustment,
       challengeEndsAt: null,
       coinDelta: null,
       challengeResult: null,
       alertsSent: [],
       basketIngredientIds: []
     };
+    if (this.isCauldronWatchCard(selected)) {
+      this.state.chapter.cauldronWatchIntervals = (this.state.chapter.cauldronWatchIntervals ?? 0) + 1;
+      instance.watchInterval = this.state.chapter.cauldronWatchIntervals;
+    }
     instance.basketIngredientIds = this.reserveTaskBasket(selected, instance.instanceId);
     this.state.tasks.push(instance);
     this.state.turn.tasksAssignedThisTurn += 1;
-    this.log('taskAssigned', { taskId: selected.id, instanceId: instance.instanceId, assignedPlayerIds, basketIngredientIds: instance.basketIngredientIds }, now);
+    this.log('taskAssigned', {
+      taskId: selected.id,
+      instanceId: instance.instanceId,
+      assignedPlayerIds,
+      basketIngredientIds: instance.basketIngredientIds,
+      taskAbilityAdjustments,
+      challengeMinutes: instance.challengeMinutes,
+      taskCoinAdjustment
+    }, now);
     this.updateChapterStage(now);
     return instance;
   }
@@ -2027,7 +3075,8 @@ export class GameEngine {
     instance.status = 'active';
     instance.startedAt = now;
     instance.timingMode = card.timingMode ?? 'challenge';
-    instance.challengeMinutes = card.challengeMinutes ?? 0;
+    instance.baseChallengeMinutes ??= card.challengeMinutes ?? 0;
+    instance.challengeMinutes ??= card.challengeMinutes ?? 0;
     instance.backgroundMinutes = card.backgroundMinutes ?? 0;
     const timerMinutes = instance.timingMode === 'background'
       ? instance.backgroundMinutes
@@ -2052,7 +3101,8 @@ export class GameEngine {
     if (instance.status === 'queued') {
       instance.startedAt = instance.assignedAt;
       instance.timingMode = card.timingMode ?? 'challenge';
-      instance.challengeMinutes = card.challengeMinutes ?? 0;
+      instance.baseChallengeMinutes ??= card.challengeMinutes ?? 0;
+      instance.challengeMinutes ??= card.challengeMinutes ?? 0;
       instance.backgroundMinutes = card.backgroundMinutes ?? 0;
       const timerMinutes = instance.timingMode === 'background'
         ? instance.backgroundMinutes
@@ -2085,14 +3135,29 @@ export class GameEngine {
     }
     instance.status = 'done';
     instance.completedAt = now;
-    instance.challengeCoinValue = coinDelta;
+    instance.baseChallengeCoinValue = coinDelta;
     instance.challengeResult = challengeResult;
     instance.assignedPlayerIds.forEach((playerId) => {
       const player = this.state.players.find((candidate) => candidate.id === playerId);
       if (player) player.taskMarkers += 1;
     });
-    instance.coinDelta = this.addCoins(coinDelta, 'task', now);
-    this.log('taskCompleted', { instanceId, taskId: card.id, assignedPlayerIds: instance.assignedPlayerIds, coinDelta: instance.coinDelta, challengeCoinValue: coinDelta, challengeResult }, now);
+    instance.coinDelta = this.addCoins(coinDelta, 'task', now, {
+      playerIds: instance.assignedPlayerIds,
+      taskCoinAdjustment: instance.taskCoinAdjustment ?? 0
+    });
+    instance.challengeCoinValue = this.state.lastCoinChange?.modifiedAmount ?? coinDelta;
+    instance.coinRoleAdjustments = clone(this.state.lastCoinChange?.passiveAdjustments ?? []);
+    this.log('taskCompleted', {
+      instanceId,
+      taskId: card.id,
+      assignedPlayerIds: instance.assignedPlayerIds,
+      coinDelta: instance.coinDelta,
+      baseChallengeCoinValue: coinDelta,
+      challengeCoinValue: instance.challengeCoinValue,
+      taskCoinAdjustment: instance.taskCoinAdjustment ?? 0,
+      coinRoleAdjustments: instance.coinRoleAdjustments,
+      challengeResult
+    }, now);
     this.reconcileTaskQueue(this.state.chapterIndex, true, now);
     this.updateChapterStage(now);
     if (completesCurrentBriefing) {
@@ -2105,6 +3170,9 @@ export class GameEngine {
         this.state.turn = freshTurn();
       }
     }
+    if (this.state.chapter.stage === 'teamSelection' && this.state.turn.phase !== 'cocktailTeamChoice') {
+      this.startCocktailTeamSelection(now);
+    }
     this.evaluateChapter(now);
     this.resumeTurnIfCrewWasBusy(now);
     return true;
@@ -2113,7 +3181,7 @@ export class GameEngine {
   undoTaskCompletion(instanceId, now = Date.now()) {
     const instance = this.state.tasks.find((taskInstance) => taskInstance.instanceId === instanceId);
     if (!this.canUndoTaskCompletion(instanceId)) return false;
-    if (instance.coinDelta) this.addCoins(-instance.coinDelta, 'taskUndo', now);
+    if (instance.coinDelta) this.addCoins(-instance.coinDelta, 'taskUndo', now, { skipRoleModifiers: true });
     instance.assignedPlayerIds.forEach((playerId) => {
       const player = this.state.players.find((candidate) => candidate.id === playerId);
       if (player) player.taskMarkers = Math.max(0, player.taskMarkers - 1);
@@ -2121,7 +3189,9 @@ export class GameEngine {
     instance.status = instance.challengeEndsAt && now >= instance.challengeEndsAt ? 'ready' : 'active';
     instance.completedAt = null;
     instance.coinDelta = null;
+    instance.baseChallengeCoinValue = null;
     instance.challengeCoinValue = null;
+    instance.coinRoleAdjustments = [];
     instance.challengeResult = null;
     this.reconcileTaskQueue(this.state.chapterIndex);
     this.log('taskCompletionUndone', { instanceId, taskId: instance.taskId }, now);
@@ -2137,7 +3207,7 @@ export class GameEngine {
       const candidateCard = taskById(candidate.taskId);
       return candidateCard?.questId === card.questId && this.questStepNumber(candidateCard) > this.questStepNumber(card);
     });
-    return Boolean(instance && instance.status === 'done' && instance.chapterIndex === this.state.chapterIndex && !this.state.chapter.served &&
+    return Boolean(instance && instance.status === 'done' && !this.isCauldronWatch(instance) && instance.chapterIndex === this.state.chapterIndex && !this.state.chapter.served &&
       !laterQuestStepExists && card?.questId !== 'reset' &&
       instance.assignedPlayerIds.every((playerId) => this.isPlayerFreeForTask(playerId, instanceId)));
   }
@@ -2170,41 +3240,125 @@ export class GameEngine {
     return true;
   }
 
-  locationGoal(group) {
-    return Math.max(1, Math.ceil(group.playerIds.length / 2));
+  courseProgressDetails() {
+    const chapterIndex = this.state.chapterIndex;
+    const applicableCards = TASK_DECKS[chapterIndex]
+      .filter((card) => card.playable && this.taskAppliesToCourse(card));
+    const clearingCards = applicableCards.filter((card) => card.questId === 'reset');
+    const courseTaskCards = applicableCards.filter((card) => card.questId !== 'reset');
+    const completedTaskIds = new Set(this.state.tasks
+      .filter((instance) => instance.chapterIndex === chapterIndex && instance.status === 'done')
+      .map((instance) => instance.taskId));
+    const clearingDone = clearingCards.filter((card) => completedTaskIds.has(card.id)).length;
+    const tasksDone = courseTaskCards.filter((card) => completedTaskIds.has(card.id)).length;
+    const ingredientTarget = this.courseRule().target;
+    const ingredientsFixed = this.requiredCourseIngredients()
+      .filter((ingredient) => ['locked', 'used'].includes(ingredient.status)).length;
+    const clearingRatio = chapterIndex === 0 || clearingCards.length === 0
+      ? 1
+      : clearingDone / clearingCards.length;
+    const ingredientRatio = chapterIndex === 0
+      ? 1
+      : Math.min(1, ingredientsFixed / Math.max(1, ingredientTarget));
+    const taskRatio = courseTaskCards.length ? tasksDone / courseTaskCards.length : 1;
+    const rawPercent = chapterIndex === 0
+      ? taskRatio * 100
+      : clearingRatio * 5 + ingredientRatio * 25 + taskRatio * 70;
+    return {
+      percent: Math.max(0, Math.min(100, Math.round(rawPercent * 10) / 10)),
+      clearingDone,
+      clearingTotal: clearingCards.length,
+      ingredientsFixed,
+      ingredientTarget,
+      tasksDone,
+      tasksTotal: courseTaskCards.length
+    };
+  }
+
+  courseProgress() {
+    return this.courseProgressDetails().percent;
+  }
+
+  locationGoal() {
+    return 100;
+  }
+
+  syncGroupLocation(group, now = Date.now(), { rebase = false, log = true } = {}) {
+    if (!group) return false;
+    const previousLocation = group.locationIndex;
+    const measuredProgress = this.courseProgress();
+    const previousProgress = Number(group.locationProgress) || 0;
+    group.locationProgress = rebase ? measuredProgress : Math.max(previousProgress, measuredProgress);
+    group.progressMode = 'course';
+    const locationCount = this.currentChapter.locations.length;
+    const lastLocationIndex = Math.max(0, locationCount - 1);
+    const targetLocationIndex = Math.min(
+      lastLocationIndex,
+      Math.floor((Math.min(99.999, group.locationProgress) * locationCount) / 100)
+    );
+    group.finished = group.locationProgress >= 100;
+    group.locationIndex = group.finished ? lastLocationIndex : targetLocationIndex;
+    const completedCount = group.finished ? locationCount : group.locationIndex;
+    group.completedLocations = Array.from({ length: completedCount }, (_, index) => index);
+    const changed = previousLocation !== group.locationIndex;
+    if (changed && group.locationIndex > previousLocation) {
+      for (let locationIndex = previousLocation + 1; locationIndex <= group.locationIndex; locationIndex += 1) {
+        this.registerLocationVisit(this.state.chapterIndex, locationIndex, now, { log });
+      }
+    }
+    if (changed && log) {
+      this.log('locationCompleted', {
+        groupId: group.id,
+        locationIndex: previousLocation,
+        nextLocation: group.locationIndex,
+        courseProgress: group.locationProgress
+      }, now);
+    }
+    return changed;
+  }
+
+  syncCourseLocations(now = Date.now()) {
+    let changed = false;
+    this.state.groups.forEach((group) => {
+      changed = this.syncGroupLocation(group, now) || changed;
+    });
+    return changed;
   }
 
   maybeAdvanceGroup(group, now = Date.now()) {
-    if (group.finished) return false;
-    const goalReached = group.locationProgress >= this.locationGoal(group);
-    if (!goalReached) return false;
-
-    if (!group.completedLocations.includes(group.locationIndex)) group.completedLocations.push(group.locationIndex);
-    const previousLocation = group.locationIndex;
-    group.locationProgress = 0;
-    if (group.locationIndex < this.currentChapter.locations.length - 1) group.locationIndex += 1;
-    else group.finished = true;
-    this.log('locationCompleted', { groupId: group.id, locationIndex: previousLocation, nextLocation: group.locationIndex }, now);
-    return true;
+    return this.syncGroupLocation(group, now);
   }
 
   endTurn(now = Date.now()) {
     if (this.state.turn.phase !== 'resolved') return false;
+    if (this.state.turn.chainPending && this.state.turn.chainDepth >= MAX_EVENT_CHAIN_DEPTH) {
+      this.state.turn.chainPending = false;
+      this.log('eventChainCompleted', { playerId: this.activePlayer.id, chainDepth: this.state.turn.chainDepth, reason: 'maximumDepth' }, now);
+    }
     if (this.state.turn.chainPending && this.isPlayerFreeForTask(this.activePlayer.id)) {
+      const previousEventId = this.state.turn.currentEventId;
+      const chainEventIds = [...new Set([...(this.state.turn.chainEventIds ?? []), previousEventId].filter(Boolean))];
+      const chainEventSignatures = [...new Set([...(this.state.turn.chainEventSignatures ?? []), this.state.turn.eventSignature].filter(Boolean))];
+      const chainEventChoiceSignatures = [...new Set([...(this.state.turn.chainEventChoiceSignatures ?? []), this.state.turn.eventChoiceSignature].filter(Boolean))];
       this.state.turn = {
         ...freshTurn(),
         chainDepth: this.state.turn.chainDepth + 1,
+        previousEventChoiceSignature: this.state.turn.eventChoiceSignature,
+        previousEventSignature: this.state.turn.eventSignature,
+        previousEventId,
+        chainEventIds,
+        chainEventSignatures,
+        chainEventChoiceSignatures,
         activeAbilityUsed: this.state.turn.activeAbilityUsed,
         ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
         tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
       };
-      this.log('eventChainContinued', { playerId: this.activePlayer.id }, now);
+      this.log('eventChainContinued', { playerId: this.activePlayer.id, chainDepth: this.state.turn.chainDepth }, now);
       return 'chain';
     }
 
     const player = this.activePlayer;
     const group = this.activeGroup;
-    group.locationProgress += 1;
     player.turns += 1;
     this.state.turnsElapsed += 1;
     this.state.chapter.turnsByPlayer[player.id] += 1;
@@ -2241,16 +3395,20 @@ export class GameEngine {
   evaluateChapter(now = Date.now()) {
     const chapterTasks = this.state.tasks.filter((taskInstance) => taskInstance.chapterIndex === this.state.chapterIndex);
     const allWorkComplete = !this.hasUnassignedCourseTasks() && chapterTasks.length > 0 && chapterTasks.every((taskInstance) => taskInstance.status === 'done');
+    this.syncCourseLocations(now);
     const allGroupsFinished = this.state.groups.every((group) => group.finished);
     const ingredientsReady = this.ingredientsLockedForCourse() || this.state.chapterIndex === 0;
     const followUpsResolved = this.unresolvedFollowUpCount() === 0;
-    const ready = ingredientsReady && allWorkComplete && allGroupsFinished && followUpsResolved;
+    const locationStoriesResolved = !this.state.pendingLocationStoryIds.some((storyId) =>
+      storyCardById(storyId)?.chapterIndex === this.state.chapterIndex
+    );
+    const ready = ingredientsReady && allWorkComplete && allGroupsFinished && followUpsResolved && locationStoriesResolved;
     const wasReady = this.state.chapter.readyToServe;
     this.state.chapter.readyToServe = ready;
     if (ready && this.state.turn.phase === 'draw') this.state.turn.phase = 'chapterReady';
     if (ready && !wasReady) this.log('chapterReady', { chapterIndex: this.state.chapterIndex }, now);
     if (!ready && this.state.turn.phase === 'chapterReady') this.state.turn.phase = 'draw';
-    return { ingredientsReady, allWorkComplete, allGroupsFinished, followUpsResolved, ready };
+    return { ingredientsReady, allWorkComplete, allGroupsFinished, followUpsResolved, locationStoriesResolved, ready };
   }
 
   serveCourse(now = Date.now()) {
@@ -2277,7 +3435,8 @@ export class GameEngine {
       servedAt: now,
       ingredientIds,
       portionCaptainPlayerId: this.state.chapter.portionCaptainPlayerId,
-      courseStyle: this.state.chapter.courseStyle
+      courseStyle: this.state.chapter.courseStyle,
+      cocktailTechniques: this.currentChapter.id === 'cocktails' ? clone(this.state.chapter.cocktailTechniques) : null
     };
     this.state.chapter.served = true;
     this.log('courseServed', { chapterIndex: this.state.chapterIndex, ingredientIds, portionCaptainPlayerId: this.state.chapter.portionCaptainPlayerId }, now);
@@ -2323,6 +3482,7 @@ export class GameEngine {
       playerIds: this.state.players.map((player) => player.id),
       locationIndex: 0,
       locationProgress: 0,
+      progressMode: 'course',
       completedLocations: [],
       finished: false
     }];
@@ -2330,8 +3490,9 @@ export class GameEngine {
     this.state.busyReason = null;
     this.state.lastIngredientId = null;
     this.state.previousIngredientId = null;
-    this.state.bonuses = freshBonuses(); // legacy field; live ingredient effects stay with each player
+    this.state.bonuses = freshBonuses(); // legacy compatibility; the shared ingredient effect stack persists
     this.log('chapterStarted', { chapterIndex: this.state.chapterIndex, stage: this.state.chapter.stage }, now);
+    this.registerLocationVisit(this.state.chapterIndex, 0, now);
     const clearingTask = this.assignTask({ group: this.activeGroup, now });
     if (clearingTask) this.briefTask(clearingTask, true, now);
     return true;
@@ -2360,6 +3521,8 @@ export class GameEngine {
     const phase = this.state.turn.phase;
     const stableIngredientPhase = this.state.chapter.stage === 'ingredients' &&
       ['draw', 'event'].includes(phase) && !this.state.turn.ingredientFlow;
+    const stableCardStep = ['draw', 'event', 'rolled', 'resolved'].includes(phase) &&
+      !this.state.turn.ingredientFlow && !this.state.turn.pendingTaskAssignment;
     const category = { chooseVegetable: 'vegetable', chooseMeat: 'meat', chooseFruit: 'fruit' }[role.activeCode] ?? null;
     const lastIngredient = this.state.ingredients.find((entry) =>
       entry.id === this.state.lastIngredientId && entry.chapterIndex === this.state.chapterIndex && entry.status === 'discovered'
@@ -2367,7 +3530,7 @@ export class GameEngine {
 
     switch (role.activeCode) {
       case 'replaceEvent':
-      case 'shuffleEvents': return Boolean(this.currentEvent) && ['event', 'rolled'].includes(phase);
+      case 'shuffleEvents': return Boolean(this.currentEvent) && !this.currentEvent.storyKind && ['event', 'rolled'].includes(phase);
       case 'adjustDie': return phase === 'rolled' && (option == null || [-1, 1].includes(Number(option)));
       case 'chooseVegetable':
       case 'chooseMeat':
@@ -2376,6 +3539,9 @@ export class GameEngine {
       case 'reserveIngredient': return stableIngredientPhase && this.canAddIngredientThisTurn() && this.courseIngredientCandidates().length > 0;
       case 'swapIngredient': return stableIngredientPhase && this.swapIngredientAlternatives(lastIngredient).length > 0;
       case 'repeatIngredient': return stableIngredientPhase && Boolean(lastIngredient?.effect);
+      case 'extendNextTask':
+      case 'shortenNextTask': return stableCardStep && !player.pendingTaskAbility;
+      case 'gambleCoins': return stableCardStep && !player.passiveUsedByChapter[`gambler-active-${this.state.chapterIndex}`];
       default: return false;
     }
   }
@@ -2388,28 +3554,26 @@ export class GameEngine {
 
     switch (role.activeCode) {
       case 'replaceEvent':
-        if (!this.currentEvent || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
+        if (!this.currentEvent || this.currentEvent.storyKind || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
         this.state.discardedEvents.push(this.currentEvent.id);
+        const turnContext = continuedTurnContext(this.state.turn);
         this.state.turn = {
           ...freshTurn(),
-          chainDepth: this.state.turn.chainDepth,
-          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
-          tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
+          ...turnContext
         };
         this.beginEvent(now);
         break;
       case 'shuffleEvents': {
-        if (!this.currentEvent || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
+        if (!this.currentEvent || this.currentEvent.storyKind || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
         const queue = this.eventQueue(this.currentEvent.stage);
         queue.unshift(this.currentEvent.id);
         const shuffled = shuffle(queue, this.state.rngState);
         this.state.rngState = shuffled.state;
         queue.splice(0, queue.length, ...shuffled.value);
+        const turnContext = continuedTurnContext(this.state.turn);
         this.state.turn = {
           ...freshTurn(),
-          chainDepth: this.state.turn.chainDepth,
-          ingredientsAddedThisTurn: this.state.turn.ingredientsAddedThisTurn,
-          tasksAssignedThisTurn: this.state.turn.tasksAssignedThisTurn
+          ...turnContext
         };
         this.beginEvent(now);
         break;
@@ -2435,6 +3599,32 @@ export class GameEngine {
         this.state.turn.previousPhase = this.state.turn.phase;
         this.applyIngredientEffect(ingredient, now, { previousIngredientId: this.state.previousIngredientId });
         this.continueIngredientFlow(now);
+        break;
+      }
+      case 'extendNextTask':
+      case 'shortenNextTask':
+        player.pendingTaskAbility = {
+          roleId: role.id,
+          armedAt: now,
+          armedChapterIndex: this.state.chapterIndex
+        };
+        this.log('taskAbilityArmed', { playerId: player.id, roleId: role.id, activeCode: role.activeCode }, now);
+        break;
+      case 'gambleCoins': {
+        const roll = randomInt(this.state.rngState, 1, 6);
+        this.state.rngState = roll.state;
+        const coinByRoll = { 1: -6, 2: -4, 3: -2, 4: 2, 5: 4, 6: 6 };
+        const requestedCoinDelta = coinByRoll[roll.value];
+        this.addCoins(requestedCoinDelta, 'gamblerAbility', now);
+        this.state.turn.gamblerAbilityRoll = roll.value;
+        this.state.turn.gamblerAbilityCoinDelta = this.state.lastCoinChange?.modifiedAmount ?? requestedCoinDelta;
+        player.passiveUsedByChapter[`gambler-active-${this.state.chapterIndex}`] = true;
+        this.log('gamblerAbilityRolled', {
+          playerId: player.id,
+          value: roll.value,
+          requestedCoinDelta,
+          appliedCoinDelta: this.state.lastCoinChange?.appliedAmount ?? 0
+        }, now);
         break;
       }
       default: used = false;
@@ -2500,7 +3690,26 @@ export class GameEngine {
   }
 
   getTaskCard(instance) {
-    return taskById(instance.taskId);
+    const card = taskById(instance.taskId);
+    const team = this.cocktailTeamForTask(card);
+    const technique = team ? this.cocktailTechniqueForTeam(team, instance.chapterIndex ?? this.state.chapterIndex) : null;
+    if (!card || !technique) return card;
+    const techniqueInstruction = technique === 'mixed'
+      ? {
+          de: 'Verbindliche Technik: Mixen. Verarbeitet die Mischung portionsweise im Mixer, bis sie gleichmäßig verbunden ist.',
+          en: 'Required technique: blend. Process the drink in batches until the mixture is evenly combined.'
+        }
+      : {
+          de: 'Verbindliche Technik: Rühren. Rührt die Mischung mit Eis im Krug gründlich kalt, ohne sie zu mixen.',
+          en: 'Required technique: stir. Stir the mixture thoroughly with ice in a jug until cold; do not blend it.'
+        };
+    return {
+      ...card,
+      instruction: {
+        de: `${card.instruction.de} ${techniqueInstruction.de}`,
+        en: `${card.instruction.en} ${techniqueInstruction.en}`
+      }
+    };
   }
 
   getIngredient(ingredientId) {

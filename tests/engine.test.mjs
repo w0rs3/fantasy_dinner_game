@@ -7,7 +7,7 @@ import { EVENT_DECKS } from '../js/data/events.js';
 import { getPlayableQuestLines } from '../js/data/tasks.js';
 import { renderGame } from '../js/ui/game.js';
 import { renderTasks } from '../js/ui/overlays.js';
-import { addOpeningTask, createEngineWithTask } from './test-helpers.mjs';
+import { addOpeningTask, createEngineWithTask, resolvePendingLocationStories } from './test-helpers.mjs';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Eva', 'Finn'];
 
@@ -40,7 +40,9 @@ test('new voyages choose a reproducible but genuinely varied random starting pla
 test('quest stacks start with one card per line and mix a completed line successor into the top three', () => {
   const engine = GameEngine.create({ names, title: 'Quest stack', defaultLanguage: 'de', seed: 20_101 }, 1_800_000_000_000);
   for (let chapterIndex = 1; chapterIndex < engine.state.taskQueues.length; chapterIndex += 1) {
-    const starts = new Set(getPlayableQuestLines(chapterIndex).map((line) => line[0].id));
+    const starts = new Set(getPlayableQuestLines(chapterIndex)
+      .map((line) => line.find((card) => engine.taskAppliesToChapter(card, chapterIndex))?.id)
+      .filter(Boolean));
     assert.equal(engine.state.taskQueues[chapterIndex].length, starts.size);
     assert.ok(engine.state.taskQueues[chapterIndex].every((taskId) => starts.has(taskId)));
   }
@@ -287,6 +289,7 @@ test('handover advances to the next free player and skips task owners', () => {
   assert.equal(engine.state.turn.phase, 'resolved');
   assert.equal(engine.endTurn(), true);
   assert.notEqual(engine.activePlayer.id, firstId);
+  resolvePendingLocationStories(engine, 1_800_000_000_100);
   engine.beginEvent();
   if (engine.currentEvent.type === 'choice') {
     engine.resolveChoice(engine.currentEvent.options[0]);
@@ -305,6 +308,13 @@ test('handover advances to the next free player and skips task owners', () => {
   if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.playerSelection) {
     engine.selectWatchChallengePlayer(engine.activePlayer.id);
     engine.confirmWatchChallengePlayer();
+  } else if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.flow === 'ongoing') {
+    engine.activateOngoingWatchChallenge();
+  } else if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.secret && engine.state.turn.watchStartedAt == null) {
+    engine.startWatchChallengeAction();
+    engine.completeWatchChallenge();
+  } else if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.skillCheck) {
+    engine.resolveWatchChallengeOutcome('success');
   } else if (engine.state.turn.phase === 'watch') engine.completeWatchChallenge();
   while (engine.state.turn.chainPending) engine.state.turn.chainPending = false;
   assert.equal(engine.state.turn.phase, 'resolved');
@@ -331,4 +341,20 @@ test('resolved work-order cards keep the task that was actually assigned', () =>
   const resultText = renderGame(engine, 'de').match(/<div class="card-effect"><strong>(.*?)<\/strong><\/div>/s)?.[1] ?? '';
   assert.match(resultText, new RegExp(assignedTitle));
   assert.doesNotMatch(resultText, new RegExp(nextTitle));
+});
+
+test('single-action event cards do not pretend that there is a crew decision', () => {
+  const engine = GameEngine.create({ names, title: 'Single event action', defaultLanguage: 'de', seed: 53 }, 1_800_000_000_000);
+  engine.state.chapter.stage = 'tasks';
+  engine.state.turn.phase = 'event';
+  const singleActionEvent = EVENT_DECKS[0].find((card) => {
+    engine.state.turn.currentEventId = card.id;
+    return engine.currentEvent?.type === 'choice' && engine.currentEvent.options.length === 1;
+  });
+  assert.ok(singleActionEvent);
+  engine.state.turn.currentEventId = singleActionEvent.id;
+
+  const html = renderGame(engine, 'de');
+  assert.doesNotMatch(html, /Die Crew darf beraten\. Die endgültige Wahl trifft die aktive Person\./);
+  assert.equal((html.match(/data-action="resolve-choice"/g) ?? []).length, 1);
 });

@@ -5,19 +5,24 @@ const item = (id, category, nameDe, nameEn, quantity, courseTags, options = {}) 
   id, category, name: { de: nameDe, en: nameEn }, quantity, essential: options.essential !== false,
   courseTags, effect: options.effect ?? null, note: options.note ?? null
 });
+const shoppingStaple = (id, nameDe, nameEn, quantity, noteDe, noteEn, courseTags = ['main']) => ({
+  id, name: { de: nameDe, en: nameEn }, quantity, note: { de: noteDe, en: noteEn }, courseTags
+});
 
 export const COURSE_INGREDIENT_RULES = Object.freeze({
-  // The five flexible courses consume exactly all 40 essential, non-Tapas
+  // The five flexible courses consume exactly all 36 essential, non-Tapas
   // ingredients. Optional cocktail extras do not count towards these targets.
   tapas: { target: 9, optionalLimit: 0, categoryMinimums: {}, categoryLimits: {} },
-  soup: { target: 6, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
-  salad: { target: 9, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
+  soup: { target: 5, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
+  salad: { target: 8, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
   main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
-  dessert: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
-  cocktails: { target: 7, optionalLimit: 2, categoryMinimums: { fruit: 1, drinks: 3 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 1 } }
+  dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
+  cocktails: { target: 6, optionalLimit: 4, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3 } }
 });
 
 export const INGREDIENT_EFFECT_TEXT = Object.freeze({
+  coins3: { de: 'Gewinnt sofort 3 Münzen.', en: 'Immediately gain 3 coins.' },
+  coins5: { de: 'Gewinnt sofort 5 Münzen.', en: 'Immediately gain 5 coins.' },
   drawIngredient: { de: 'Zieht sofort die nächste Zutatenkarte.', en: 'Immediately draw the next ingredient card.' },
   doubleDie: { de: 'Der nächste Würfelwurf zählt doppelt.', en: 'The next die roll counts double.' },
   chain: { de: 'Deckt sofort die nächste Ereigniskarte auf.', en: 'Immediately reveal the next event card.' },
@@ -28,10 +33,10 @@ export const INGREDIENT_EFFECT_TEXT = Object.freeze({
   drawVegetable: { de: 'Zieht sofort eine weitere Gemüsekarte.', en: 'Immediately draw another vegetable card.' },
   replaceEvent: { de: 'Legt die aktuelle Ereigniskarte unter den Stapel und deckt eine neue auf.', en: 'Put the current event card under its deck and reveal a new one.' },
   rerollDie: { de: 'Der nächste Würfelwurf darf wiederholt werden.', en: 'The next die roll may be rerolled.' },
-  repeatNextIngredient: { de: 'Die nächste Zutatenkarte löst ihren Effekt zweimal aus.', en: 'The next ingredient card triggers its effect twice.' },
+  repeatNextIngredient: { de: 'Der Effekt der nächsten Zutatenkarte wird soweit sinnvoll zweimal ausgeführt. Einmalige Auswahlen, Stapeltausche und Ereignisketten bleiben einmalig.', en: 'The next ingredient card effect is applied twice where it can be counted. One-off choices, deck swaps, and event chains remain single.' },
   shuffleVegetables: { de: 'Mischt die noch verfügbaren Gemüsekarten.', en: 'Shuffle the remaining vegetable cards.' },
   swapTopCards: { de: 'Tauscht die obersten zwei Karten eines Zutatenstapels.', en: 'Swap the top two cards of an ingredient deck.' },
-  adjustDie: { de: 'Ändert den nächsten Würfelwurf einmal um ±1.', en: 'Adjust the next die roll once by ±1.' },
+  adjustDie: { de: 'Der nächste Würfelwurf darf einmal um ±1 geändert werden.', en: 'The next die roll may be adjusted once by ±1.' },
   revealEvent: { de: 'Deckt die nächste Ereigniskarte als Vorschau auf.', en: 'Reveal the next event card as a preview.' },
   replaceIngredient: { de: 'Bei der nächsten Zutatenkarte wird eine zusätzliche Alternative angeboten.', en: 'The next ingredient draw offers one extra replacement option.' },
   shuffleEvents: { de: 'Mischt den verbleibenden Ereignisstapel des aktuellen Ortes.', en: 'Shuffle the current location’s remaining event deck.' },
@@ -39,6 +44,29 @@ export const INGREDIENT_EFFECT_TEXT = Object.freeze({
   nextPlayer: { de: 'Die nächste Person sieht ihre Ereigniskarte vor dem Ziehen als Vorschau.', en: 'The next player previews their event card before drawing it.' },
   extraTurn: { de: 'Deckt als Teil desselben Zuges sofort eine weitere Ereigniskarte auf.', en: 'Immediately reveal another event card as part of the same turn.' }
 });
+
+export const SHOPPING_STAPLES = Object.freeze([
+  shoppingStaple(
+    'roasting-bags', 'Bratschläuche', 'Roasting bags', q(2, 2, 'Stück', 'bags'),
+    'Für den Hauptgang verbindlich. Verwendet ausreichend große, ofenfeste Bratschläuche samt passenden Verschlüssen und beachtet die Packungsangaben.',
+    'Required for the main course. Use sufficiently large oven-safe roasting bags with suitable ties and follow the package instructions.'
+  ),
+  shoppingStaple(
+    'dry-wine', 'Trockener Wein', 'Dry wine', q(250, 400, 'ml'),
+    'Grundlage der Sauce, die vor dem Garen in den Bratschlauch gegeben wird.',
+    'Base for the sauce added to the roasting bag before cooking.'
+  ),
+  shoppingStaple(
+    'soy-sauce', 'Sojasauce', 'Soy sauce', q(100, 150, 'ml'),
+    'Für Würze und Umami in der Backschlauch-Sauce; wegen des Salzgehalts vorsichtig dosieren.',
+    'Adds seasoning and umami to the roasting-bag sauce; use carefully because it is salty.'
+  ),
+  shoppingStaple(
+    'main-seasonings', 'Gewürze für den Hauptgang', 'Main-course seasonings', q(1, 1, 'Grundausstattung', 'basic selection'),
+    'Mindestens Salz, Pfeffer und Paprika; weitere passende Gewürze können nach Geschmack ergänzt werden.',
+    'At minimum salt, pepper, and paprika; add other suitable seasonings to taste.'
+  )
+]);
 
 export const INGREDIENTS = Object.freeze([
   item('tapas-dates', 'tapas', 'Datteln für Speckmantel', 'Dates for bacon wrapping', q(18, 30, 'Stück', 'pieces'), ['tapas']),
@@ -62,22 +90,19 @@ export const INGREDIENTS = Object.freeze([
   item('garlic', 'vegetable', 'Knoblauch', 'Garlic', q(2, 2, 'Knollen', 'bulbs'), ['soup', 'salad', 'main'], { effect: 'ignoreEvent' }),
   item('ginger', 'vegetable', 'Ingwer', 'Ginger', q(100, 100, 'g'), ['soup', 'salad', 'main', 'dessert', 'cocktails'], { effect: 'adjustDie' }),
   item('chestnuts', 'pantry', 'Maronen', 'Chestnuts', q(200, 300, 'g'), ['soup', 'salad', 'main', 'dessert'], { effect: 'drawIngredient' }),
-  item('lettuce', 'vegetable', 'Blattsalat', 'Mixed leaves', q(500, 800, 'g'), ['salad']),
-  item('cucumber', 'vegetable', 'Gurke', 'Cucumber', q(1, 2, 'Stück', 'pieces'), ['salad', 'main']),
-  item('herbs', 'vegetable', 'Frische Kräuter', 'Fresh herbs', q(3, 4, 'Bund', 'bunches'), ['soup', 'salad', 'main']),
-
+  item('lettuce', 'vegetable', 'Blattsalat', 'Mixed leaves', q(500, 800, 'g'), ['salad'], { effect: 'coins3' }),
+  item('cucumber', 'vegetable', 'Gurke', 'Cucumber', q(1, 2, 'Stück', 'pieces'), ['salad', 'main'], { effect: 'shuffleVegetables' }),
   item('chicken', 'meat', 'Hähnchen', 'Chicken', q(450, 600, 'g'), ['soup', 'salad', 'main'], { effect: 'drawIngredient' }),
   item('beef', 'meat', 'Rind', 'Beef', q(400, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'doubleDie' }),
   item('pork', 'meat', 'Schwein', 'Pork', q(400, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'chain' }),
   item('lamb', 'meat', 'Lamm', 'Lamb', q(350, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'reserveIngredient' }),
 
   item('peppermint', 'pantry', 'Pfefferminze', 'Peppermint', q(2, 3, 'Bund', 'bunches'), ['salad', 'dessert', 'cocktails'], { effect: 'revealEvent' }),
-  item('croutons', 'pantry', 'Croûtons', 'Croutons', q(150, 250, 'g'), ['soup', 'salad']),
-  item('nuts', 'pantry', 'Nüsse', 'Nuts', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert']),
-  item('seeds', 'pantry', 'Kerne', 'Seeds', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert']),
-  item('vinegar', 'pantry', 'Essig', 'Vinegar', q(180, 250, 'ml'), ['salad', 'main']),
-  item('mustard', 'pantry', 'Senf', 'Mustard', q(1, 1, 'Glas', 'jar'), ['salad', 'main']),
-  item('honey', 'pantry', 'Honig', 'Honey', q(1, 1, 'Glas', 'jar'), ['salad', 'main', 'dessert', 'cocktails']),
+  item('croutons', 'pantry', 'Croûtons', 'Croutons', q(150, 250, 'g'), ['soup', 'salad'], { effect: 'reserveIngredient' }),
+  item('nuts', 'pantry', 'Nüsse', 'Nuts', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert'], { effect: 'repeatNextIngredient' }),
+  item('seeds', 'pantry', 'Kerne', 'Seeds', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert'], { effect: 'adjustDie' }),
+  item('mustard', 'pantry', 'Senf', 'Mustard', q(1, 1, 'Glas', 'jar'), ['salad', 'main'], { effect: 'rerollDie' }),
+  item('honey', 'pantry', 'Honig', 'Honey', q(1, 1, 'Glas', 'jar'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'coins5' }),
 
   item('apples', 'fruit', 'Äpfel', 'Apples', q(3, 4, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'revealEvent' }),
   item('pears', 'fruit', 'Birnen', 'Pears', q(5, 6, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'replaceIngredient' }),
@@ -85,20 +110,18 @@ export const INGREDIENTS = Object.freeze([
   item('raspberries', 'fruit', 'Himbeeren', 'Raspberries', q(250, 400, 'g'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'repeatIngredient' }),
   item('currants', 'fruit', 'Johannisbeeren', 'Redcurrants', q(200, 300, 'g'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'nextPlayer' }),
   item('cherries', 'fruit', 'Kirschen', 'Cherries', q(300, 500, 'g'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'extraTurn' }),
-  item('fruit-dates', 'fruit', 'Datteln', 'Dates', q(150, 200, 'g'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'reserveIngredient' }),
-  item('lemons', 'fruit', 'Zitronen', 'Lemons', q(3, 4, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails']),
-  item('limes', 'fruit', 'Limetten', 'Limes', q(4, 6, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails']),
+  item('lemons', 'fruit', 'Zitronen', 'Lemons', q(3, 4, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'ignoreEvent' }),
+  item('limes', 'fruit', 'Limetten', 'Limes', q(4, 6, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'replaceEvent' }),
 
-  item('vanilla-ice', 'dessert', 'Vanilleeis', 'Vanilla ice cream', q(750, 1000, 'ml'), ['dessert']),
-  item('second-ice', 'dessert', 'Zweite Eissorte', 'Second ice-cream flavour', q(750, 1000, 'ml'), ['dessert', 'cocktails'], { essential: false }),
-  item('sprinkles', 'dessert', 'Schokostreusel', 'Chocolate sprinkles', q(1, 1, 'Packung', 'packet'), ['dessert']),
-  item('chocolate', 'dessert', 'Schokolade', 'Chocolate', q(200, 300, 'g'), ['dessert', 'cocktails']),
-  item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false }),
-  item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false }),
-  item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false }),
-  item('mineral-water', 'drinks', 'Mineralwasser', 'Mineral water', q(3, 4, 'l'), ['cocktails']),
-  item('juices', 'drinks', 'Säfte', 'Juices', q(2, 4, 'l'), ['cocktails']),
-  item('ice-cubes', 'drinks', 'Eiswürfel', 'Ice cubes', q(3, 5, 'kg'), ['cocktails'])
+  item('vanilla-ice', 'dessert', 'Vanilleeis', 'Vanilla ice cream', q(750, 1000, 'ml'), ['dessert'], { effect: 'coins5' }),
+  item('second-ice', 'dessert', 'Zweite Eissorte', 'Second ice-cream flavour', q(750, 1000, 'ml'), ['dessert', 'cocktails'], { essential: false, effect: 'revealEvent' }),
+  item('sprinkles', 'dessert', 'Schokostreusel', 'Chocolate sprinkles', q(1, 1, 'Packung', 'packet'), ['dessert'], { effect: 'repeatIngredient' }),
+  item('chocolate', 'dessert', 'Schokolade', 'Chocolate', q(200, 300, 'g'), ['dessert', 'cocktails'], { effect: 'drawIngredient' }),
+  item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'chain' }),
+  item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
+  item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'replaceIngredient' }),
+  item('mineral-water', 'drinks', 'Mineralwasser', 'Mineral water', q(3, 4, 'l'), ['cocktails'], { effect: 'coins3' }),
+  item('juices', 'drinks', 'Säfte', 'Juices', q(2, 4, 'l'), ['cocktails'], { effect: 'nextPlayer' })
 ]);
 
 const COURSE_INDEX = Object.freeze({ tapas: 0, soup: 1, salad: 2, main: 3, dessert: 4, cocktails: 5 });
@@ -127,8 +150,14 @@ export function buildIngredientPlan(initialSeed, playerCount) {
       en: suggestQuantity(ingredient, playerCount, 'en')
     }
   }));
-  // Keep the established RNG cadence after retiring yoghurt so existing seeds do not reshuffle every later deck.
-  const shuffled = shuffle([...plan.filter((entry) => entry.chapterIndex == null).map((entry) => entry.id), 'retired-yoghurt-slot'], state);
+  // Keep the established RNG cadence after retiring pantry staples so existing seeds do not reshuffle every later deck.
+  const shuffled = shuffle([
+    ...plan.filter((entry) => entry.chapterIndex == null).map((entry) => entry.id),
+    'retired-yoghurt-slot',
+    'retired-vinegar-slot',
+    'retired-ice-cubes-slot',
+    'retired-fruit-dates-slot'
+  ], state);
   state = shuffled.state;
   return { state, plan };
 }

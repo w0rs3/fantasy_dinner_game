@@ -6,6 +6,7 @@ import { getRemainingSeconds, getTaskTimerProgress, updateTaskTimers } from './c
 import { formatDuration, localize, ui } from './data/i18n.js';
 import { getRole } from './data/roles.js';
 import { AppDialog } from './ui/dialog.js';
+import { renderCardCatalog } from './ui/card-catalog.js';
 import { renderGame } from './ui/game.js';
 import { escapeHtml, playerInitials } from './ui/helpers.js';
 import { renderCrew, renderIngredientGuide, renderPantry, renderRules, renderSessions, renderTasks } from './ui/overlays.js';
@@ -17,8 +18,6 @@ const nav = document.querySelector('#app-nav');
 const taskBadge = document.querySelector('#task-badge');
 const languageButton = document.querySelector('#language-button');
 const audioButton = document.querySelector('#audio-button');
-const notificationButton = document.querySelector('#notification-button');
-const menuButton = document.querySelector('#menu-button');
 const saveIndicator = document.querySelector('#save-indicator');
 const toastRegion = document.querySelector('#toast-region');
 const liveRegion = document.querySelector('#live-region');
@@ -35,8 +34,7 @@ let setupDraft = {
   title: '',
   playerCount: 6,
   defaultLanguage: preferences.language,
-  names: Array(10).fill(''),
-  cocktailTeams: Array(10).fill('')
+  names: Array(10).fill('')
 };
 
 const currentSnapshot = repository.getCurrentSession();
@@ -63,17 +61,6 @@ function updateHeader(currentLanguage) {
   languageButton.setAttribute('aria-label', currentLanguage === 'de' ? 'Auf Englisch wechseln' : 'Switch to German');
   audioButton.querySelector('span').textContent = audio.enabled ? '♪' : '×';
   audioButton.setAttribute('aria-label', ui(audio.enabled ? 'audioOn' : 'audioOff', currentLanguage));
-  const notificationsSupported = 'Notification' in window;
-  const notificationsEnabled = notificationsSupported && preferences.notifications && Notification.permission === 'granted';
-  notificationButton.hidden = !notificationsSupported;
-  notificationButton.dataset.enabled = String(notificationsEnabled);
-  notificationButton.querySelector('span').textContent = notificationsEnabled ? '🔔' : '🔕';
-  notificationButton.setAttribute('aria-label', currentLanguage === 'de'
-    ? notificationsEnabled ? 'Timer-Endmeldungen ausschalten' : 'Timer-Endmeldungen einschalten'
-    : notificationsEnabled ? 'Disable timer-finished notifications' : 'Enable timer-finished notifications');
-  notificationButton.title = currentLanguage === 'de'
-    ? 'Benachrichtigt nur, wenn ein Timer abgelaufen ist'
-    : 'Only notifies when a timer has finished';
   const activeTasks = engine?.state.tasks.filter((task) => ['queued', 'active', 'ready'].includes(task.status)).length ?? 0;
   taskBadge.hidden = activeTasks === 0;
   taskBadge.textContent = String(activeTasks);
@@ -95,6 +82,7 @@ function render() {
   else if (view === 'pantry') root.innerHTML = engine
     ? renderPantry(engine, currentLanguage)
     : renderIngredientGuide(setupDraft.playerCount, currentLanguage);
+  else if (view === 'cards') root.innerHTML = renderCardCatalog(engine, currentLanguage);
   else if (view === 'sessions') root.innerHTML = renderSessions(repository.listSessions(), engine?.state.id, currentLanguage);
   else if (view === 'rules') root.innerHTML = renderRules(currentLanguage);
   else if (!engine) {
@@ -141,16 +129,12 @@ function readSetupForm() {
   const names = Array.from({ length: Math.max(playerCount, setupDraft.names.length) }, (_, index) =>
     String(data.get(`player-${index}`) ?? setupDraft.names[index] ?? '').trim()
   );
-  const cocktailTeams = Array.from({ length: Math.max(playerCount, setupDraft.cocktailTeams.length) }, (_, index) =>
-    String(data.get(`cocktail-team-${index}`) ?? setupDraft.cocktailTeams[index] ?? '')
-  );
   setupDraft = {
     ...setupDraft,
     title: String(data.get('title') ?? setupDraft.title),
     playerCount,
     defaultLanguage: String(data.get('defaultLanguage') ?? setupDraft.defaultLanguage),
-    names,
-    cocktailTeams
+    names
   };
   return setupDraft;
 }
@@ -165,26 +149,6 @@ async function requestWakeLock() {
   }
 }
 
-async function requestNotifications() {
-  if (!('Notification' in window)) return false;
-  if (Notification.permission === 'denied') {
-    preferences = repository.savePreferences({ notifications: false });
-    return false;
-  }
-  try {
-    const permission = Notification.permission === 'granted' ? 'granted' : await Notification.requestPermission();
-    preferences = repository.savePreferences({ notifications: permission === 'granted' });
-    return permission === 'granted';
-  } catch {
-    return false;
-  }
-}
-
-function systemNotice(title, body) {
-  if (!preferences.notifications || !('Notification' in window) || Notification.permission !== 'granted') return;
-  try { new Notification(title, { body, tag: 'adventure-dinner-timer' }); } catch { /* in-app notice remains */ }
-}
-
 function showCrewReveal() {
   const currentLanguage = language();
   dialog.show({
@@ -192,10 +156,7 @@ function showCrewReveal() {
     title: currentLanguage === 'de' ? 'Willkommen an Bord' : 'Welcome aboard',
     content: `<div class="crew-list">${engine.state.players.map((player) => {
       const role = getRole(player.roleId);
-      const cocktailTeam = player.cocktailTeam === 'alcoholic'
-        ? (currentLanguage === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
-        : (currentLanguage === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free');
-      return `<div class="crew-item"><div class="card-row"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(player.name))}</span><div style="flex:1"><strong>${escapeHtml(player.name)}</strong><br><span class="muted">${escapeHtml(localize(role.name, currentLanguage))} · ${escapeHtml(localize(role.passive, currentLanguage))}<br>${escapeHtml(cocktailTeam)}</span></div></div></div>`;
+      return `<div class="crew-item"><div class="card-row"><span class="avatar" style="background:${role.color}">${escapeHtml(playerInitials(player.name))}</span><div style="flex:1"><strong>${escapeHtml(player.name)}</strong><br><span class="muted">${escapeHtml(localize(role.name, currentLanguage))} · ${escapeHtml(localize(role.passive, currentLanguage))}</span></div></div></div>`;
     }).join('')}</div>`,
     actions: `<button type="button" class="primary-button" data-action="close-dialog">${ui('confirmHandover', currentLanguage)}</button>`
   });
@@ -208,7 +169,11 @@ function showHandover() {
   const assignment = engine.currentChapter.id === 'cocktails'
     ? next.cocktailTeam === 'alcoholic'
       ? (nextLanguage === 'de' ? 'Cocktail-Team: alkoholisch' : 'Cocktail team: alcoholic')
-      : (nextLanguage === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free')
+      : next.cocktailTeam === 'alcohol-free'
+        ? (nextLanguage === 'de' ? 'Cocktail-Team: alkoholfrei' : 'Cocktail team: alcohol-free')
+        : engine.state.turn.phase === 'cocktailTeamChoice'
+          ? (nextLanguage === 'de' ? 'Cocktail-Team jetzt wählen' : 'Choose cocktail team now')
+          : (nextLanguage === 'de' ? 'Cocktail-Team noch offen' : 'Cocktail team not chosen yet')
     : `${ui('group', nextLanguage)} ${engine.activeGroup.id}`;
   dialog.show({
     kicker: ui('handTablet', nextLanguage),
@@ -249,11 +214,9 @@ function resumeSession(sessionId) {
 function navigate(nextView) {
   if (view === 'setup') readSetupForm();
   if (!engine && nextView === 'game') nextView = publicHomeView;
-  if (!engine && !['welcome', 'setup', 'pantry', 'sessions', 'rules'].includes(nextView)) nextView = publicHomeView;
+  if (!engine && !['welcome', 'setup', 'pantry', 'cards', 'sessions', 'rules'].includes(nextView)) nextView = publicHomeView;
   if (!engine && ['welcome', 'setup'].includes(nextView)) publicHomeView = nextView;
   view = nextView;
-  nav.dataset.open = 'false';
-  menuButton.setAttribute('aria-expanded', 'false');
   render();
   document.querySelector('#main-content')?.focus({ preventScroll: true });
 }
@@ -289,8 +252,8 @@ function updateVisibleTimers() {
   });
 }
 
-function animateVisibleDie() {
-  const stage = document.querySelector('.dice-stage');
+function animateVisibleDie(selector = '.game-card .dice-stage') {
+  const stage = document.querySelector(selector);
   if (!stage) return;
   stage.dataset.rolling = 'true';
   window.setTimeout(() => {
@@ -311,7 +274,6 @@ function processTimers() {
     const prefix = ui('timerDone', currentLanguage);
     const title = card ? localize(card.title, currentLanguage) : ui('timerDone', currentLanguage);
     showToast(`${prefix}: ${title}`);
-    systemNotice(prefix, title);
     audio.play('timer');
   });
   persist();
@@ -323,7 +285,7 @@ async function handleAction(target) {
   await audio.unlock();
   switch (action) {
     case 'open-setup':
-      setupDraft = { title: '', playerCount: 6, defaultLanguage: preferences.language, names: Array(10).fill(''), cocktailTeams: Array(10).fill('') };
+      setupDraft = { title: '', playerCount: 6, defaultLanguage: preferences.language, names: Array(10).fill('') };
       publicHomeView = 'setup';
       navigate('setup');
       break;
@@ -332,10 +294,23 @@ async function handleAction(target) {
     case 'resume-session': resumeSession(target.dataset.sessionId); break;
     case 'navigate': navigate(target.dataset.view); break;
     case 'draw-event': engine.beginEvent(); audio.play('card'); persist(); render(); break;
+    case 'complete-story-card':
+      if (engine.completeStoryCard()) { audio.play('complete'); persist(); render(); }
+      break;
+    case 'answer-story-quiz': {
+      const answered = engine.answerStoryQuiz(target.dataset.answerId);
+      if (answered) audio.play(engine.state.turn.storyAnswerCorrect ? 'complete' : 'move');
+      persist(); render();
+      break;
+    }
     case 'resolve-choice': {
       const choice = target.dataset.choice;
-      if (engine.resolveChoice(choice)) audio.play(cueForAction(choice));
-      persist(); render(); break;
+      const resolved = engine.resolveChoice(choice);
+      const gamblerRolled = resolved && Number.isInteger(engine.state.turn.gamblerLossRoll);
+      if (resolved) audio.play(gamblerRolled ? 'dice' : cueForAction(choice));
+      persist(); render();
+      if (gamblerRolled) animateVisibleDie();
+      break;
     }
     case 'roll-die': {
       engine.rollDie();
@@ -360,6 +335,14 @@ async function handleAction(target) {
       break;
     }
     case 'complete-watch': engine.completeWatchChallenge(); audio.play('complete'); persist(); render(); break;
+    case 'resolve-watch-outcome': {
+      const outcome = target.dataset.outcome;
+      if (engine.resolveWatchChallengeOutcome(outcome)) {
+        audio.play(outcome === 'success' ? 'complete' : 'move');
+        persist(); render();
+      }
+      break;
+    }
     case 'choose-watch-player':
       if (engine.selectWatchChallengePlayer(target.dataset.playerId)) { audio.play('move'); persist(); render(); }
       break;
@@ -383,6 +366,20 @@ async function handleAction(target) {
     case 'choose-soup-style':
       if (engine.chooseSoupStyle(target.dataset.style)) { audio.play('move'); persist(); render(); }
       break;
+    case 'choose-cocktail-technique':
+      if (engine.chooseCocktailTechnique(target.dataset.team, target.dataset.technique)) { audio.play('move'); persist(); render(); }
+      break;
+    case 'choose-cocktail-spirit-count':
+      if (engine.chooseCocktailSpiritCount(Number(target.dataset.count))) { audio.play('move'); persist(); render(); }
+      break;
+    case 'choose-cocktail-team': {
+      const previousPlayerId = engine.activePlayer.id;
+      if (engine.chooseCocktailTeam(target.dataset.team)) {
+        audio.play('move'); persist(); render();
+        if (engine.activePlayer.id !== previousPlayerId) showHandover();
+      }
+      break;
+    }
     case 'choose-ingredient-ignore': engine.chooseIngredient(target.dataset.ingredientId, Date.now(), true); audio.play('move'); persist(); render(); break;
     case 'resolve-ingredient-effect': engine.resolveIngredientEffectChoice(target.dataset.option); audio.play('move'); persist(); render(); break;
     case 'toggle-task-assignee':
@@ -392,8 +389,13 @@ async function handleAction(target) {
       if (engine.confirmTaskAssignees()) { audio.play('card'); persist(); render(); }
       break;
     case 'use-ability': {
+      const roleId = engine.activePlayer.roleId;
       const used = engine.useActiveAbility(target.dataset.option == null ? null : Number(target.dataset.option));
-      if (used) { audio.play('move'); persist(); render(); }
+      if (used) {
+        audio.play(roleId === 'gambler' ? 'dice' : 'move');
+        persist(); render();
+        if (roleId === 'gambler') animateVisibleDie('.role-guide .dice-stage');
+      }
       else showToast(language() === 'de'
         ? 'Diese Spezialfähigkeit kann nur in einem passenden, abgeschlossenen Kartenschritt eingesetzt werden.'
         : 'This special ability can only be used during a matching, settled card step.');
@@ -426,6 +428,18 @@ async function handleAction(target) {
           : task?.challengeResult === 'manual'
             ? (language() === 'de' ? 'Nach Gargrad erledigt · keine Zeitwertung' : 'Completed by doneness · no time score')
             : `${score >= 0 ? '+' : ''}${score} ${language() === 'de' ? 'Münzen für die Aufgaben-Challenge' : 'coins for the task challenge'}`);
+        audio.play('complete'); persist(); render();
+        if (wasCrewBusy && engine.state.turn.phase !== 'crewBusy') showHandover();
+      }
+      break;
+    }
+    case 'resolve-cauldron-watch': {
+      const wasCrewBusy = engine.state.turn.phase === 'crewBusy';
+      const decision = target.dataset.decision;
+      if (engine.completeCauldronWatch(target.dataset.taskId, decision)) {
+        showToast(decision === 'soupReady'
+          ? (language() === 'de' ? 'Suppe ist fertig · weitere Kesselwachen entfallen' : 'Soup is ready · no further cauldron watches are needed')
+          : (language() === 'de' ? 'Kesselwache abgelöst · die Karte liegt wieder oben auf dem Aufgabenstapel' : 'Cauldron watch relieved · the card is back on top of the task deck'));
         audio.play('complete'); persist(); render();
         if (wasCrewBusy && engine.state.turn.phase !== 'crewBusy') showHandover();
       }
@@ -497,20 +511,11 @@ document.addEventListener('submit', (event) => {
   event.preventDefault();
   const draft = readSetupForm();
   const names = draft.names.slice(0, draft.playerCount).map((name) => name.trim());
-  const cocktailTeams = draft.cocktailTeams.slice(0, draft.playerCount);
   if (names.some((name) => !name)) {
     showToast(language() === 'de' ? 'Bitte gebt für jede Person einen Namen ein.' : 'Please enter a name for every player.');
     return;
   }
-  if (cocktailTeams.some((team) => !['alcoholic', 'alcohol-free'].includes(team))) {
-    showToast(language() === 'de' ? 'Bitte wählt für jede Person ein Cocktail-Team.' : 'Please choose a cocktail team for every player.');
-    return;
-  }
-  if (!cocktailTeams.includes('alcoholic') || !cocktailTeams.includes('alcohol-free')) {
-    showToast(language() === 'de' ? 'Für die zwei Cocktailvarianten braucht jedes Team mindestens eine Person.' : 'Each cocktail version needs at least one person on its team.');
-    return;
-  }
-  engine = GameEngine.create({ ...draft, names, cocktailTeams, audio: preferences.audio });
+  engine = GameEngine.create({ ...draft, names, audio: preferences.audio });
   preferences = repository.savePreferences({ language: draft.defaultLanguage });
   audio.setEnabled(preferences.audio);
   view = 'game';
@@ -539,39 +544,6 @@ audioButton.addEventListener('click', async () => {
   if (engine) { engine.state.settings.audio = audio.enabled; persist(); }
   if (audio.enabled) await audio.play('card');
   render();
-});
-notificationButton.addEventListener('click', async () => {
-  const currentLanguage = language();
-  if (!('Notification' in window)) {
-    showToast(currentLanguage === 'de' ? 'Dieser Browser unterstützt keine Systemmeldungen.' : 'This browser does not support system notifications.');
-    return;
-  }
-  if (preferences.notifications && Notification.permission === 'granted') {
-    preferences = repository.savePreferences({ notifications: false });
-    showToast(currentLanguage === 'de'
-      ? 'Meldungen bei abgelaufenen Timern sind ausgeschaltet.'
-      : 'Timer-finished notifications are disabled.');
-    render();
-    return;
-  }
-  const granted = await requestNotifications();
-  showToast(currentLanguage === 'de'
-    ? granted
-      ? 'Du wirst nur benachrichtigt, wenn ein Timer abgelaufen ist.'
-      : Notification.permission === 'denied'
-        ? 'Systemmeldungen sind im Browser blockiert. Du kannst sie in den Website-Einstellungen freigeben.'
-        : 'Systemmeldungen bleiben ausgeschaltet.'
-    : granted
-      ? 'You will only be notified when a timer has finished.'
-      : Notification.permission === 'denied'
-        ? 'System notifications are blocked by the browser. You can enable them in the site settings.'
-        : 'System notifications remain disabled.');
-  render();
-});
-menuButton.addEventListener('click', () => {
-  const open = nav.dataset.open !== 'true';
-  nav.dataset.open = String(open);
-  menuButton.setAttribute('aria-expanded', String(open));
 });
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState === 'visible') {

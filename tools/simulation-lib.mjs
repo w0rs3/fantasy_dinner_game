@@ -27,7 +27,14 @@ function serviceKitchenWork(engine, now) {
         : Math.min(card.challengeMinutes || card.estimatedMinutes, 2);
     const estimatedEnd = instance.startedAt == null ? Infinity : instance.startedAt + simulatedHandsOnMinutes * MINUTE;
     if (instance.status === 'ready' || (instance.status === 'active' && now >= estimatedEnd)) {
-      engine.completeTask(instance.instanceId, now);
+      if (engine.isCauldronWatch(instance)) {
+        const completedWatches = engine.state.tasks.filter((candidate) =>
+          candidate.chapterIndex === engine.state.chapterIndex && candidate.status === 'done' && engine.isCauldronWatch(candidate)
+        ).length;
+        engine.completeCauldronWatch(instance.instanceId, completedWatches >= 2 ? 'soupReady' : 'relieve', now);
+      } else {
+        engine.completeTask(instance.instanceId, now);
+      }
       changed = true;
     }
   }
@@ -52,6 +59,9 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
   let now = initialNow;
   const names = Array.from({ length: playerCount }, (_, index) => `Player ${index + 1}`);
   const engine = GameEngine.create({ names, title: `Simulation ${seed}`, defaultLanguage: 'de', audio: false, seed }, now);
+  const assignedActiveCodes = new Set(engine.state.players
+    .map((player) => ROLES.find((role) => role.id === player.roleId)?.activeCode)
+    .filter(Boolean));
   now += 10 * MINUTE;
   let steps = 0;
   let maxConcurrentTasks = 0;
@@ -88,21 +98,32 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
 
     const phase = engine.state.turn.phase;
     if (phase === 'draw') {
-      if (engine.state.groups.every((group) => group.finished) && engine.state.tasks.some((task) => task.chapterIndex === engine.state.chapterIndex && task.status !== 'done')) {
+      if (engine.state.tasks.some((task) =>
+        task.chapterIndex === engine.state.chapterIndex && ['active', 'ready'].includes(task.status) && task.endAt
+      )) {
         productiveWaitingTurns += 1;
       }
       if (!engine.beginEvent(now) && engine.state.turn.phase === 'draw') pureWaitingSteps += 1;
     } else if (phase === 'event') {
       const event = engine.currentEvent;
-      stageEvents[event.stage] += 1;
-      if (event.stage !== engine.currentEventStage()) stageEventMismatches += 1;
-      const actions = event.type === 'choice' ? event.options : event.outcomes;
-      if (new Set(actions).size !== actions.length) duplicateEventActions += 1;
-      invalidEventActions += actions.filter((action) => !engine.actionAvailable(action)).length;
-      if (event.stage === 'tasks' && engine.state.chapter.stage !== 'clearing' && !engine.ingredientsLockedForCourse() && engine.state.chapterIndex !== 0) taskAssignmentsBeforeIngredientsLocked += 1;
-      if (engine.currentEvent.type === 'choice') {
-        if (!engine.resolveChoice(chooseEventOption(engine, seed), now)) failedTransitions += 1;
-      } else if (!engine.rollDie(now)) failedTransitions += 1;
+      if (event.storyKind === 'location') {
+        if (!engine.completeStoryCard(now)) failedTransitions += 1;
+      } else if (event.storyKind === 'quiz') {
+        const answer = (seed + steps) % 4
+          ? event.correctAnswerId
+          : event.answers.find((candidate) => candidate.id !== event.correctAnswerId).id;
+        if (!engine.answerStoryQuiz(answer, now)) failedTransitions += 1;
+      } else {
+        stageEvents[event.stage] += 1;
+        if (event.stage !== engine.currentEventStage()) stageEventMismatches += 1;
+        const actions = event.type === 'choice' ? event.options : event.outcomes;
+        if (new Set(actions).size !== actions.length) duplicateEventActions += 1;
+        invalidEventActions += actions.filter((action) => !engine.actionAvailable(action)).length;
+        if (event.stage === 'tasks' && engine.state.chapter.stage !== 'clearing' && !engine.ingredientsLockedForCourse() && engine.state.chapterIndex !== 0) taskAssignmentsBeforeIngredientsLocked += 1;
+        if (engine.currentEvent.type === 'choice') {
+          if (!engine.resolveChoice(chooseEventOption(engine, seed), now)) failedTransitions += 1;
+        } else if (!engine.rollDie(now)) failedTransitions += 1;
+      }
     } else if (phase === 'rolled') {
       if (!engine.confirmRoll(now)) failedTransitions += 1;
     } else if (phase === 'watch') {
@@ -112,6 +133,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
         handled = engine.selectWatchChallengePlayer(player.id) && engine.confirmWatchChallengePlayer(now);
       } else if (engine.currentWatchChallenge?.flow === 'ongoing') handled = engine.activateOngoingWatchChallenge(now);
       else if (engine.currentWatchChallenge?.secret && engine.state.turn.watchStartedAt == null) handled = engine.startWatchChallengeAction(now);
+      else if (engine.currentWatchChallenge?.skillCheck) handled = engine.resolveWatchChallengeOutcome((seed + steps) % 3 ? 'success' : 'failure', now);
       else handled = engine.completeWatchChallenge(now);
       if (!handled) failedTransitions += 1;
     } else if (phase === 'ingredientChoice') {
@@ -147,8 +169,23 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
       if (!engine.startNextChapter(now)) failedTransitions += 1;
       previousChapter = engine.state.chapterIndex;
     } else if (phase === 'courseDecision') {
-      const style = choiceStyle === 'clear' ? 'clear' : choiceStyle === 'cream' ? 'cream' : seed % 2 ? 'clear' : 'cream';
-      if (!engine.chooseSoupStyle(style, now)) failedTransitions += 1;
+      if (engine.currentChapter.id === 'cocktails') {
+        if (engine.state.turn.courseDecisionType === 'cocktailSpiritCount') {
+          const counts = engine.availableCocktailSpiritCounts();
+          if (!engine.chooseCocktailSpiritCount(counts[seed % counts.length], now)) failedTransitions += 1;
+        } else {
+          const team = engine.state.turn.pendingCocktailTeam;
+          const technique = (seed + (team === 'alcohol-free' ? 1 : 0)) % 2 ? 'mixed' : 'stirred';
+          if (!engine.chooseCocktailTechnique(team, technique, now)) failedTransitions += 1;
+        }
+      } else {
+        const style = choiceStyle === 'clear' ? 'clear' : choiceStyle === 'cream' ? 'cream' : seed % 2 ? 'clear' : 'cream';
+        if (!engine.chooseSoupStyle(style, now)) failedTransitions += 1;
+      }
+    } else if (phase === 'cocktailTeamChoice') {
+      const preferredTeam = engine.state.chapter.cocktailTeamSelectionIndex % 2 === 0 ? 'alcoholic' : 'alcohol-free';
+      const availableTeams = engine.availableCocktailTeamChoices();
+      if (!engine.chooseCocktailTeam(availableTeams.includes(preferredTeam) ? preferredTeam : availableTeams[0], now)) failedTransitions += 1;
     } else if (phase === 'crewBusy') {
       const ends = engine.state.tasks.filter((task) => task.status === 'active' && task.endAt).map((task) => task.endAt);
       now = ends.length ? Math.max(now + 1000, Math.min(...ends)) : now + turnSeconds * 1000;
@@ -194,6 +231,8 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     taskMarkerSpread: Math.max(...markers) - Math.min(...markers),
     events: engine.state.eventsDrawn.length,
     uniqueEvents: new Set(engine.state.eventsDrawn).size,
+    locationStories: engine.state.eventsDrawn.filter((eventId) => eventId.startsWith('SL')).length,
+    storyQuizzes: engine.state.eventsDrawn.filter((eventId) => eventId.startsWith('SQ')).length,
     funCards: engine.state.funCardsDrawn.length,
     uniqueFunCards: new Set(engine.state.funCardsDrawn).size,
     maxConcurrentTasks,
@@ -212,7 +251,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     activeCreatorAssignmentViolations,
     taskAssigneeChoices,
     exercisedAbilities: [...exercisedAbilities],
-    allActiveAbilitiesExercised: ROLES.every((role) => exercisedAbilities.has(role.activeCode)),
+    allActiveAbilitiesExercised: [...assignedActiveCodes].every((activeCode) => exercisedAbilities.has(activeCode)),
     assignmentViolations,
     taskIngredientMismatches,
     cauldronHandoffViolations,
@@ -224,6 +263,8 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     manualTasks: engine.state.tasks.filter((instance) => instance.timingMode === 'manual').length,
     basketResidue: engine.state.ingredients.filter((ingredient) => ingredient.status === 'discovered').map((ingredient) => ingredient.id),
     soupStyle: engine.state.menu[1]?.courseStyle,
+    cocktailTechniques: engine.state.menu[5]?.cocktailTechniques,
+    cocktailTeamChoices: engine.state.history.filter((entry) => entry.type === 'cocktailTeamChosen').length,
     coins: engine.state.coins,
     stageEvents,
     essentialUnused: essentialUnused.map((ingredient) => ingredient.id),

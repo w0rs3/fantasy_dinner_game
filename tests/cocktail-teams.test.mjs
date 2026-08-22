@@ -3,21 +3,130 @@ import assert from 'node:assert/strict';
 import { GameEngine } from '../js/core/game-engine.js';
 import { TASK_DECKS } from '../js/data/tasks.js';
 import { renderGame } from '../js/ui/game.js';
+import { renderSetup } from '../js/ui/welcome.js';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Ella', 'Finn'];
 const cocktailTeams = ['alcoholic', 'alcohol-free', 'alcoholic', 'alcohol-free', 'alcoholic', 'alcohol-free'];
 const now = 1_804_000_000_000;
 
 function create(seed = 9_101) {
-  return GameEngine.create({ names, cocktailTeams, title: 'Two cocktail crews', defaultLanguage: 'de', seed }, now);
+  return GameEngine.create({ names, title: 'Two cocktail crews', defaultLanguage: 'de', seed }, now);
+}
+
+function assignFixtureTeams(engine) {
+  engine.state.players.forEach((player, index) => { player.cocktailTeam = cocktailTeams[index]; });
+  return engine;
 }
 
 function enterCocktailChapter(engine, stage = 'ingredients') {
+  assignFixtureTeams(engine);
   engine.state.chapterIndex = 5;
   engine.state.chapter.stage = stage;
+  engine.state.chapter.cocktailSpiritTarget = 1;
   engine.state.turn.phase = 'draw';
+  engine.state.turn.courseDecisionType = null;
   engine.state.turn.tasksAssignedThisTurn = 0;
   engine.state.tasks = [];
+  return engine;
+}
+
+function beginCocktailTeamRound(engine) {
+  engine.state.chapterIndex = 4;
+  engine.state.turn.phase = 'eating';
+  assert.equal(engine.startNextChapter(now + 100), true);
+  const clearing = engine.state.tasks.find((task) => task.chapterIndex === 5 && engine.getTaskCard(task)?.questId === 'reset');
+  assert.ok(clearing);
+  assert.equal(engine.state.chapter.stage, 'clearing');
+  assert.equal(engine.completeTask(clearing.instanceId, now + 200), true);
+  assert.equal(engine.state.chapter.stage, 'teamSelection');
+  assert.equal(engine.state.turn.phase, 'cocktailTeamChoice');
+  return engine;
+}
+
+test('the voyage setup asks only for names and defers cocktail teams to the game', () => {
+  const html = renderSetup('de', {
+    title: 'Teamwahl später', playerCount: names.length, defaultLanguage: 'de', names
+  });
+  assert.doesNotMatch(html, /name="cocktail-team-/);
+  assert.doesNotMatch(html, /Cocktail-Team wählen …/);
+  assert.match(html, /zu Beginn des Cocktailgangs festgelegt/);
+});
+
+test('cocktail teams are chosen in one uninterrupted personal round at the start of the course', () => {
+  const engine = create(9_100);
+  assert.ok(engine.state.players.every((player) => player.cocktailTeam == null), 'setup does not preassign cocktail teams');
+  const drawnBefore = engine.state.eventsDrawn.length;
+  beginCocktailTeamRound(engine);
+  const order = [...engine.state.chapter.cocktailTeamSelectionPlayerIds];
+  assert.equal(order.length, names.length);
+  assert.equal(new Set(order).size, names.length);
+
+  for (let index = 0; index < order.length; index += 1) {
+    assert.equal(engine.activePlayer.id, order[index]);
+    assert.equal(engine.state.chapter.cocktailTeamSelectionIndex, index);
+    const html = renderGame(engine, 'de');
+    assert.match(html, new RegExp(`Cocktail-Teamwahl · ${index + 1} von ${order.length}`));
+    assert.match(html, new RegExp(`${engine.activePlayer.name}, welche Variante trinkst du`));
+    const preferred = index % 2 === 0 ? 'alcoholic' : 'alcohol-free';
+    assert.ok(engine.availableCocktailTeamChoices().includes(preferred));
+    assert.equal(engine.chooseCocktailTeam(preferred, now + 300 + index), true);
+  }
+
+  assert.equal(engine.state.chapter.stage, 'ingredients');
+  assert.equal(engine.state.turn.phase, 'courseDecision');
+  assert.equal(engine.state.turn.courseDecisionType, 'cocktailSpiritCount');
+  assert.equal(engine.activePlayer.id, order[0], 'the regular cocktail round starts after the completed selection circuit');
+  assert.equal(engine.cocktailTeamsReady(), true);
+  const spiritChoice = renderGame(engine, 'de');
+  assert.match(spiritChoice, /Wie viele Spirituosensorten kommen in den alkoholischen Cocktail/);
+  assert.equal(engine.chooseCocktailSpiritCount(0, now + 399), false);
+  assert.equal(engine.chooseCocktailSpiritCount(2, now + 400), true);
+  assert.equal(engine.state.chapter.cocktailSpiritTarget, 2);
+  assert.equal(engine.state.turn.phase, 'draw');
+  assert.equal(engine.state.history.filter((entry) => entry.type === 'cocktailTeamChosen').length, names.length);
+  assert.equal(engine.state.history.filter((entry) => entry.type === 'cocktailSpiritCountChosen').length, 1);
+  assert.deepEqual(new Set(engine.state.history.filter((entry) => entry.type === 'cocktailTeamChosen').map((entry) => entry.data.playerId)), new Set(order));
+  assert.equal(engine.state.eventsDrawn.length, drawnBefore, 'no event or fun card interrupts the team round');
+});
+
+test('the final personal choice keeps both cocktail teams staffed', () => {
+  const engine = beginCocktailTeamRound(create(9_105));
+  const total = engine.state.players.length;
+  for (let index = 0; index < total - 1; index += 1) {
+    assert.equal(engine.chooseCocktailTeam('alcoholic', now + 400 + index), true);
+  }
+  assert.deepEqual(engine.availableCocktailTeamChoices(), ['alcohol-free']);
+  assert.equal(engine.chooseCocktailTeam('alcoholic', now + 500), false);
+  assert.equal(engine.chooseCocktailTeam('alcohol-free', now + 501), true);
+  assert.equal(engine.cocktailTeamMembers('alcoholic').length, total - 1);
+  assert.equal(engine.cocktailTeamMembers('alcohol-free').length, 1);
+});
+
+function completeCocktailComposition(engine) {
+  engine.state.chapter.cocktailSpiritTarget = 1;
+  const selected = new Map([
+    ['rum', 'alcoholic'],
+    ['oranges', 'alcohol-free'],
+    ['lemons', 'shared'],
+    ['ginger', 'shared'],
+    ['chocolate', 'shared'],
+    ['juices', 'shared'],
+    ['mineral-water', 'shared']
+  ]);
+  engine.state.ingredients.forEach((ingredient) => {
+    if (selected.has(ingredient.id)) {
+      ingredient.status = 'locked';
+      ingredient.chapterIndex = 5;
+      ingredient.basketCourseIndex = null;
+      ingredient.cocktailUse = selected.get(ingredient.id);
+    } else if (ingredient.essential) {
+      ingredient.status = 'used';
+      ingredient.chapterIndex = 4;
+      ingredient.basketCourseIndex = null;
+    }
+  });
+  engine.state.chapter.stage = 'ingredients';
+  engine.state.turn.phase = 'resolved';
   return engine;
 }
 
@@ -50,6 +159,58 @@ test('cocktail ingredients are assigned to one recipe basket or shared by both',
   assert.match(html, /nur alkoholische Mischung/);
   assert.match(html, /nur alkoholfreie Mischung/);
   assert.match(html, /für beide Mischungen/);
+  assert.doesNotMatch(html, /data-action="(?:lock|remove)-basket-ingredient"/, 'cocktail ingredients cannot be locked or returned manually from the draft basket');
+  assert.doesNotMatch(html, /data-action="assign-cocktail-ingredient"/, 'locked cocktail assignments cannot be changed manually from the draft basket');
+});
+
+test('one to three distinct spirit varieties can be required and the cocktail round waits for the exact target', () => {
+  const engine = enterCocktailChapter(create(9_106));
+  engine.state.chapter.cocktailSpiritTarget = 3;
+  const assignments = new Map([
+    ['rum', 'alcoholic'], ['gin', 'alcoholic'], ['vodka', 'alcoholic'],
+    ['oranges', 'alcohol-free'], ['juices', 'shared'], ['mineral-water', 'shared']
+  ]);
+  engine.state.ingredients.forEach((ingredient) => {
+    if (assignments.has(ingredient.id)) {
+      ingredient.status = 'discovered';
+      ingredient.chapterIndex = 5;
+      ingredient.basketCourseIndex = 5;
+    }
+  });
+
+  assert.equal(engine.lockIngredientFromBasket('rum', now + 1, 'alcoholic'), true);
+  assert.equal(engine.cocktailCompositionReady(), false, 'one spirit does not satisfy a three-spirit recipe');
+  assert.equal(engine.lockIngredientFromBasket('gin', now + 2, 'alcoholic'), true);
+  assert.equal(engine.cocktailCompositionReady(), false, 'two spirits do not satisfy a three-spirit recipe');
+  assert.equal(engine.lockIngredientFromBasket('vodka', now + 3, 'alcoholic'), true);
+  assert.equal(engine.lockIngredientFromBasket('oranges', now + 4, 'alcohol-free'), true);
+  assert.equal(engine.lockIngredientFromBasket('juices', now + 5, 'shared'), true);
+  assert.equal(engine.lockIngredientFromBasket('mineral-water', now + 6, 'shared'), true);
+  assert.equal(engine.cocktailCompositionReady(), true);
+  assert.equal(engine.courseCategoryCount('alcohol', ['locked']), 3);
+  assert.match(renderGame(engine, 'de'), /3\/3 Spirituosensorten/);
+
+  engine.state.chapter.cocktailSpiritTarget = 2;
+  const rum = engine.getIngredient('rum');
+  rum.status = 'discovered';
+  rum.basketCourseIndex = 5;
+  engine.state.lastIngredientId = 'rum';
+  assert.equal(engine.lockLastIngredient(now + 7, 'alcoholic'), false, 'a stale basket card cannot exceed the selected target');
+});
+
+test('the spirit count choice never promises a variety that was already consumed by dessert', () => {
+  const engine = enterCocktailChapter(create(9_107));
+  engine.state.chapter.cocktailSpiritTarget = null;
+  engine.state.turn.phase = 'courseDecision';
+  engine.state.turn.courseDecisionType = 'cocktailSpiritCount';
+  const vodka = engine.getIngredient('vodka');
+  vodka.status = 'used';
+  vodka.chapterIndex = 4;
+
+  assert.deepEqual(engine.availableCocktailSpiritCounts(), [1, 2]);
+  assert.equal(engine.chooseCocktailSpiritCount(3, now + 1), false);
+  assert.doesNotMatch(renderGame(engine, 'de'), /data-count="3"/);
+  assert.equal(engine.chooseCocktailSpiritCount(2, now + 2), true);
 });
 
 test('variant-specific mixing jobs can only be created by and assigned to their consumers', () => {
@@ -91,4 +252,39 @@ test('the cocktail screen names both consumer teams while shared work remains cr
   assert.match(html, /Alkoholfrei/);
   assert.match(html, /Ben, Dario, Finn/);
   assert.match(html, /gemeinsame Crew-Aufgaben/);
+});
+
+test('both cocktails require their own binding blended-or-stirred decision', () => {
+  const engine = completeCocktailComposition(enterCocktailChapter(create(9_104)));
+
+  assert.equal(engine.ingredientsLockedForCourse(), true);
+  assert.equal(engine.cocktailCompositionReady(), true);
+  assert.equal(engine.updateChapterStage(now + 1), true);
+  assert.equal(engine.state.chapter.stage, 'ingredients');
+  assert.equal(engine.state.turn.phase, 'courseDecision');
+  assert.equal(engine.state.turn.pendingCocktailTeam, 'alcoholic');
+  let html = renderGame(engine, 'de');
+  assert.match(html, /Wird der alkoholische Cocktail gemixt oder gerührt/);
+  assert.match(html, /Eis ist für beide Varianten verbindlicher Grundvorrat/);
+
+  assert.equal(engine.chooseCocktailTechnique('alcohol-free', 'stirred', now + 2), false, 'the visible recipe must be decided first');
+  assert.equal(engine.chooseCocktailTechnique('alcoholic', 'mixed', now + 3), true);
+  assert.equal(engine.state.turn.phase, 'courseDecision');
+  assert.equal(engine.state.turn.pendingCocktailTeam, 'alcohol-free');
+  html = renderGame(engine, 'de');
+  assert.match(html, /Wird der alkoholfreie Cocktail gemixt oder gerührt/);
+
+  assert.equal(engine.chooseCocktailTechnique('alcohol-free', 'stirred', now + 4), true);
+  assert.equal(engine.state.chapter.stage, 'tasks');
+  assert.equal(engine.state.turn.phase, 'draw');
+  assert.deepEqual(engine.state.chapter.cocktailTechniques, { alcoholic: 'mixed', 'alcohol-free': 'stirred' });
+  assert.deepEqual(engine.state.menu[5].cocktailTechniques, { alcoholic: 'mixed', 'alcohol-free': 'stirred' });
+
+  const alcoholicCard = TASK_DECKS[5].find((card) => card.area === 'alcoholic');
+  const alcoholFreeCard = TASK_DECKS[5].find((card) => card.area === 'alcohol-free');
+  assert.match(engine.getTaskCard({ taskId: alcoholicCard.id, chapterIndex: 5 }).instruction.de, /Verbindliche Technik: Mixen/);
+  assert.match(engine.getTaskCard({ taskId: alcoholFreeCard.id, chapterIndex: 5 }).instruction.de, /Verbindliche Technik: Rühren/);
+  html = renderGame(engine, 'de');
+  assert.match(html, /Technik: mixen/);
+  assert.match(html, /Technik: rühren/);
 });

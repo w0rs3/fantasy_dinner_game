@@ -24,7 +24,6 @@ export const DEFAULT_PREFERENCES = Object.freeze({
   language: 'de',
   audio: true,
   reducedMotion: false,
-  notifications: false
 });
 
 export const SESSION_STATUS = Object.freeze({

@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { GameEngine } from '../js/core/game-engine.js';
 import { EVENT_DECKS } from '../js/data/events.js';
 import { INGREDIENTS, INGREDIENT_EFFECT_TEXT } from '../js/data/ingredients.js';
-import { addOpeningTask } from './test-helpers.mjs';
+import { TASK_DECKS } from '../js/data/tasks.js';
+import { addOpeningTask, resolvePendingLocationStories } from './test-helpers.mjs';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Eva', 'Finn'];
 function finishClearingPhase(engine, timestamp = 1_800_000_000_105) {
@@ -12,6 +13,18 @@ function finishClearingPhase(engine, timestamp = 1_800_000_000_105) {
   );
   assert.ok(clearingTask);
   assert.equal(engine.completeTask(clearingTask.instanceId, timestamp), true);
+  if (engine.currentChapter.id === 'cocktails') {
+    while (engine.state.turn.phase === 'cocktailTeamChoice') {
+      const preferred = engine.state.chapter.cocktailTeamSelectionIndex % 2 === 0 ? 'alcoholic' : 'alcohol-free';
+      const available = engine.availableCocktailTeamChoices();
+      assert.equal(engine.chooseCocktailTeam(available.includes(preferred) ? preferred : available[0], timestamp + 1), true);
+    }
+    assert.equal(engine.state.chapter.stage, 'ingredients');
+    assert.equal(engine.state.turn.phase, 'courseDecision');
+    assert.equal(engine.chooseCocktailSpiritCount(1, timestamp + 2), true);
+    assert.equal(engine.state.turn.phase, 'draw');
+    return;
+  }
   assert.equal(engine.state.chapter.stage, 'ingredients');
   assert.equal(engine.endTurn(timestamp + 1), true);
 }
@@ -25,6 +38,7 @@ const createEngine = (seed = 801) => {
   finishClearingPhase(engine);
   engine.beginEvent(1_800_000_000_110);
   engine.chooseSoupStyle('cream', 1_800_000_000_120);
+  resolvePendingLocationStories(engine, 1_800_000_000_121);
   return engine;
 };
 
@@ -60,7 +74,7 @@ function completeSoupCompositionForTest(engine) {
 }
 
 function completeSaladCompositionForTest(engine) {
-  ['lettuce', 'garlic', 'herbs', 'vinegar', 'mustard', 'apples', 'pears', 'beef', 'chestnuts'].forEach((ingredientId) => {
+  ['lettuce', 'cucumber', 'garlic', 'mustard', 'apples', 'pears', 'beef', 'chestnuts'].forEach((ingredientId) => {
     const ingredient = engine.getIngredient(ingredientId);
     ingredient.status = 'used';
     ingredient.chapterIndex = 2;
@@ -70,7 +84,7 @@ function completeSaladCompositionForTest(engine) {
 
 test('every prepared ingredient effect is translated and handled by the engine', () => {
   const effects = [...new Set(INGREDIENTS.map((ingredient) => ingredient.effect).filter(Boolean))];
-  assert.equal(effects.length, 20);
+  assert.equal(effects.length, 22);
   for (const effect of effects) {
     assert.ok(INGREDIENT_EFFECT_TEXT[effect]?.de, `missing German text for ${effect}`);
     assert.ok(INGREDIENT_EFFECT_TEXT[effect]?.en, `missing English text for ${effect}`);
@@ -78,13 +92,14 @@ test('every prepared ingredient effect is translated and handled by the engine',
     beginAbilityIngredientFlow(engine);
     const previousIngredientId = effect === 'repeatIngredient' ? effectCard(engine, 'doubleDie').id : null;
     assert.equal(engine.applyIngredientEffect(effectCard(engine, effect), 1_800_000_001_000, { previousIngredientId }), true, `unhandled ${effect}`);
-    assert.equal(engine.state.history.at(-1).type, 'ingredientEffectApplied');
+    assert.ok(engine.state.history.some((entry) => entry.type === 'ingredientEffectApplied' && entry.data.effect === effect));
   }
 });
 
-test('persistent ingredient bonuses are consumed by the intended later action', () => {
+test('the crew shares one ordered effect stack and consumes the oldest effect matching the trigger', () => {
   const engine = createEngine(850);
   beginAbilityIngredientFlow(engine);
+  const firstContributorId = engine.activePlayer.id;
   engine.applyIngredientEffect(effectCard(engine, 'doubleDie'));
   engine.applyIngredientEffect(effectCard(engine, 'rerollDie'));
   engine.applyIngredientEffect(effectCard(engine, 'adjustDie'));
@@ -95,6 +110,15 @@ test('persistent ingredient bonuses are consumed by the intended later action', 
   engine.applyIngredientEffect(effectCard(engine, 'revealEvent'));
   engine.applyIngredientEffect(effectCard(engine, 'extraTurn'));
   engine.applyIngredientEffect(effectCard(engine, 'nextPlayer'));
+
+  assert.deepEqual(engine.storedIngredientEffects().map((entry) => entry.effect), [
+    'doubleDie', 'rerollDie', 'adjustDie', 'ignoreEvent', 'ignoreIngredient',
+    'repeatNextIngredient', 'replaceIngredient', 'revealEvent', 'nextPlayer'
+  ]);
+  assert.ok(engine.storedIngredientEffects().every((entry) => entry.storedByPlayerId === firstContributorId));
+  const restored = new GameEngine(engine.snapshot());
+  assert.deepEqual(restored.storedIngredientEffects(), engine.storedIngredientEffects(), 'the shared stack survives persistence in order');
+  assert.ok(restored.state.players.every((player) => !Object.hasOwn(player, 'ingredientEffectStack')));
 
   assert.deepEqual({
     double: engine.activeBonuses.doubleNextDie,
@@ -114,14 +138,98 @@ test('persistent ingredient bonuses are consumed by the intended later action', 
   engine.state.turn.currentEventId = diceEvent.id;
   engine.state.turn.phase = 'rolled';
   engine.state.turn.dieResult = 3;
-  assert.ok(engine.rerollDieWithIngredient() >= 1);
+  assert.equal(engine.nextStoredIngredientEffect('dice').effect, 'doubleDie');
+  assert.equal(engine.rerollDieWithIngredient(), null, 'a later reroll may not jump over the older double effect');
+  assert.equal(engine.adjustDieWithIngredient(1), false, 'a later adjustment may not jump over the older double effect');
+  assert.equal(engine.confirmRoll(), true);
+  assert.equal(engine.state.turn.dieResult, 6);
+  assert.equal(engine.activeBonuses.doubleNextDie, 0);
+
+  engine.state.activePlayerIndex = (engine.state.activePlayerIndex + 1) % engine.state.players.length;
+  assert.notEqual(engine.activePlayer.id, firstContributorId);
+  engine.state.turn.currentEventId = diceEvent.id;
+  engine.state.turn.phase = 'rolled';
+  engine.state.turn.dieResult = 3;
+  assert.ok(engine.rerollDieWithIngredient() >= 1, 'another crew member can consume the shared reroll');
   assert.equal(engine.activeBonuses.rerollNext, 0);
   assert.equal(engine.adjustDieWithIngredient(1), true);
   assert.equal(engine.activeBonuses.adjustNext, 0);
-  const adjustedResult = engine.state.turn.dieResult;
+
+  engine.state.turn.currentEventId = null;
+  engine.state.turn.phase = 'draw';
+  engine.state.turn.ingredientFlow = null;
+  assert.equal(engine.nextStoredIngredientEffect('event').effect, 'ignoreEvent');
+  assert.equal(engine.nextEventPreview(), null, 'the later preview effect waits behind the older ignore effect');
+  assert.ok(engine.beginEvent(1_800_000_002_000));
+  assert.equal(engine.state.turn.outcomeCode, 'ignored');
+  assert.equal(engine.nextStoredIngredientEffect('event').effect, 'revealEvent');
+});
+
+test('unused optional dice effects expire in order instead of blocking the shared stack', () => {
+  const engine = createEngine(852);
+  beginAbilityIngredientFlow(engine);
+  engine.applyIngredientEffect(effectCard(engine, 'rerollDie'));
+  engine.applyIngredientEffect(effectCard(engine, 'adjustDie'));
+  engine.applyIngredientEffect(effectCard(engine, 'doubleDie'));
+  const diceEvent = EVENT_DECKS[1].find((event) => event.id === 'E2-10');
+  const prepareRoll = () => {
+    engine.state.turn.currentEventId = diceEvent.id;
+    engine.state.turn.phase = 'rolled';
+    engine.state.turn.dieResult = 3;
+    engine.state.turn.ingredientFlow = null;
+  };
+
+  prepareRoll();
   assert.equal(engine.confirmRoll(), true);
-  assert.equal(engine.state.turn.dieResult, Math.min(6, adjustedResult * 2));
-  assert.equal(engine.activeBonuses.doubleNextDie, 0);
+  assert.equal(engine.state.turn.dieResult, 3, 'declining a reroll does not alter the result');
+  assert.equal(engine.nextStoredIngredientEffect('dice').effect, 'adjustDie');
+
+  prepareRoll();
+  assert.equal(engine.confirmRoll(), true);
+  assert.equal(engine.state.turn.dieResult, 3, 'declining an adjustment does not alter the result');
+  assert.equal(engine.nextStoredIngredientEffect('dice').effect, 'doubleDie');
+
+  prepareRoll();
+  assert.equal(engine.confirmRoll(), true);
+  assert.equal(engine.state.turn.dieResult, 6, 'the mandatory double effect is eventually applied');
+  assert.equal(engine.nextStoredIngredientEffect('dice'), null);
+  assert.deepEqual(engine.state.history.filter((entry) => entry.type === 'ingredientEffectSkipped')
+    .map((entry) => entry.data.effect), ['rerollDie', 'adjustDie']);
+});
+
+test('a next-player preview is reserved for the named next free crew member', () => {
+  const engine = createEngine(853);
+  engine.state.players.forEach((player) => { player.roleId = 'cook'; });
+  const ownerId = engine.activePlayer.id;
+  const targetIndex = engine.nextFreePlayerIndex(engine.state.activePlayerIndex);
+  const targetId = engine.state.players[targetIndex].id;
+  beginAbilityIngredientFlow(engine);
+  engine.applyIngredientEffect(effectCard(engine, 'nextPlayer'));
+  const storedPreview = engine.storedIngredientEffects().find((entry) => entry.effect === 'nextPlayer');
+  assert.equal(storedPreview.targetPlayerId, targetId);
+
+  engine.state.turn.ingredientFlow = null;
+  engine.state.turn.currentEventId = null;
+  engine.state.turn.phase = 'draw';
+  assert.equal(engine.activePlayer.id, ownerId);
+  assert.equal(engine.nextEventPreview(), null, 'the current player cannot use the next player’s preview');
+
+  engine.state.activePlayerIndex = targetIndex;
+  const preview = engine.nextEventPreview();
+  assert.ok(preview);
+  assert.equal(engine.beginEvent(1_800_000_002_500).id, preview.id);
+  assert.equal(engine.storedIngredientEffects().some((entry) => entry.id === storedPreview.id), false);
+});
+
+test('coin ingredient effects reward the crew immediately and never enter the deferred stack', () => {
+  const engine = createEngine(851);
+  beginAbilityIngredientFlow(engine);
+  const before = engine.state.coins;
+  engine.applyIngredientEffect(effectCard(engine, 'coins3'));
+  engine.applyIngredientEffect(effectCard(engine, 'coins5'));
+
+  assert.equal(engine.state.coins, before + 8);
+  assert.equal(engine.storedIngredientEffects().length, 0);
 });
 
 test('draw, character-choice, deck-swap, repeat, and event-replacement effects complete their UI flows', () => {
@@ -140,6 +248,17 @@ test('draw, character-choice, deck-swap, repeat, and event-replacement effects c
   assert.equal(onionEngine.isPassiveEnabled(onionEngine.state.players[1]), false);
   onionEngine.state.players[1].turns += 1;
   assert.equal(onionEngine.isPassiveEnabled(onionEngine.state.players[1]), true);
+
+  const selfOnionEngine = createEngine(885);
+  beginAbilityIngredientFlow(selfOnionEngine);
+  const activePlayer = selfOnionEngine.activePlayer;
+  selfOnionEngine.applyIngredientEffect(effectCard(selfOnionEngine, 'disablePassive'));
+  assert.equal(selfOnionEngine.resolveIngredientEffectChoice(activePlayer.id), true);
+  assert.equal(selfOnionEngine.isPassiveEnabled(activePlayer), false);
+  activePlayer.turns += 1;
+  assert.equal(selfOnionEngine.isPassiveEnabled(activePlayer), false, 'the passive stays disabled throughout the player’s next turn');
+  activePlayer.turns += 1;
+  assert.equal(selfOnionEngine.isPassiveEnabled(activePlayer), true);
 
   const swapEngine = createEngine(882);
   beginAbilityIngredientFlow(swapEngine);
@@ -215,7 +334,17 @@ test('category-role and Treasurer passives follow the character-card wording', (
   const merchant = createEngine(930);
   merchant.activePlayer.roleId = 'merchant';
   assert.equal(merchant.prepareIngredientChoice(), true);
-  assert.equal(merchant.state.turn.pendingIngredientIds.length, 2);
+  assert.equal(merchant.state.turn.pendingIngredientIds.length, 3);
+
+  const ordinaryFind = createEngine(932);
+  ordinaryFind.activePlayer.roleId = 'cook';
+  assert.equal(ordinaryFind.prepareIngredientChoice(), true);
+  assert.equal(ordinaryFind.state.turn.pendingIngredientIds.length, 2);
+
+  const merchantAbility = createEngine(933);
+  merchantAbility.activePlayer.roleId = 'merchant';
+  assert.equal(merchantAbility.prepareIngredientChoice(null, 'ability', { count: 2 }), true);
+  assert.equal(merchantAbility.state.turn.pendingIngredientIds.length, 2, 'the active ability still follows its two-card wording');
 
   const treasurer = createEngine(931);
   treasurer.activePlayer.roleId = 'treasurer';
@@ -252,10 +381,67 @@ test('cocktail spirits remain independent optional choices in the global pool', 
   assert.equal(engine.getIngredient('rum').chapterIndex, 5);
   assert.equal(engine.getIngredient('gin').status, 'available');
   assert.equal(engine.getIngredient('second-ice').essential, false);
-  assert.equal(engine.getIngredient('ice-cubes').essential, true);
+  assert.equal(engine.getIngredient('ice-cubes'), undefined, 'ice is required basic stock, not an ingredient card');
+  assert.equal(engine.courseRule().target, 6);
+  assert.equal(engine.courseRule().optionalLimit, 4);
+  assert.equal(engine.courseRule().categoryLimits.alcohol, 3);
+  assert.equal(engine.courseRule().categoryMinimums.drinks, 2);
   assert.equal(engine.removeIngredientFromBasket('rum'), true);
   assert.equal(engine.getIngredient('rum').status, 'available');
   assert.equal(engine.getIngredient('rum').chapterIndex, null);
+});
+
+test('the optional dessert spirit task appears only when alcohol was assigned to dessert', () => {
+  const engine = createEngine(951);
+  const spiritTask = TASK_DECKS[4].find((card) => card.id === 'A5-19');
+  assert.equal(spiritTask.title.de, 'Optionale Geisterbeute');
+  assert.equal(engine.taskAppliesToChapter(spiritTask, 4), false);
+  const vodka = engine.getIngredient('vodka');
+  vodka.status = 'locked';
+  vodka.chapterIndex = 4;
+  assert.equal(engine.taskAppliesToChapter(spiritTask, 4), true);
+});
+
+test('soup and salad accept at most one meat variety, including stale pending choices', () => {
+  const cases = [
+    { course: 'soup', first: 'beef', second: 'chicken' },
+    { course: 'salad', first: 'pork', second: 'lamb' }
+  ];
+
+  for (const [index, { course, first, second }] of cases.entries()) {
+    const engine = createEngine(955 + index);
+    if (course === 'salad') {
+      completeSoupCompositionForTest(engine);
+      engine.state.turn.phase = 'eating';
+      assert.equal(engine.startNextChapter(), true);
+      finishClearingPhase(engine);
+    }
+
+    assert.equal(engine.currentChapter.id, course);
+    assert.equal(engine.prepareIngredientChoice('meat', 'ability', { all: true }), true);
+    assert.ok(engine.state.turn.pendingIngredientIds.includes(first));
+    assert.ok(engine.state.turn.pendingIngredientIds.includes(second));
+    assert.equal(engine.chooseIngredient(first), true);
+    assert.deepEqual(engine.courseIngredientCandidates('meat'), [], `${course} must stop offering meat`);
+    assert.equal(engine.lockIngredientFromBasket(first), true);
+
+    // Simulate a stale UI choice that was prepared before the first meat was
+    // fixed. Committing it must still be rejected.
+    engine.state.turn.phase = 'ingredientChoice';
+    engine.state.turn.pendingIngredientIds = [second];
+    assert.equal(engine.chooseIngredient(second), false);
+    assert.equal(engine.getIngredient(second).status, 'available');
+
+    // Defense in depth: even a stale basket entry may not be fixed as a second
+    // meat variety.
+    const staleBasketMeat = engine.getIngredient(second);
+    staleBasketMeat.status = 'discovered';
+    staleBasketMeat.chapterIndex = engine.state.chapterIndex;
+    staleBasketMeat.basketCourseIndex = engine.state.chapterIndex;
+    engine.state.lastIngredientId = second;
+    assert.equal(engine.lockIngredientFromBasket(second), false);
+    assert.equal(engine.courseCategoryCount('meat', ['locked']), 1);
+  }
 });
 
 test('active abilities can be used at most once before the tablet is handed over', () => {
