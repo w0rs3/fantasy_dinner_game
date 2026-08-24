@@ -374,7 +374,8 @@ function renderAbility(engine, language) {
   const role = getRole(player.roleId);
   const phase = engine.state.turn.phase;
   const key = `tactician-ignore-${engine.state.chapterIndex}`;
-  const canIgnore = role.id === 'tactician' && phase === 'event' && engine.passiveUnused(player, key);
+  const canIgnore = role.id === 'tactician' && ['event', 'rolled'].includes(phase) &&
+    !engine.currentEvent?.storyKind && engine.passiveUnused(player, key);
   const categoryByRole = { herbalist: 'vegetable', hunter: 'meat', gatherer: 'fruit' };
   const passiveCategory = categoryByRole[role.id] ?? null;
   const categoryPassiveKey = `${role.id}-draw-${engine.state.chapterIndex}`;
@@ -441,7 +442,7 @@ function renderAbility(engine, language) {
         ? statusTag(language === 'de' ? 'jetzt einsetzbar' : 'available now', 'green')
         : statusTag(language === 'de' ? 'Bedingung gerade nicht erfüllt' : 'condition not currently met');
   const activeButtons = role.activeCode === 'adjustDie' && canUse
-    ? `<button class="secondary-button" type="button" data-action="use-ability" data-option="-1">${language === 'de' ? 'Wurf um −1 ändern (aktiv)' : 'Adjust roll by −1 (active)'}</button><button class="secondary-button" type="button" data-action="use-ability" data-option="1">${language === 'de' ? 'Wurf um +1 ändern (aktiv)' : 'Adjust roll by +1 (active)'}</button>`
+    ? `${engine.activeAbilityAvailable(-1) ? `<button class="secondary-button" type="button" data-action="use-ability" data-option="-1">${language === 'de' ? 'Wurf um −1 ändern (aktiv)' : 'Adjust roll by −1 (active)'}</button>` : ''}${engine.activeAbilityAvailable(1) ? `<button class="secondary-button" type="button" data-action="use-ability" data-option="1">${language === 'de' ? 'Wurf um +1 ändern (aktiv)' : 'Adjust roll by +1 (active)'}</button>` : ''}`
     : canUse ? `<button class="secondary-button" type="button" data-action="use-ability">${t(role.activeButton, language)}</button>` : '';
   const gamblerAbilityResult = role.id === 'gambler' && Number.isInteger(engine.state.turn.gamblerAbilityRoll)
     ? renderDieResult(
@@ -526,16 +527,17 @@ function renderStoryEventCard(engine, language) {
   }
   const answers = card.answers.map((answer) => `
     <button type="button" class="choice-button" data-action="answer-story-quiz" data-answer-id="${escapeHtml(answer.id)}">${t(answer.label, language)}</button>`).join('');
+  const wrongAnswerCoins = Math.abs(engine.coinLossPreview(-3).amount ?? -3);
   return `
     <article class="game-card story-quiz-card">
       ${renderCourseFlow(engine, language)}
       <div class="card-row">
         <p class="eyebrow">${language === 'de' ? 'Erinnerungskarte' : 'Memory card'} · ${escapeHtml(card.id)}</p>
-        ${statusTag(language === 'de' ? '±3 Münzen' : '±3 coins', 'gold')}
+        ${statusTag(language === 'de' ? `+3 / −${wrongAnswerCoins} Münzen` : `+3 / −${wrongAnswerCoins} coins`, 'gold')}
       </div>
       <h2>${t(card.title, language)}</h2>
       <p class="card-story">${t(card.question, language)}</p>
-      <div class="card-effect"><strong>${language === 'de' ? 'Die aktive Person entscheidet.' : 'The active player decides.'}</strong><p>${language === 'de' ? 'Richtige Antwort: +3 Münzen · falsche Antwort: −3 Münzen.' : 'Correct answer: +3 coins · wrong answer: −3 coins.'}</p></div>
+      <div class="card-effect"><strong>${language === 'de' ? 'Die aktive Person entscheidet.' : 'The active player decides.'}</strong><p>${language === 'de' ? `Richtige Antwort: +3 Münzen · falsche Antwort: −${wrongAnswerCoins} Münzen.` : `Correct answer: +3 coins · wrong answer: −${wrongAnswerCoins} coins.`}</p></div>
       <div class="choice-list">${answers}</div>
     </article>`;
 }
@@ -606,7 +608,8 @@ function renderRolledCard(engine, language) {
         <button class="primary-button" type="button" data-action="confirm-roll">${tx('resolve', language)}</button>
         ${canReroll ? `<button class="secondary-button" type="button" data-action="reroll-die">${tx('rollAgain', language)} · ${t(getRole('smith').name, language)}</button>` : ''}
         ${hasStoredReroll ? `<button class="secondary-button" type="button" data-action="reroll-ingredient-die">${language === 'de' ? 'Gespeicherten Neuwurf einsetzen' : 'Use stored reroll'}</button>` : ''}
-        ${hasStoredAdjustment ? `<button class="secondary-button" type="button" data-action="adjust-ingredient-die" data-option="-1">${language === 'de' ? 'Gespeicherten Effekt: −1' : 'Stored effect: −1'}</button><button class="secondary-button" type="button" data-action="adjust-ingredient-die" data-option="1">${language === 'de' ? 'Gespeicherten Effekt: +1' : 'Stored effect: +1'}</button>` : ''}
+        ${hasStoredAdjustment && engine.canAdjustDieWithIngredient(-1) ? `<button class="secondary-button" type="button" data-action="adjust-ingredient-die" data-option="-1">${language === 'de' ? 'Gespeicherten Effekt: −1' : 'Stored effect: −1'}</button>` : ''}
+        ${hasStoredAdjustment && engine.canAdjustDieWithIngredient(1) ? `<button class="secondary-button" type="button" data-action="adjust-ingredient-die" data-option="1">${language === 'de' ? 'Gespeicherten Effekt: +1' : 'Stored effect: +1'}</button>` : ''}
       </div>
       ${storedEffectNotes.length ? `<div class="card-effect"><strong>${language === 'de' ? 'Gespeicherte Zutateneffekte' : 'Stored ingredient effects'}</strong><br>${storedEffectNotes.join('<br>')}</div>` : ''}
     </article>`;
@@ -849,6 +852,8 @@ function renderResolvedCard(engine, language) {
     const quiz = event.storyKind === 'quiz';
     const correctAnswer = quiz ? event.answers.find((answer) => answer.id === event.correctAnswerId) : null;
     const correct = engine.state.turn.storyAnswerCorrect;
+    const storyCoins = Number(engine.state.turn.storyCoinDelta) || 0;
+    const storyCoinText = `${storyCoins >= 0 ? '+' : '−'}${Math.abs(storyCoins)}`;
     const nextPlayerIndex = engine.nextFreePlayerIndex(engine.state.activePlayerIndex);
     const nextPlayer = nextPlayerIndex == null ? null : engine.state.players[nextPlayerIndex];
     return `
@@ -857,8 +862,8 @@ function renderResolvedCard(engine, language) {
         <h2>${t(event.title, language)}</h2>
         <div class="card-effect"><strong>${quiz
           ? correct
-            ? (language === 'de' ? 'Richtig · +3 Münzen' : 'Correct · +3 coins')
-            : (language === 'de' ? 'Leider falsch · −3 Münzen' : 'Not quite · −3 coins')
+            ? (language === 'de' ? `Richtig · ${storyCoinText} Münzen` : `Correct · ${storyCoinText} coins`)
+            : (language === 'de' ? `Leider falsch · ${storyCoinText} Münzen` : `Not quite · ${storyCoinText} coins`)
           : (language === 'de' ? 'Die Chronik dieses Ortes ist jetzt Teil eurer Reise.' : 'This location’s chronicle is now part of your voyage.')}</strong>${quiz ? `<p>${language === 'de' ? 'Richtige Antwort' : 'Correct answer'}: ${t(correctAnswer.label, language)}</p>` : ''}</div>
         <p>${nextPlayer
           ? `${tx('handTablet', language)} ${escapeHtml(nextPlayer.name)}.`
@@ -1029,7 +1034,9 @@ function renderWatchCard(engine, language) {
         <button class="primary-button" type="button" data-action="resolve-watch-outcome" data-outcome="success">${language === 'de' ? `Hat geklappt · +${challenge.successCoins} Münzen` : `Succeeded · +${challenge.successCoins} coins`}</button>
         <button class="secondary-button" type="button" data-action="resolve-watch-outcome" data-outcome="failure">${language === 'de' ? `Gescheitert · −${failureCoins} Münzen` : `Failed · −${failureCoins} coins`}</button>
       </div>` : `<button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${ongoing
-        ? (language === 'de' ? 'Geheime Challenge starten & Tablet weitergeben' : 'Start secret challenge & pass the tablet')
+        ? challenge.secret
+          ? (language === 'de' ? 'Geheime Challenge starten & Tablet weitergeben' : 'Start secret challenge & pass the tablet')
+          : (language === 'de' ? 'Challenge starten & Tablet weitergeben' : 'Start challenge & pass the tablet')
         : awaitingSecretStart
           ? (language === 'de' ? 'Geheimes Event starten' : 'Start secret event')
           : mandatory

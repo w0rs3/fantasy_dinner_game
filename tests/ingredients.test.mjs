@@ -132,7 +132,7 @@ test('the crew shares one ordered effect stack and consumes the oldest effect ma
     chain: engine.state.turn.chainPending,
     extra: engine.activeBonuses.extraTurns,
     next: engine.activeBonuses.forceNextPlayer
-  }, { double: 1, reroll: 1, adjust: 1, ignoreEvent: 1, ignoreIngredient: 1, repeatIngredient: 1, replaceIngredient: 1, reveal: 2, chain: true, extra: 0, next: 0 });
+  }, { double: 1, reroll: 1, adjust: 1, ignoreEvent: 1, ignoreIngredient: 1, repeatIngredient: 1, replaceIngredient: 1, reveal: 1, chain: true, extra: 0, next: 1 });
 
   const diceEvent = EVENT_DECKS[0].find((event) => event.type === 'dice');
   engine.state.turn.currentEventId = diceEvent.id;
@@ -150,9 +150,10 @@ test('the crew shares one ordered effect stack and consumes the oldest effect ma
   engine.state.turn.currentEventId = diceEvent.id;
   engine.state.turn.phase = 'rolled';
   engine.state.turn.dieResult = 3;
-  assert.ok(engine.rerollDieWithIngredient() >= 1, 'another crew member can consume the shared reroll');
+  const rerolled = engine.rerollDieWithIngredient();
+  assert.ok(rerolled >= 1, 'another crew member can consume the shared reroll');
   assert.equal(engine.activeBonuses.rerollNext, 0);
-  assert.equal(engine.adjustDieWithIngredient(1), true);
+  assert.equal(engine.adjustDieWithIngredient(rerolled >= 6 ? -1 : 1), true);
   assert.equal(engine.activeBonuses.adjustNext, 0);
 
   engine.state.turn.currentEventId = null;
@@ -238,7 +239,7 @@ test('draw, character-choice, deck-swap, repeat, and event-replacement effects c
   drawEngine.applyIngredientEffect(effectCard(drawEngine, 'drawIngredient'));
   drawEngine.continueIngredientFlow();
   assert.equal(drawEngine.state.turn.phase, 'ingredientChoice');
-  assert.ok(drawEngine.state.turn.pendingIngredientIds.length >= 1);
+  assert.equal(drawEngine.state.turn.pendingIngredientIds.length, 1, 'a singular draw effect offers exactly one card');
 
   const onionEngine = createEngine(881);
   beginAbilityIngredientFlow(onionEngine);
@@ -328,6 +329,7 @@ test('category-role and Treasurer passives follow the character-card wording', (
       engine.activePlayer.roleId = roleId;
     }
     assert.equal(engine.useCategoryRolePassive(), true, roleId);
+    assert.equal(engine.state.turn.pendingIngredientIds.length, 1, `${roleId} passive draws exactly one card`);
     const offered = engine.state.turn.pendingIngredientIds[0];
     assert.equal(engine.getIngredient(offered).category, engine.getIngredient(ingredientId).category);
     engine.chooseIngredient(offered);
@@ -365,6 +367,67 @@ test('category-role and Treasurer passives follow the character-card wording', (
   finishClearingPhase(treasurer);
   assert.equal(treasurer.state.ingredients.filter((ingredient) => ingredient.chapterIndex === 3 && ingredient.status === 'discovered').length, before + 1);
   assert.equal(treasurer.secureTreasurerIngredient(), false);
+});
+
+test('a replacement alternative waits until it can add a real extra choice', () => {
+  const engine = createEngine(934);
+  beginAbilityIngredientFlow(engine);
+  engine.storeIngredientEffect(effectCard(engine, 'replaceIngredient'), 'replaceIngredient');
+  const available = engine.courseIngredientCandidates();
+  assert.ok(available.length > 2);
+  const [first, second] = available;
+  engine.state.ingredientQueues[engine.state.chapterIndex] = [first.id];
+
+  assert.equal(engine.prepareIngredientChoice(null, 'ability', { count: 1 }), true);
+  assert.deepEqual(engine.state.turn.pendingIngredientIds, [first.id]);
+  assert.equal(engine.nextStoredIngredientEffect('ingredient')?.effect, 'replaceIngredient', 'the effect is not spent as a no-op');
+
+  engine.state.turn.phase = 'draw';
+  engine.state.turn.pendingIngredientIds = [];
+  engine.state.turn.ingredientFlow = null;
+  engine.state.ingredientQueues[engine.state.chapterIndex] = [first.id, second.id];
+  assert.equal(engine.prepareIngredientChoice(null, 'ability', { count: 1 }), true);
+  assert.equal(engine.state.turn.pendingIngredientIds.length, 2);
+  assert.equal(engine.nextStoredIngredientEffect('ingredient'), null);
+});
+
+test('a stored die adjustment cannot be consumed in a direction that leaves the die unchanged', () => {
+  const engine = createEngine(935);
+  beginAbilityIngredientFlow(engine);
+  engine.applyIngredientEffect(effectCard(engine, 'adjustDie'));
+  const diceEvent = EVENT_DECKS[1].find((event) => event.type === 'dice');
+  engine.state.turn.ingredientFlow = null;
+  engine.state.turn.currentEventId = diceEvent.id;
+  engine.state.turn.phase = 'rolled';
+  engine.state.turn.dieResult = 1;
+
+  const storedId = engine.nextStoredIngredientEffect('dice').id;
+  assert.equal(engine.canAdjustDieWithIngredient(-1), false);
+  assert.equal(engine.adjustDieWithIngredient(-1), false);
+  assert.equal(engine.nextStoredIngredientEffect('dice').id, storedId, 'an invalid direction keeps the effect on the shared stack');
+  assert.equal(engine.canAdjustDieWithIngredient(1), true);
+  assert.equal(engine.adjustDieWithIngredient(1), true);
+  assert.equal(engine.state.turn.dieResult, 2);
+  assert.equal(engine.nextStoredIngredientEffect('dice'), null);
+});
+
+test('a stored event replacement waits instead of redrawing the only remaining event forever', () => {
+  const engine = createEngine(936);
+  beginAbilityIngredientFlow(engine);
+  engine.applyIngredientEffect(effectCard(engine, 'replaceEvent'));
+  engine.state.turn.ingredientFlow = null;
+  engine.state.turn.phase = 'draw';
+  const stage = engine.currentEventStage();
+  const stageQueues = engine.state.eventQueues[engine.state.chapterIndex][stage];
+  const onlyEventId = stageQueues.flat().find((eventId) => !engine.state.eventsDrawn.includes(eventId));
+  assert.ok(onlyEventId);
+  stageQueues.forEach((queue) => queue.splice(0, queue.length));
+  engine.eventQueue(stage).push(onlyEventId);
+
+  assert.equal(engine.beginEvent()?.id, onlyEventId);
+  assert.equal(engine.state.turn.phase, 'event');
+  assert.equal(engine.nextStoredIngredientEffect('event')?.effect, 'replaceEvent', 'the unusable replacement remains stored');
+  assert.equal(engine.state.eventsDrawn.filter((eventId) => eventId === onlyEventId).length, 1);
 });
 
 test('cocktail spirits remain independent optional choices in the global pool', () => {

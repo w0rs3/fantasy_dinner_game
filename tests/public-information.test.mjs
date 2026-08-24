@@ -9,6 +9,11 @@ test('complete ingredient and rule references render without an active voyage', 
     SHOPPING_STAPLES.filter((staple) => ['coconut-milk', 'milk', 'cream'].includes(staple.id)).map((staple) => staple.id),
     ['coconut-milk', 'milk', 'cream']
   );
+  const questPantryStaples = ['stock', 'cooking-oil', 'butter', 'vinegar', 'yoghurt', 'fresh-herbs', 'ice-cubes'];
+  assert.deepEqual(
+    SHOPPING_STAPLES.filter((staple) => questPantryStaples.includes(staple.id)).map((staple) => staple.id),
+    questPantryStaples
+  );
   for (const language of ['de', 'en']) {
     const ingredients = renderIngredientGuide(8, language);
     const rules = renderRules(language);

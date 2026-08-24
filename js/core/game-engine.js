@@ -26,7 +26,7 @@ const STORED_INGREDIENT_EFFECTS = Object.freeze({
   adjustDie: { bonus: 'adjustNext', trigger: 'dice' },
   ignoreEvent: { bonus: 'ignoreNextEvent', trigger: 'event' },
   revealEvent: { bonus: 'revealNextEvent', trigger: 'event' },
-  nextPlayer: { bonus: 'revealNextEvent', trigger: 'event' },
+  nextPlayer: { bonus: 'forceNextPlayer', trigger: 'event' },
   replaceEvent: { bonus: 'replaceNextEvent', trigger: 'event' },
   ignoreIngredient: { bonus: 'ignoreNextIngredientEffect', trigger: 'ingredient' },
   repeatNextIngredient: { bonus: 'repeatNextIngredientEffect', trigger: 'ingredient' },
@@ -1743,6 +1743,12 @@ export class GameEngine {
     return this.state.eventQueues[this.state.chapterIndex]?.[stage]?.[group.locationIndex] ?? [];
   }
 
+  eventQueueForCard(event = this.currentEvent) {
+    return event
+      ? this.state.eventQueues[this.state.chapterIndex]?.[event.stage]?.[event.locationIndex] ?? this.eventQueue(event.stage)
+      : [];
+  }
+
   actionAvailable(actionCode) {
     switch (actionCode) {
       case 'discoverIngredient':
@@ -1942,6 +1948,8 @@ export class GameEngine {
     const storedEffect = this.nextStoredIngredientEffect('event');
     const revealsEvent = ['revealEvent', 'nextPlayer'].includes(storedEffect?.effect);
     if ((!scout && !revealsEvent) || this.state.turn.phase !== 'draw') return null;
+    const pendingQuiz = this.storyQuizDue() ? this.eligibleStoryQuiz() : null;
+    if (pendingQuiz) return pendingQuiz;
     const queue = this.eventQueue();
     const event = eventById(queue[0]);
     return event ? this.contextualizeEvent(event) : null;
@@ -2050,15 +2058,35 @@ export class GameEngine {
       !card.answers.some((answer) => answer.id === answerId)) return false;
     const correct = answerId === card.correctAnswerId;
     const requestedCoins = correct ? 3 : -3;
-    this.addCoins(requestedCoins, 'storyQuiz', now, { skipRoleModifiers: true });
+    this.addCoins(requestedCoins, 'storyQuiz', now);
+    const modifiedCoins = this.state.lastCoinChange?.modifiedAmount ?? requestedCoins;
+    const appliedCoins = this.state.lastCoinChange?.appliedAmount ?? modifiedCoins;
     this.state.turn.storyAnswerId = answerId;
     this.state.turn.storyAnswerCorrect = correct;
-    this.state.turn.storyCoinDelta = requestedCoins;
+    this.state.turn.storyCoinDelta = modifiedCoins;
     this.state.turn.outcomeCode = correct ? 'storyQuizCorrect' : 'storyQuizWrong';
     this.state.turn.phase = 'resolved';
     this.markEventResolved(card, now);
-    this.log('storyQuizAnswered', { eventId: card.id, answerId, correct, coins: requestedCoins }, now);
+    this.log('storyQuizAnswered', {
+      eventId: card.id,
+      answerId,
+      correct,
+      requestedCoins,
+      modifiedCoins,
+      appliedCoins
+    }, now);
     return true;
+  }
+
+  distinctEventReplacementAvailable(event = this.currentEvent) {
+    if (!event || event.storyKind) return false;
+    const stageQueues = this.state.eventQueues[this.state.chapterIndex]?.[event.stage] ?? [];
+    const alreadyDrawn = new Set(this.state.eventsDrawn);
+    return stageQueues.some((queue) => queue.some((eventId) => {
+      if (eventId === event.id || alreadyDrawn.has(eventId)) return false;
+      const candidate = eventById(eventId);
+      return Boolean(candidate) && !(event.stage === 'cooking' && this.hasUnassignedCourseTasks() && candidate.archetype === 'watch');
+    }));
   }
 
   beginEvent(now = Date.now(), skipStoredIngredientEffect = false) {
@@ -2202,15 +2230,19 @@ export class GameEngine {
     this.state.turn.eventSignature = eventSignature(this.currentEvent);
     this.log('eventDrawn', { eventId, stage, playerId: this.activePlayer.id, groupId: group.id }, now);
 
-    const storedEventEffect = skipStoredIngredientEffect ? null : this.nextStoredIngredientEffect('event');
+    const pendingStoredEventEffect = skipStoredIngredientEffect ? null : this.nextStoredIngredientEffect('event');
+    const storedEventEffect = pendingStoredEventEffect?.effect !== 'replaceEvent' ||
+      this.distinctEventReplacementAvailable(this.currentEvent)
+      ? pendingStoredEventEffect
+      : null;
     if (storedEventEffect) this.consumeStoredIngredientEffect(storedEventEffect.effect, 'event', now);
 
     if (storedEventEffect?.effect === 'replaceEvent') {
       if (this.state.eventsDrawn.at(-1) === eventId) this.state.eventsDrawn.pop();
       queue.push(eventId);
       this.log('eventReplacedByIngredient', { eventId }, now);
-      this.state.turn.currentEventId = null;
-      this.state.turn.phase = 'draw';
+      const turnContext = continuedTurnContext(this.state.turn);
+      this.state.turn = { ...freshTurn(), ...turnContext };
       return this.beginEvent(now, true);
     }
 
@@ -2386,11 +2418,24 @@ export class GameEngine {
   }
 
   adjustDieWithIngredient(amount, now = Date.now()) {
-    if (this.state.turn.phase !== 'rolled' || ![-1, 1].includes(Number(amount)) ||
+    if (!this.canAdjustDieWithIngredient(amount) ||
       !this.consumeStoredIngredientEffect('adjustDie', 'dice', now)) return false;
-    this.state.turn.dieResult = Math.max(1, Math.min(6, this.state.turn.dieResult + Number(amount)));
+    this.state.turn.dieResult += Number(amount);
     this.log('dieAdjustedByIngredient', { amount: Number(amount), value: this.state.turn.dieResult }, now);
     return true;
+  }
+
+  dieAdjustmentAvailable(amount = null) {
+    if (this.state.turn.phase !== 'rolled' || !Number.isInteger(this.state.turn.dieResult)) return false;
+    if (amount == null) return this.state.turn.dieResult >= 1 && this.state.turn.dieResult <= 6;
+    const adjustment = Number(amount);
+    if (![-1, 1].includes(adjustment)) return false;
+    const adjusted = this.state.turn.dieResult + adjustment;
+    return adjusted >= 1 && adjusted <= 6;
+  }
+
+  canAdjustDieWithIngredient(amount = null) {
+    return this.nextStoredIngredientEffect('dice')?.effect === 'adjustDie' && this.dieAdjustmentAvailable(amount);
   }
 
   confirmRoll(now = Date.now()) {
@@ -2621,10 +2666,12 @@ export class GameEngine {
     }
 
     this.state.turn.ingredientEffectConsumedForChoice = false;
-    let count = options.all ? candidates.length : Math.max(2, Number(options.count) || 2);
+    let count = options.all ? candidates.length : Math.max(1, Number(options.count) || 2);
     const player = this.activePlayer;
     if (context === 'event' && player.roleId === 'merchant' && this.isPassiveEnabled(player)) count = Math.max(count, 3);
-    if (this.consumeStoredIngredientEffect('replaceIngredient', 'ingredient', now)) {
+    if (!options.all && candidates.length > count &&
+      this.nextStoredIngredientEffect('ingredient')?.effect === 'replaceIngredient' &&
+      this.consumeStoredIngredientEffect('replaceIngredient', 'ingredient', now)) {
       this.state.turn.ingredientEffectConsumedForChoice = true;
       count += 1;
       this.log('ingredientReplacementOffered', { category }, now);
@@ -2752,7 +2799,8 @@ export class GameEngine {
         this.state.turn.phase = 'effectChoice';
         break;
       case 'replaceEvent':
-        if (this.state.turn.ingredientFlow?.context === 'event' && this.currentEvent) this.state.turn.ingredientFlow.replaceCurrentEvent = true;
+        if (this.state.turn.ingredientFlow?.context === 'event' && this.currentEvent &&
+          this.distinctEventReplacementAvailable(this.currentEvent)) this.state.turn.ingredientFlow.replaceCurrentEvent = true;
         else this.storeIngredientEffect(ingredient, ingredient.effect, times, now);
         break;
       case 'shuffleEvents': {
@@ -2799,7 +2847,7 @@ export class GameEngine {
 
     if (flow.replaceCurrentEvent && flow.context === 'event' && this.currentEvent) {
       const eventId = this.currentEvent.id;
-      const queue = this.eventQueue(this.currentEvent.stage);
+      const queue = this.eventQueueForCard(this.currentEvent);
       if (this.state.eventsDrawn.at(-1) === eventId) this.state.eventsDrawn.pop();
       queue.push(eventId);
       const turnContext = continuedTurnContext(this.state.turn);
@@ -2958,8 +3006,8 @@ export class GameEngine {
 
   ingredientCategoriesForTask(card) {
     const mapping = {
-      vegetables: ['vegetable'], fruit: ['fruit'], protein: ['meat'], dressing: ['pantry'],
-      seasoning: ['vegetable', 'pantry'], garnish: ['pantry', 'dessert'],
+      vegetables: ['vegetable'], fruit: ['fruit'], protein: card?.chapterId === 'soup' ? ['meat', 'vegetable', 'pantry'] : ['meat'], dressing: ['pantry'],
+      seasoning: [], garnish: ['pantry', 'dessert'],
       hotplate: ['vegetable', 'pantry'], blender: ['vegetable', 'pantry'],
       oven: this.state.chapterIndex === 3 ? ['vegetable', 'meat', 'fruit', 'pantry'] : [],
       assembly: card?.chapterId === 'main'
@@ -3339,8 +3387,14 @@ export class GameEngine {
       const candidateCard = taskById(candidate.taskId);
       return candidateCard?.questId === card.questId && this.questStepNumber(candidateCard) > this.questStepNumber(card);
     });
+    const dependentTaskExists = card && this.state.tasks.some((candidate) => {
+      if (candidate.chapterIndex !== instance.chapterIndex || candidate.instanceId === instance.instanceId) return false;
+      const candidateCard = taskById(candidate.taskId);
+      return [...(candidateCard?.prerequisites ?? []), ...(candidateCard?.alternativePrerequisites ?? [])]
+        .some((requirement) => requirement.requiredBlueprintIndex === card.blueprintIndex);
+    });
     return Boolean(instance && instance.status === 'done' && !this.isCauldronWatch(instance) && instance.chapterIndex === this.state.chapterIndex && !this.state.chapter.served &&
-      !laterQuestStepExists && card?.questId !== 'reset' &&
+      !laterQuestStepExists && !dependentTaskExists && card?.questId !== 'reset' &&
       instance.assignedPlayerIds.every((playerId) => this.isPlayerFreeForTask(playerId, instanceId)));
   }
 
@@ -3646,6 +3700,13 @@ export class GameEngine {
     );
   }
 
+  repeatableIngredientEffect(ingredient = null) {
+    if (!ingredient?.effect) return false;
+    if (ingredient.effect !== 'repeatIngredient') return true;
+    const previous = this.state.ingredients.find((entry) => entry.id === this.state.previousIngredientId);
+    return Boolean(previous?.effect && previous.effect !== 'repeatIngredient');
+  }
+
   activeAbilityAvailable(option = null) {
     const player = this.activePlayer;
     const role = getRole(player?.roleId);
@@ -3662,15 +3723,16 @@ export class GameEngine {
 
     switch (role.activeCode) {
       case 'replaceEvent':
-      case 'shuffleEvents': return Boolean(this.currentEvent) && !this.currentEvent.storyKind && ['event', 'rolled'].includes(phase);
-      case 'adjustDie': return phase === 'rolled' && (option == null || [-1, 1].includes(Number(option)));
+      case 'shuffleEvents': return Boolean(this.currentEvent) && !this.currentEvent.storyKind &&
+        ['event', 'rolled'].includes(phase) && this.distinctEventReplacementAvailable(this.currentEvent);
+      case 'adjustDie': return this.dieAdjustmentAvailable(option);
       case 'chooseVegetable':
       case 'chooseMeat':
       case 'chooseFruit': return stableIngredientPhase && this.canAddIngredientThisTurn() && this.courseIngredientCandidates(category).length > 0;
       case 'chooseIngredient':
       case 'reserveIngredient': return stableIngredientPhase && this.canAddIngredientThisTurn() && this.courseIngredientCandidates().length > 0;
       case 'swapIngredient': return stableIngredientPhase && this.swapIngredientAlternatives(lastIngredient).length > 0;
-      case 'repeatIngredient': return stableIngredientPhase && Boolean(lastIngredient?.effect);
+      case 'repeatIngredient': return stableIngredientPhase && this.repeatableIngredientEffect(lastIngredient);
       case 'extendNextTask':
       case 'shortenNextTask': return stableCardStep && !player.pendingTaskAbility;
       case 'gambleCoins': return stableCardStep && !player.passiveUsedByChapter[`gambler-active-${this.state.chapterIndex}`];
@@ -3697,7 +3759,9 @@ export class GameEngine {
         break;
       case 'shuffleEvents': {
         if (!this.currentEvent || this.currentEvent.storyKind || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
-        const queue = this.eventQueue(this.currentEvent.stage);
+        const queue = this.eventQueueForCard(this.currentEvent);
+        const drawnIndex = this.state.eventsDrawn.lastIndexOf(this.currentEvent.id);
+        if (drawnIndex >= 0) this.state.eventsDrawn.splice(drawnIndex, 1);
         queue.unshift(this.currentEvent.id);
         const shuffled = shuffle(queue, this.state.rngState);
         this.state.rngState = shuffled.state;
@@ -3711,8 +3775,8 @@ export class GameEngine {
         break;
       }
       case 'adjustDie':
-        if (this.state.turn.phase !== 'rolled' || ![-1, 1].includes(Number(option))) return false;
-        this.state.turn.dieResult = Math.max(1, Math.min(6, this.state.turn.dieResult + Number(option)));
+        if (!this.dieAdjustmentAvailable(option)) return false;
+        this.state.turn.dieResult += Number(option);
         break;
       case 'chooseVegetable': used = this.prepareIngredientChoice('vegetable', 'ability', { count: 2 }, now); break;
       case 'chooseMeat': used = this.prepareIngredientChoice('meat', 'ability', { count: 2 }, now); break;
@@ -3784,7 +3848,8 @@ export class GameEngine {
   ignoreEventWithTactician(now = Date.now()) {
     const player = this.activePlayer;
     const key = `tactician-ignore-${this.state.chapterIndex}`;
-    if (player.roleId !== 'tactician' || !this.passiveUnused(player, key) || this.state.turn.phase !== 'event') return false;
+    if (player.roleId !== 'tactician' || !this.passiveUnused(player, key) || !['event', 'rolled'].includes(this.state.turn.phase) ||
+      !this.currentEvent || this.currentEvent.storyKind) return false;
     player.passiveUsedByChapter[key] = true;
     this.state.turn.outcomeCode = 'ignored';
     this.state.turn.phase = 'resolved';

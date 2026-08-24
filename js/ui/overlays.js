@@ -40,6 +40,9 @@ function taskTimerCaption(instance, timingMode, remaining, language) {
 
 function taskCoinTag(instance, language) {
   if (instance.status !== 'done' || !Number.isFinite(instance.challengeCoinValue)) return '';
+  if (['background', 'manual'].includes(instance.challengeResult)) {
+    return statusTag(language === 'de' ? 'Keine Münzwertung' : 'No coin score', 'blue');
+  }
   const coins = instance.challengeCoinValue;
   const value = `${coins > 0 ? '+' : coins < 0 ? '−' : '±'}${Math.abs(coins)}`;
   return statusTag(`${language === 'de' ? 'Münzwertung' : 'Coin score'}: ${value} ${language === 'de' ? 'Münzen' : 'coins'}`, coins > 0 ? 'green' : coins < 0 ? 'coral' : 'blue');

@@ -135,6 +135,25 @@ test('ingredient abilities cannot overwrite an already open ingredient flow', ()
   assert.deepEqual(engine.state.turn.ingredientFlow, flowBefore);
 });
 
+test('the Cook cannot spend an active use when a repeat card has no repeatable predecessor', () => {
+  const engine = create('cook', 4_301);
+  const repeat = engine.state.ingredients.find((ingredient) => ingredient.effect === 'repeatIngredient');
+  assert.ok(repeat);
+  repeat.status = 'discovered';
+  repeat.chapterIndex = engine.state.chapterIndex;
+  repeat.basketCourseIndex = engine.state.chapterIndex;
+  engine.state.lastIngredientId = repeat.id;
+  engine.state.previousIngredientId = null;
+  const uses = engine.activePlayer.activeUsesRemaining;
+  assert.equal(engine.activeAbilityAvailable(), false);
+  assert.equal(engine.useActiveAbility(), false);
+  assert.equal(engine.activePlayer.activeUsesRemaining, uses);
+
+  const repeatable = engine.state.ingredients.find((ingredient) => ingredient.effect === 'doubleDie');
+  engine.state.previousIngredientId = repeatable.id;
+  assert.equal(engine.activeAbilityAvailable(), true);
+});
+
 test('the current-player UI always explains both abilities and uses concrete action labels', () => {
   for (const roleEntry of ROLES) {
     const engine = create(roleEntry.id, 4_500 + ROLES.indexOf(roleEntry));
@@ -184,6 +203,49 @@ test('adjusting a die by plus one keeps the roll confirmation visible and progre
   assert.notEqual(engine.state.turn.phase, 'rolled');
 });
 
+test('the Smith cannot spend an active use on a clamped no-op at die boundaries', () => {
+  const engine = create('smith', 4_604);
+  const diceEvent = EVENT_DECKS[1].find((event) => event.type === 'dice');
+  engine.state.turn.currentEventId = diceEvent.id;
+  engine.state.turn.phase = 'rolled';
+  engine.state.turn.dieResult = 1;
+  const uses = engine.activePlayer.activeUsesRemaining;
+
+  assert.equal(engine.activeAbilityAvailable(-1), false);
+  assert.equal(engine.activeAbilityAvailable(1), true);
+  assert.equal(engine.useActiveAbility(-1, now + 300), false);
+  assert.equal(engine.activePlayer.activeUsesRemaining, uses);
+  const html = renderGame(engine, 'de');
+  assert.doesNotMatch(html, /data-action="use-ability" data-option="-1"/);
+  assert.match(html, /data-action="use-ability" data-option="1"/);
+  assert.equal(engine.useActiveAbility(1, now + 301), true);
+  assert.equal(engine.state.turn.dieResult, 2);
+});
+
+test('the Tactician really shuffles the open event back instead of silently discarding it', () => {
+  const engine = create('tactician', 4_605);
+  assert.ok(engine.beginEvent(now + 300));
+  const originalId = engine.currentEvent.id;
+  assert.equal(engine.distinctEventReplacementAvailable(), true);
+  assert.equal(engine.useActiveAbility(null, now + 301), true);
+  assert.notEqual(engine.currentEvent.id, originalId);
+  assert.equal(engine.state.eventsDrawn.includes(originalId), false);
+  const originalCard = EVENT_DECKS[engine.state.chapterIndex].find((event) => event.id === originalId);
+  assert.ok(engine.state.eventQueues[engine.state.chapterIndex][originalCard.stage][originalCard.locationIndex].includes(originalId));
+});
+
+test('the Tactician may cancel a rolled event before its effect is resolved', () => {
+  const engine = create('tactician', 4_606);
+  const diceEvent = EVENT_DECKS[1].find((event) => event.type === 'dice');
+  engine.state.turn.currentEventId = diceEvent.id;
+  engine.state.turn.phase = 'rolled';
+  engine.state.turn.dieResult = 2;
+  assert.match(renderGame(engine, 'de'), /Ereignis ohne Wirkung abschließen \(passiv\)/);
+  assert.equal(engine.ignoreEventWithTactician(now + 302), true);
+  assert.equal(engine.state.turn.phase, 'resolved');
+  assert.equal(engine.state.turn.outcomeCode, 'ignored');
+});
+
 test('stored ingredient roll effects are explained without looking like character abilities', () => {
   const engine = create('herbalist', 4_603);
   const diceEvent = EVENT_DECKS[1].find((event) => event.type === 'dice');
@@ -207,8 +269,16 @@ test('stored ingredient roll effects are explained without looking like characte
 
   assert.ok(engine.rerollDieWithIngredient() >= 1);
   const afterReroll = renderGame(engine, 'de');
-  assert.match(afterReroll, /Gespeicherten Effekt: −1/);
-  assert.match(afterReroll, /Gespeicherten Effekt: \+1/);
+  if (engine.state.turn.dieResult === 1) {
+    assert.doesNotMatch(afterReroll, /Gespeicherten Effekt: −1/);
+    assert.match(afterReroll, /Gespeicherten Effekt: \+1/);
+  } else if (engine.state.turn.dieResult === 6) {
+    assert.match(afterReroll, /Gespeicherten Effekt: −1/);
+    assert.doesNotMatch(afterReroll, /Gespeicherten Effekt: \+1/);
+  } else {
+    assert.match(afterReroll, /Gespeicherten Effekt: −1/);
+    assert.match(afterReroll, /Gespeicherten Effekt: \+1/);
+  }
   assert.doesNotMatch(afterReroll, /Gespeicherten Neuwurf einsetzen/);
 });
 

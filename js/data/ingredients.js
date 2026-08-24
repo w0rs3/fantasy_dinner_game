@@ -62,9 +62,52 @@ export const SHOPPING_STAPLES = Object.freeze([
     'Adds seasoning and umami to the roasting-bag sauce; use carefully because it is salty.'
   ),
   shoppingStaple(
-    'main-seasonings', 'Gewürze für den Hauptgang', 'Main-course seasonings', q(1, 1, 'Grundausstattung', 'basic selection'),
-    'Mindestens Salz, Pfeffer und Paprika; weitere passende Gewürze können nach Geschmack ergänzt werden.',
-    'At minimum salt, pepper, and paprika; add other suitable seasonings to taste.'
+    'main-seasonings', 'Salz, Pfeffer und Gewürze', 'Salt, pepper, and seasonings', q(1, 1, 'Grundausstattung', 'basic selection'),
+    'Für alle herzhaften Gänge sowie passende Desserts und Cocktails. Mindestens Salz, Pfeffer und Paprika; weitere passende Gewürze nach Geschmack.',
+    'For all savoury courses and suitable desserts or cocktails. At minimum salt, pepper, and paprika; add other suitable seasonings to taste.',
+    ['tapas', 'soup', 'salad', 'main', 'dessert', 'cocktails']
+  ),
+  shoppingStaple(
+    'stock', 'Brühe', 'Stock', q(2, 3, 'l'),
+    'Für die Suppe nach Bedarf bereitstellen; sie bleibt Grundvorrat und wird nicht als erspielte Zutat einem Gang zugeordnet.',
+    'Keep available for the soup as needed; it remains a pantry staple and is not assigned as a played ingredient.',
+    ['soup']
+  ),
+  shoppingStaple(
+    'cooking-oil', 'Speiseöl', 'Cooking oil', q(500, 750, 'ml'),
+    'Zum Anschwitzen, Braten, für Dressings und zum feinen Anpassen der Bratschlauch-Sauce nach Bedarf.',
+    'Use as needed for sweating, frying, dressings, and fine-tuning the roasting-bag sauce.',
+    ['tapas', 'soup', 'salad', 'main']
+  ),
+  shoppingStaple(
+    'butter', 'Butter', 'Butter', q(250, 500, 'g'),
+    'Nur bei Bedarf zum Abrunden, Anschwitzen oder für passende Dessertkomponenten verwenden; keine erspielte Zutat.',
+    'Use only when suitable for finishing, sweating, or dessert components; it is not a played ingredient.',
+    ['soup', 'main', 'dessert']
+  ),
+  shoppingStaple(
+    'vinegar', 'Essig', 'Vinegar', q(250, 500, 'ml'),
+    'Für Dressings und zum Abschmecken jederzeit verfügbar; sparsam dosieren und nach jeder Zugabe probieren.',
+    'Always available for dressings and final seasoning; dose carefully and taste after each addition.',
+    ['soup', 'salad', 'main']
+  ),
+  shoppingStaple(
+    'yoghurt', 'Joghurt', 'Yoghurt', q(500, 750, 'g'),
+    'Optionale Grundvorrats-Basis für das Salatdressing oder passende cremige Komponenten; keine erspielte Zutat.',
+    'Optional pantry base for salad dressing or suitable creamy components; it is not a played ingredient.',
+    ['salad', 'dessert']
+  ),
+  shoppingStaple(
+    'fresh-herbs', 'Frische Kräuter', 'Fresh herbs', q(3, 5, 'Bund', 'bunches'),
+    'Zum Abschmecken und Garnieren frei verfügbar; empfindliche Kräuter erst kurz vor dem Servieren verarbeiten.',
+    'Freely available for seasoning and garnish; prepare delicate herbs shortly before serving.',
+    ['soup', 'salad', 'main', 'dessert', 'cocktails']
+  ),
+  shoppingStaple(
+    'ice-cubes', 'Eiswürfel', 'Ice cubes', q(3, 5, 'kg'),
+    'Für beide Cocktailvarianten verbindlicher Grundvorrat; nicht als Zutatenkarte ausspielen.',
+    'Required pantry supply for both cocktail versions; do not play it as an ingredient card.',
+    ['cocktails']
   ),
   shoppingStaple(
     'coconut-milk', 'Kokosmilch', 'Coconut milk', q(400, 800, 'ml'),

@@ -22,21 +22,14 @@ function startChallenge(id, seed = 700, targetPlayerId = null) {
   return engine;
 }
 
-test('multi-turn challenges activate and hand over instead of blocking the current turn', () => {
+test('public multi-turn challenges show their instructions, then activate and hand over', () => {
   const engine = startChallenge('compliments');
   const ownerId = engine.activePlayer.id;
-  const announcement = renderGame(engine, 'de');
-  assert.match(announcement, /Alle außer der aktiven Person schauen jetzt vom großen Bildschirm weg/);
-  assert.match(announcement, /data-action="reveal-secret-watch"/);
-  assert.doesNotMatch(announcement, /Rückenwind für die Crew|ehrliches, kurzes Kompliment|data-action="activate-watch"/);
-
-  assert.equal(engine.activateOngoingWatchChallenge(now + 150), false, 'a secret event cannot start before it is privately opened');
-  assert.equal(engine.revealSecretWatchChallenge(now + 160), true);
   const html = renderGame(engine, 'de');
-  assert.match(html, /<details class="secret-instruction" open>/);
+  assert.match(html, /Rückenwind für die Crew|ehrliches, kurzes Kompliment/);
   assert.match(html, /data-action="activate-watch"/);
-  assert.match(html, /Geheime Challenge starten &amp; Tablet weitergeben|Geheime Challenge starten & Tablet weitergeben/);
-  assert.match(html, /Nicht vorlesen, nicht zeigen und der Gruppe nicht erklären/);
+  assert.match(html, /Challenge starten &amp; Tablet weitergeben|Challenge starten & Tablet weitergeben/);
+  assert.doesNotMatch(html, /Geheime Challenge|reveal-secret-watch|secret-instruction|Nicht vorlesen/);
   assert.match(html, /Die Aktion beginnt erst mit dem Button/);
   assert.doesNotMatch(html, /data-watch-timer/);
 
@@ -65,14 +58,11 @@ test('speech rules and captain permission last until the owner next receives the
     const targetName = engine.state.players.find((player) => player.id === engine.state.turn.watchTargetPlayerId).name;
     const html = renderGame(engine, 'de');
     if (id === 'captain-permission') {
-      assert.doesNotMatch(html, new RegExp(targetName));
-      assert.equal(engine.revealSecretWatchChallenge(now + 150 + index), true);
-      const revealedHtml = renderGame(engine, 'de');
-      assert.match(revealedHtml, new RegExp(targetName));
-      assert.doesNotMatch(revealedHtml, /\{targetPlayer\}/);
-    } else {
-      assert.equal(engine.revealSecretWatchChallenge(now + 150 + index), true);
+      assert.match(html, new RegExp(targetName));
+      assert.doesNotMatch(html, /\{targetPlayer\}/);
     }
+    assert.equal(engine.currentWatchChallenge.secret, false);
+    assert.equal(engine.revealSecretWatchChallenge(now + 150 + index), false);
     assert.equal(engine.currentWatchChallenge.flow, 'ongoing');
     assert.equal(engine.currentWatchChallenge.endTrigger, 'ownerNextTurn');
     assert.equal(engine.activateOngoingWatchChallenge(now + 200 + index), true);
@@ -361,7 +351,7 @@ test('the pirate verse event accepts either a song or a dramatic poem', () => {
 });
 
 test('private one-person challenges announce privacy, reveal in a collapse, and require an explicit start', () => {
-  const engine = startChallenge('table-lap', 704);
+  const engine = startChallenge('folded-note', 704);
   assert.equal(engine.currentWatchChallenge.secret, true);
   assert.equal(engine.state.turn.watchSecretRevealedAt, null);
   assert.equal(engine.state.turn.watchStartedAt, null);
@@ -372,15 +362,15 @@ test('private one-person challenges announce privacy, reveal in a collapse, and 
   assert.match(before, /Geheimes Event/);
   assert.match(before, /großen Bildschirm weg/);
   assert.match(before, /data-action="reveal-secret-watch"/);
-  assert.doesNotMatch(before, /Geheimer Rundgang|geh einmal um den Tisch|data-action="start-watch"/);
+  assert.doesNotMatch(before, /streng geheime Nachricht|Nicht sagen, was hier draufsteht|data-action="start-watch"/);
 
   assert.equal(engine.revealSecretWatchChallenge(now + 250), true);
   assert.equal(engine.revealSecretWatchChallenge(now + 251), false, 'the private reveal boundary is unique');
   const revealed = renderGame(engine, 'de');
   assert.match(revealed, /<details class="secret-instruction" open>/);
   assert.match(revealed, /<summary[^>]*>Geheime Anweisung anzeigen<\/summary>/);
-  assert.match(revealed, /Geheimer Rundgang/);
-  assert.match(revealed, /geh einmal um den Tisch/);
+  assert.match(revealed, /streng geheime Nachricht/);
+  assert.match(revealed, /Nicht sagen, was hier draufsteht/);
   assert.match(revealed, /data-action="start-watch"/);
   assert.match(revealed, /Geheimes Event starten/);
 
@@ -397,7 +387,7 @@ test('private one-person challenges announce privacy, reveal in a collapse, and 
 
 test('event choices never reveal a secret challenge before it is drawn', () => {
   const engine = GameEngine.create({ names, title: 'Private preview', defaultLanguage: 'de', seed: 705 }, now);
-  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'compliments');
+  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'chicken');
   const event = EVENT_DECKS[0].find((card) =>
     card.locationIndex === 0 && card.stage === 'cooking' && card.type === 'choice' && card.options.includes('watchChallenge')
   );
@@ -434,7 +424,7 @@ test('strange encounters offer accepting the challenge or losing coins instead o
 test('ingredient-round fun choices offer one challenge or a five-coin loss without duplicate rewards', () => {
   const engine = GameEngine.create({ names, title: 'Pantry choice', defaultLanguage: 'de', seed: 719 }, now);
   const event = EVENT_DECKS[0].find((card) => card.archetype === 'pantry-mischief');
-  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'compliments');
+  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'chicken');
   assert.deepEqual(event.options, ['watchChallenge', 'coinLoss']);
   engine.state.chapter.stage = 'ingredients';
   engine.state.funCardQueue = [secret.id, ...engine.state.funCardQueue.filter((id) => id !== secret.id)];

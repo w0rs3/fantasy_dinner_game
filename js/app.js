@@ -470,8 +470,8 @@ async function handleAction(target) {
         if (roleId === 'gambler') animateVisibleDie('.role-guide .dice-stage');
       }
       else showToast(language() === 'de'
-        ? 'Diese Spezialfähigkeit kann nur in einem passenden, abgeschlossenen Kartenschritt eingesetzt werden.'
-        : 'This special ability can only be used during a matching, settled card step.');
+        ? 'Diese Spezialfähigkeit kann nur in einem passenden Kartenschritt eingesetzt werden.'
+        : 'This special ability can only be used during a matching card step.');
       break;
     }
     case 'ignore-event': engine.ignoreEventWithTactician(); persist(); render(); break;

@@ -175,6 +175,31 @@ test('every task can be completed early and its challenge score survives persist
   assert.notEqual(restored.state.tasks[0].status, 'done');
 });
 
+test('a completed prerequisite cannot be reopened after a cross-quest dependent task was dealt', () => {
+  const now = 1_800_000_045_000;
+  const engine = createEngineWithTask({ names, title: 'Dependent undo guard', defaultLanguage: 'de', seed: 450 }, now);
+  const preparation = getPlayableQuestLines(0).flat().find((card) => card.blueprintIndex === 3);
+  const serving = getPlayableQuestLines(0).flat().find((card) =>
+    card.questId === 'serve' && card.prerequisites.some((requirement) => requirement.requiredBlueprintIndex === preparation.blueprintIndex)
+  );
+  const instance = engine.state.tasks[0];
+  instance.taskId = preparation.id;
+  assert.equal(engine.completeTask(instance.instanceId, now + 1_000), true);
+  engine.state.tasks.push({
+    ...structuredClone(instance),
+    instanceId: 'dependent-serving-task',
+    taskId: serving.id,
+    assignedPlayerIds: [engine.state.players.find((player) => !instance.assignedPlayerIds.includes(player.id)).id],
+    status: 'queued',
+    completedAt: null,
+    coinDelta: null
+  });
+
+  assert.equal(engine.canUndoTaskCompletion(instance.instanceId), false);
+  assert.equal(engine.undoTaskCompletion(instance.instanceId, now + 2_000), false);
+  assert.equal(instance.status, 'done');
+});
+
 test('manual frying tasks have no countdown and no time-based coin score', () => {
   const now = 1_800_000_050_000;
   const engine = createEngineWithTask({ names, title: 'Doneness test', defaultLanguage: 'de', seed: 451 }, now);
@@ -193,6 +218,8 @@ test('manual frying tasks have no countdown and no time-based coin score', () =>
   assert.equal(task.challengeResult, 'manual');
   assert.equal(task.challengeCoinValue, 0);
   assert.equal(engine.state.coins, coinsBefore);
+  assert.match(renderTasks(engine, 'de'), /Keine Münzwertung/);
+  assert.doesNotMatch(renderTasks(engine, 'de'), /Münzwertung: ±0 Münzen/);
 });
 
 test('the current briefing task can be checked directly from the task list without blocking the turn', () => {

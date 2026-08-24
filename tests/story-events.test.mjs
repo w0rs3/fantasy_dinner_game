@@ -82,6 +82,15 @@ test('entering an island always queues its island story before the first locatio
   assert.deepEqual(engine.state.eventsDrawn.slice(0, 2), ['SI1', 'SL1-1']);
 });
 
+test('mandatory stories and memory questions cannot be skipped by the Tactician passive', () => {
+  const engine = create(91_006);
+  engine.activePlayer.roleId = 'tactician';
+  assert.equal(engine.beginEvent(now + 1).storyKind, 'island');
+  assert.equal(engine.ignoreEventWithTactician(now + 2), false);
+  assert.doesNotMatch(renderGame(engine, 'de'), /Ereignis ohne Wirkung abschließen \(passiv\)/);
+  assert.equal(engine.state.turn.phase, 'event');
+});
+
 test('moving to another location queues exactly one new required story', () => {
   const engine = create(91_002);
   engine.beginEvent(now + 1);
@@ -99,7 +108,7 @@ test('moving to another location queues exactly one new required story', () => {
   assert.equal(engine.activeAbilityAvailable(), false);
 });
 
-test('memory questions enforce their prerequisites and award or remove exactly three coins', () => {
+test('memory questions enforce prerequisites and apply character passives to their three-coin base score', () => {
   const prepareQuiz = (seed, answerCorrect) => {
     const engine = create(seed);
     engine.beginEvent(now + 1);
@@ -115,6 +124,7 @@ test('memory questions enforce their prerequisites and award or remove exactly t
     engine.state.chapter.nextStoryQuizAt = 0;
     const drawn = engine.beginEvent(now + 7);
     assert.equal(drawn.id, quiz.id);
+    if (!answerCorrect) assert.match(renderGame(engine, 'de'), /falsche Antwort: −4 Münzen/);
     const answerId = answerCorrect ? quiz.correctAnswerId : quiz.answers.find((answer) => answer.id !== quiz.correctAnswerId).id;
     assert.equal(engine.answerStoryQuiz(answerId, now + 8), true);
     return engine;
@@ -124,8 +134,8 @@ test('memory questions enforce their prerequisites and award or remove exactly t
   assert.equal(correct.state.coins, 13);
   assert.equal(correct.state.turn.storyCoinDelta, 3);
   const wrong = prepareQuiz(91_004, false);
-  assert.equal(wrong.state.coins, 7, 'Unlucky does not change the fixed story-quiz loss');
-  assert.equal(wrong.state.turn.storyCoinDelta, -3);
+  assert.equal(wrong.state.coins, 6, 'Unlucky increases a loss caused during the player’s own turn');
+  assert.equal(wrong.state.turn.storyCoinDelta, -4);
 });
 
 test('the card overview exposes all story groups, requirements, scoring, and current usage', () => {
