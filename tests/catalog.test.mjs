@@ -29,19 +29,21 @@ test('catalog contains 580 uniquely named event cards including an expanded main
 });
 
 test('interludes reserve privacy for linked surprises, alongside drinks, co-op cards, and a real break', () => {
-  assert.equal(WATCH_CHALLENGES.length, 139);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.id)).size, 139);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.de)).size, 139);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.en)).size, 139);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.de)).size, 139);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.en)).size, 139);
+  assert.equal(WATCH_CHALLENGES.length, 147);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.id)).size, 147);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.de)).size, 147);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.en)).size, 147);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.de)).size, 147);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.en)).size, 147);
   const cooperative = WATCH_CHALLENGES.filter((challenge) => challenge.cooperative);
   assert.equal(cooperative.length, 30);
   assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 1).length, 20);
   assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 2).length, 10);
   assert.deepEqual(
     WATCH_CHALLENGES.filter((challenge) => challenge.secret).map((challenge) => challenge.id),
-    ['chicken', 'stop-chicken', 'nose-voice', 'stop-nose', 'folded-note']
+    ['chicken', 'stop-chicken', 'nose-voice', 'stop-nose', 'folded-note',
+      'charade-anchor', 'charade-parrot', 'charade-treasure-chest', 'charade-storm-ship',
+      'charade-lighthouse', 'charade-cannon', 'charade-seasick-pirate', 'charade-buried-treasure']
   );
   assert.ok(WATCH_CHALLENGES.some((challenge) => challenge.minutes === 5 && challenge.coins === 0));
   const chicken = WATCH_CHALLENGES.find((challenge) => challenge.id === 'chicken');

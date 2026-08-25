@@ -1846,6 +1846,7 @@ export class GameEngine {
           return openChapterTasks.some((instance) => instance.endAt && ['active', 'ready'].includes(instance.status));
         case 'hazardousTaskOpen':
           return openChapterTasks.some((instance) => Boolean(this.getTaskCard(instance)?.safety));
+        case 'twoFreeGuessers': return this.availableCoopPartners().length >= 2;
         default: return false;
       }
     });

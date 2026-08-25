@@ -142,9 +142,10 @@ function eventActionText(engine, actionCode, language) {
   if (['watchSuccess', 'watchFailure'].includes(actionCode)) {
     const coins = Number(engine.state.turn.watchCoinDelta) || 0;
     const coinText = `${coins > 0 ? '+' : coins < 0 ? '−' : '±'}${Math.abs(coins)}`;
+    const charade = engine.currentWatchChallenge?.charade;
     return language === 'de'
-      ? `${actionCode === 'watchSuccess' ? 'Challenge geschafft' : 'Challenge gescheitert'} · ${coinText} Münzen`
-      : `${actionCode === 'watchSuccess' ? 'Challenge succeeded' : 'Challenge failed'} · ${coinText} coins`;
+      ? `${actionCode === 'watchSuccess' ? (charade ? 'Scharade erraten' : 'Challenge geschafft') : (charade ? 'Scharade nicht erraten' : 'Challenge gescheitert')} · ${coinText} Münzen`
+      : `${actionCode === 'watchSuccess' ? (charade ? 'Charade guessed' : 'Challenge succeeded') : (charade ? 'Charade not guessed' : 'Challenge failed')} · ${coinText} coins`;
   }
   if (['drawTask', 'singleTask', 'teamTask', 'treasureAndTask'].includes(actionCode)) {
     const resolvedInstance = engine.state.turn.phase === 'resolved' && engine.state.turn.resolvedTaskId
@@ -963,12 +964,13 @@ function renderWatchCard(engine, language) {
   const mandatory = challenge.mandatory;
   const cooperative = challenge.cooperative;
   const skillCheck = challenge.skillCheck;
+  const charade = challenge.charade;
   const failurePreview = skillCheck ? engine.coinLossPreview(challenge.failureCoins) : null;
   const failureCoins = skillCheck ? Math.abs(failurePreview.amount) : 0;
   const skillScoreText = skillCheck
     ? (language === 'de'
-      ? `Erfolg +${challenge.successCoins} · Scheitern −${failureCoins} Münzen`
-      : `Success +${challenge.successCoins} · failure −${failureCoins} coins`)
+      ? `${charade ? 'Erraten' : 'Erfolg'} +${challenge.successCoins} · ${charade ? 'nicht erraten' : 'Scheitern'} −${failureCoins} Münzen`
+      : `${charade ? 'Guessed' : 'Success'} +${challenge.successCoins} · ${charade ? 'not guessed' : 'failure'} −${failureCoins} coins`)
     : '';
   const cooperativeNames = [engine.activePlayer.id, ...(challenge.partnerPlayerIds ?? [])]
     .map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name)
@@ -1019,10 +1021,12 @@ function renderWatchCard(engine, language) {
         ? `<span>${language === 'de' ? 'Noch nicht gestartet' : 'Not started yet'}</span>`
         : mandatory ? `<span>${language === 'de' ? 'Jetzt verbindlich ausführen' : 'Carry out now'}</span>` : ongoing ? `<span>${durationText}</span>`
         : `<span class="timer" data-watch-timer>${formatDuration(seconds)}</span>`}<strong>${skillCheck ? skillScoreText : challenge.coins > 0 ? `+${challenge.coins} ${language === 'de' ? 'Münzen nach Abschluss' : 'coins after completion'}` : (language === 'de' ? 'echte Pause' : 'real break')}</strong></div>
-      <div class="card-effect">${skillCheck
-        ? (language === 'de' ? 'Führt genau den beschriebenen Versuch aus und wertet ehrlich. Drückt danach genau einen der beiden Ergebnis-Buttons.' : 'Perform the described attempt exactly and score it honestly. Then press exactly one of the two result buttons.')
-        : awaitingSecretStart
+      <div class="card-effect">${awaitingSecretStart
           ? (language === 'de' ? 'Lies die aufgeklappte Anweisung, klappe sie wieder zu und starte das geheime Event erst dann. Die Aktion beginnt erst mit dem Startknopf.' : 'Read the expanded instruction, collapse it again, and only then start the secret event. The action begins only with the start button.')
+        : skillCheck
+          ? charade
+            ? (language === 'de' ? 'Die übrige Crew rät jetzt eine Minute. Drückt danach ehrlich „Erraten“ oder „Nicht erraten“.' : 'The rest of the crew now has one minute to guess. Afterwards, honestly press “Guessed” or “Not guessed.”')
+            : (language === 'de' ? 'Führt genau den beschriebenen Versuch aus und wertet ehrlich. Drückt danach genau einen der beiden Ergebnis-Buttons.' : 'Perform the described attempt exactly and score it honestly. Then press exactly one of the two result buttons.')
         : mandatory
         ? (language === 'de' ? 'Führe die verbindliche Anweisung jetzt aus und bestätige sie anschließend.' : 'Carry out the mandatory instruction now, then confirm it.')
         : ongoing
@@ -1030,9 +1034,11 @@ function renderWatchCard(engine, language) {
         : challenge.secret
             ? (language === 'de' ? 'Die geheime Challenge läuft jetzt. Führe sie aus, ohne der Gruppe die Karte zu erklären.' : 'The secret challenge is now running. Carry it out without explaining the card to the group.')
             : (language === 'de' ? 'Erledigt die kurze Aktion jetzt; laufende Küchen-Challenges bleiben davon unberührt.' : 'Complete the short action now; running kitchen challenges continue independently.')}</div>
-      ${skillCheck ? `<div class="button-row skill-check-actions">
-        <button class="primary-button" type="button" data-action="resolve-watch-outcome" data-outcome="success">${language === 'de' ? `Hat geklappt · +${challenge.successCoins} Münzen` : `Succeeded · +${challenge.successCoins} coins`}</button>
-        <button class="secondary-button" type="button" data-action="resolve-watch-outcome" data-outcome="failure">${language === 'de' ? `Gescheitert · −${failureCoins} Münzen` : `Failed · −${failureCoins} coins`}</button>
+      ${awaitingSecretStart
+        ? `<button class="primary-button" type="button" data-action="start-watch">${language === 'de' ? 'Geheimes Event starten' : 'Start secret event'}</button>`
+        : skillCheck ? `<div class="button-row skill-check-actions">
+        <button class="primary-button" type="button" data-action="resolve-watch-outcome" data-outcome="success">${language === 'de' ? `${charade ? 'Erraten' : 'Hat geklappt'} · +${challenge.successCoins} Münzen` : `${charade ? 'Guessed' : 'Succeeded'} · +${challenge.successCoins} coins`}</button>
+        <button class="secondary-button" type="button" data-action="resolve-watch-outcome" data-outcome="failure">${language === 'de' ? `${charade ? 'Nicht erraten' : 'Gescheitert'} · −${failureCoins} Münzen` : `${charade ? 'Not guessed' : 'Failed'} · −${failureCoins} coins`}</button>
       </div>` : `<button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${ongoing
         ? challenge.secret
           ? (language === 'de' ? 'Geheime Challenge starten & Tablet weitergeben' : 'Start secret challenge & pass the tablet')

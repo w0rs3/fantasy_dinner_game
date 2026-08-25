@@ -171,11 +171,21 @@ test('the audited challenge deck uses success and failure only for objectively f
     'skill-one-leg', 'skill-thumb-ladder', 'skill-paper-catch',
     'skill-paper-balance', 'skill-opposite-feet', 'skill-opposite-circles'
   ];
+  const charadeIds = [
+    'charade-anchor', 'charade-parrot', 'charade-treasure-chest', 'charade-storm-ship',
+    'charade-lighthouse', 'charade-cannon', 'charade-seasick-pirate', 'charade-buried-treasure'
+  ];
 
-  assert.equal(skillChecks.length, 15);
+  assert.equal(skillChecks.length, 23);
   assert.ok(skillChecks.every((challenge) =>
-    challenge.flow === 'immediate' && !challenge.secret && challenge.successCoins === 3 && challenge.failureCoins === -2
+    challenge.flow === 'immediate' && challenge.successCoins === 3 && challenge.failureCoins === -2
   ));
+  assert.ok(skillChecks.filter((challenge) => !charadeIds.includes(challenge.id)).every((challenge) => !challenge.secret));
+  assert.ok(charadeIds.every((id) => {
+    const challenge = WATCH_CHALLENGES.find((entry) => entry.id === id);
+    return challenge?.skillCheck && challenge.secret && challenge.charade && !challenge.dexterity &&
+      challenge.durationSeconds === 60 && challenge.requirements.includes('twoFreeGuessers');
+  }));
   assert.ok(newDexterityIds.every((id) => {
     const challenge = WATCH_CHALLENGES.find((entry) => entry.id === id);
     return challenge?.skillCheck && challenge.dexterity && [15, 30].includes(challenge.durationSeconds);
@@ -206,6 +216,40 @@ test('dexterity cards show exactly two result buttons and award their success sc
   assert.equal(engine.state.turn.watchCoinDelta, 3);
   assert.equal(engine.state.turn.outcomeCode, 'watchSuccess');
   assert.match(renderGame(engine, 'de'), /Challenge geschafft · \+3 Münzen/);
+});
+
+test('secret charades hide the answer, start a one-minute guessing round, and score both outcomes', () => {
+  const success = startChallenge('charade-anchor', 8_304);
+  success.state.coins = 10;
+  const announcement = renderGame(success, 'de');
+  assert.match(announcement, /Geheimes Event|data-action="reveal-secret-watch"/);
+  assert.doesNotMatch(announcement, /schweren Schiffsanker|Scharade: Der schwere Anker/);
+  assert.equal(success.resolveWatchChallengeOutcome('success', now + 150), false);
+
+  assert.equal(success.revealSecretWatchChallenge(now + 160), true);
+  const revealed = renderGame(success, 'de');
+  assert.match(revealed, /schweren Schiffsanker|Scharade: Der schwere Anker/);
+  assert.match(revealed, /data-action="start-watch"/);
+  assert.doesNotMatch(revealed, /data-action="resolve-watch-outcome"/);
+
+  assert.equal(success.startWatchChallengeAction(now + 200), true);
+  assert.equal(success.state.turn.watchEndsAt - success.state.turn.watchStartedAt, 60_000);
+  const running = renderGame(success, 'de');
+  assert.equal((running.match(/data-action="resolve-watch-outcome"/g) ?? []).length, 2);
+  assert.match(running, /Erraten · \+3 Münzen/);
+  assert.match(running, /Nicht erraten · −2 Münzen/);
+  assert.equal(success.resolveWatchChallengeOutcome('success', now + 300), true);
+  assert.equal(success.state.coins, 13);
+  assert.match(renderGame(success, 'de'), /Scharade erraten · \+3 Münzen/);
+
+  const failure = startChallenge('charade-parrot', 8_305);
+  failure.state.coins = 10;
+  assert.equal(failure.revealSecretWatchChallenge(now + 400), true);
+  assert.equal(failure.startWatchChallengeAction(now + 410), true);
+  assert.equal(failure.resolveWatchChallengeOutcome('failure', now + 500), true);
+  assert.equal(failure.state.coins, 8);
+  assert.equal(failure.state.turn.watchOutcome, 'failure');
+  assert.match(renderGame(failure, 'de'), /Scharade nicht erraten · −2 Münzen/);
 });
 
 test('failed challenges lose coins and preview lucky or unlucky passive modifiers', () => {
@@ -489,8 +533,8 @@ test('the complete fun-card deck is randomly shuffled per voyage and reproducibl
   const repeated = order(8_001);
   const second = order(8_002);
 
-  assert.equal(first.length, 139);
-  assert.equal(new Set(first).size, 139);
+  assert.equal(first.length, 147);
+  assert.equal(new Set(first).size, 147);
   assert.deepEqual(first, repeated, 'the same seed recreates the same shuffled deck');
   assert.notDeepEqual(first.slice(0, 20), second.slice(0, 20), 'different voyages receive different opening orders');
   assert.equal(new Set(Array.from({ length: 12 }, (_, index) => order(8_100 + index)
@@ -518,6 +562,24 @@ test('co-op fun cards enter the pool only with enough task-free partners', () =>
   });
   cooperativeIds = engine.watchChallengeCandidates().filter((challenge) => challenge.cooperative).map((challenge) => challenge.id);
   assert.deepEqual(cooperativeIds, []);
+});
+
+test('secret charades enter the deck only while at least two guessers are free', () => {
+  const engine = GameEngine.create({ names, title: 'Charade availability', defaultLanguage: 'de', seed: 8_206 }, now);
+  const charade = WATCH_CHALLENGES.find((challenge) => challenge.id === 'charade-anchor');
+  const otherPlayers = engine.state.players.filter((player) => player.id !== engine.activePlayer.id);
+  engine.state.funCardQueue = [charade.id, ...engine.state.funCardQueue.filter((id) => id !== charade.id)];
+  otherPlayers.slice(2).forEach((player, index) => engine.state.tasks.push({
+    instanceId: `busy-charade-${index}`, taskId: 'A1-03', chapterIndex: 0,
+    assignedPlayerIds: [player.id], status: 'active', assignedAt: now, startedAt: now
+  }));
+  assert.ok(engine.watchChallengeCandidates().some((challenge) => challenge.id === charade.id));
+
+  engine.state.tasks.push({
+    instanceId: 'busy-second-guesser', taskId: 'A1-03', chapterIndex: 0,
+    assignedPlayerIds: [otherPlayers[1].id], status: 'active', assignedAt: now, startedAt: now
+  });
+  assert.equal(engine.watchChallengeCandidates().some((challenge) => challenge.id === charade.id), false);
 });
 
 test('a co-op card names only free partners and renders its complete crew', () => {

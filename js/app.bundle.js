@@ -1514,8 +1514,12 @@ const EFFECT_TEXT = Object.freeze({
 // Privacy is reserved for cards whose linked surprise would stop working if
 // the mirrored screen revealed it to the crew. Ordinary timed, physical and
 // ongoing challenges stay public.
+const SECRET_CHARADE_IDS = new Set([
+  'charade-anchor', 'charade-parrot', 'charade-treasure-chest', 'charade-storm-ship',
+  'charade-lighthouse', 'charade-cannon', 'charade-seasick-pirate', 'charade-buried-treasure'
+]);
 const PRIVATE_CHALLENGE_IDS = new Set([
-  'chicken', 'stop-chicken', 'nose-voice', 'stop-nose', 'folded-note'
+  'chicken', 'stop-chicken', 'nose-voice', 'stop-nose', 'folded-note', ...SECRET_CHARADE_IDS
 ]);
 
 const challenge = (id, de, en, options = {}) => ({
@@ -1526,6 +1530,7 @@ const challenge = (id, de, en, options = {}) => ({
     : options.coins === 0 ? 0 : Math.max(1, Math.ceil((options.coins ?? 2) / 3)),
   skillCheck: options.skillCheck ?? false,
   dexterity: options.dexterity ?? false,
+  charade: SECRET_CHARADE_IDS.has(id),
   successCoins: options.skillCheck ? Math.max(1, Number(options.successCoins) || 3) : null,
   failureCoins: options.skillCheck ? -Math.max(1, Math.abs(Number(options.failureCoins) || 2)) : null,
   durationSeconds: Math.max(1, Number(options.durationSeconds) || (options.minutes ?? 1) * 60),
@@ -1536,7 +1541,7 @@ const challenge = (id, de, en, options = {}) => ({
   cooperative: options.cooperative ?? false,
   partnerCount: options.partnerCount ?? 0,
   followUpOnly: options.followUpOnly ?? false,
-  requirements: options.requirements ?? []
+  requirements: options.requirements ?? (SECRET_CHARADE_IDS.has(id) ? ['twoFreeGuessers'] : [])
 });
 
 const WATCH_CHALLENGES = Object.freeze([
@@ -1582,6 +1587,14 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('chair-circle', 'Dreh dich sicher einmal mit einem geeigneten Drehstuhl im Kreis. Falls der Stuhl nicht dafür geeignet ist, steh auf und geh einmal um ihn herum.', 'Safely spin once in a suitable swivel chair. If the chair is not suitable, stand and walk around it once instead.', { title: { de: 'Einmal rund um die Insel', en: 'Once Around the Island' } }),
   challenge('ceremonial-greeting', 'Bestehe freundlich darauf, deinen Sitznachbarn feierlich zu begrüßen. Die andere Person wählt zwischen Handschlag, Faustgruß oder Winken.', 'Politely insist on ceremonially greeting the person beside you. They choose between a handshake, fist bump, or wave.', { title: { de: 'Feierlicher Matrosengruß', en: 'Ceremonial Sailor Greeting' } }),
   challenge('folded-note', 'Nimm einen Zettel und schreibe: „Nicht sagen, was hier draufsteht.“ Falte ihn und gib ihn einer beliebigen Person. Erkläre nichts weiter.', 'Take a note and write: “Do not say what is written here.” Fold it and hand it to any player. Explain nothing further.', { title: { de: 'Die streng geheime Nachricht', en: 'The Highly Secret Note' } }),
+  challenge('charade-anchor', 'Stelle pantomimisch einen schweren Schiffsanker dar, der erst hochgezogen und anschließend ins Meer gelassen wird. Sprich nicht, mache keine Geräusche und zeige nicht auf Gegenstände. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Anker“ oder „Schiffsanker“ zu erraten.', 'Mime a heavy ship anchor being hauled up and then lowered into the sea. Do not speak, make sounds, or point at objects. After the start, the rest of the crew has 60 seconds to guess “anchor” or “ship anchor.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der schwere Anker', en: 'Charade: The Heavy Anchor' } }),
+  challenge('charade-parrot', 'Stelle pantomimisch einen Papagei dar, der auf einer Piratenschulter sitzt, Körner pickt und mit den Flügeln schlägt. Sprich nicht, mache keine Tiergeräusche und zeige nicht auf Gegenstände. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Papagei“ zu erraten.', 'Mime a parrot sitting on a pirate’s shoulder, pecking seeds, and flapping its wings. Do not speak, make animal sounds, or point at objects. After the start, the rest of the crew has 60 seconds to guess “parrot.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der Papagei', en: 'Charade: The Parrot' } }),
+  challenge('charade-treasure-chest', 'Stelle pantomimisch dar, wie du eine schwere verschlossene Schatztruhe findest, mühsam öffnest und vom Inhalt geblendet wirst. Sprich nicht, mache keine Geräusche und zeige nicht auf Gegenstände. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Schatztruhe“ zu erraten.', 'Mime finding a heavy locked treasure chest, struggling to open it, and being dazzled by its contents. Do not speak, make sounds, or point at objects. After the start, the rest of the crew has 60 seconds to guess “treasure chest.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Die Schatztruhe', en: 'Charade: The Treasure Chest' } }),
+  challenge('charade-storm-ship', 'Stelle pantomimisch ein Piratenschiff in einem heftigen Sturm dar: schwankendes Deck, starkes Steuern und hohe Wellen. Bleib dabei sicher an deinem Platz. Sprich nicht und mache keine Geräusche. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Schiff im Sturm“ oder „Piratenschiff im Sturm“ zu erraten.', 'Mime a pirate ship in a fierce storm: a rolling deck, hard steering, and towering waves. Stay safely in place. Do not speak or make sounds. After the start, the rest of the crew has 60 seconds to guess “ship in a storm” or “pirate ship in a storm.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Sturm auf See', en: 'Charade: Storm at Sea' } }),
+  challenge('charade-lighthouse', 'Stelle pantomimisch einen Leuchtturm dar, dessen Licht langsam über das Meer wandert und einem Schiff den Weg zeigt. Sprich nicht, mache keine Geräusche und zeige nicht auf echte Lampen. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Leuchtturm“ zu erraten.', 'Mime a lighthouse whose beam slowly sweeps across the sea and guides a ship. Do not speak, make sounds, or point at real lights. After the start, the rest of the crew has 60 seconds to guess “lighthouse.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der Leuchtturm', en: 'Charade: The Lighthouse' } }),
+  challenge('charade-cannon', 'Stelle pantomimisch dar, wie eine Schiffskanone geladen, ausgerichtet und abgefeuert wird. Bleib an deinem Platz und berühre niemanden. Sprich nicht und mache keinen Kanonenknall. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Kanone“ oder „Schiffskanone“ zu erraten.', 'Mime loading, aiming, and firing a ship’s cannon. Stay in place and touch nobody. Do not speak or imitate the cannon blast. After the start, the rest of the crew has 60 seconds to guess “cannon” or “ship’s cannon.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Die Schiffskanone', en: 'Charade: The Ship’s Cannon' } }),
+  challenge('charade-seasick-pirate', 'Stelle pantomimisch einen seekranken Piraten auf starkem Wellengang dar, der sich am Mast festhält und trotzdem weiter Ausschau hält. Bleib sicher an deinem Platz und spiele nur. Sprich nicht und mache keine Geräusche. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „seekranker Pirat“ oder „Seekrankheit“ zu erraten.', 'Mime a seasick pirate in heavy waves, clinging to the mast while still keeping watch. Stay safely in place and only act it out. Do not speak or make sounds. After the start, the rest of the crew has 60 seconds to guess “seasick pirate” or “seasickness.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der seekranke Pirat', en: 'Charade: The Seasick Pirate' } }),
+  challenge('charade-buried-treasure', 'Stelle pantomimisch dar, wie du einer Schatzkarte folgst, an der richtigen Stelle gräbst und einen vergrabenen Schatz findest. Sprich nicht, mache keine Geräusche und benutze keine echten Gegenstände. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „vergrabener Schatz“ oder „Schatzsuche“ zu erraten.', 'Mime following a treasure map, digging in the right place, and finding buried treasure. Do not speak, make sounds, or use real objects. After the start, the rest of the crew has 60 seconds to guess “buried treasure” or “treasure hunt.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der vergrabene Schatz', en: 'Charade: The Buried Treasure' } }),
   challenge('captain-pose', 'Steh auf und nimm zehn Sekunden lang deine überzeugendste Kapitänspose ein. Setz dich danach wortlos wieder hin.', 'Stand and hold your most convincing captain’s pose for ten seconds. Then sit down again without a word.', { title: { de: 'Die Pose des Kapitäns', en: 'The Captain’s Pose' } }),
   challenge('invisible-parrot', 'Begrüße einen unsichtbaren Papagei auf deiner Schulter und frage ihn leise nach seiner Meinung.', 'Greet an invisible parrot on your shoulder and quietly ask for its opinion.', { title: { de: 'Der unsichtbare Papagei', en: 'The Invisible Parrot' } }),
   challenge('pirate-weather', 'Gib der Crew einen 20-sekündigen Wetterbericht für die aktuelle Piratenreise. Mindestens Wind, Wellen und die Aussicht auf Beute müssen vorkommen.', 'Give the crew a 20-second weather report for the current pirate voyage. Mention wind, waves, and the chance of treasure.', { title: { de: 'Wetterbericht von hoher See', en: 'High-Seas Weather Report' } }),
@@ -4195,6 +4208,7 @@ class GameEngine {
           return openChapterTasks.some((instance) => instance.endAt && ['active', 'ready'].includes(instance.status));
         case 'hazardousTaskOpen':
           return openChapterTasks.some((instance) => Boolean(this.getTaskCard(instance)?.safety));
+        case 'twoFreeGuessers': return this.availableCoopPartners().length >= 2;
         default: return false;
       }
     });
@@ -6652,9 +6666,10 @@ function eventActionText(engine, actionCode, language) {
   if (['watchSuccess', 'watchFailure'].includes(actionCode)) {
     const coins = Number(engine.state.turn.watchCoinDelta) || 0;
     const coinText = `${coins > 0 ? '+' : coins < 0 ? '−' : '±'}${Math.abs(coins)}`;
+    const charade = engine.currentWatchChallenge?.charade;
     return language === 'de'
-      ? `${actionCode === 'watchSuccess' ? 'Challenge geschafft' : 'Challenge gescheitert'} · ${coinText} Münzen`
-      : `${actionCode === 'watchSuccess' ? 'Challenge succeeded' : 'Challenge failed'} · ${coinText} coins`;
+      ? `${actionCode === 'watchSuccess' ? (charade ? 'Scharade erraten' : 'Challenge geschafft') : (charade ? 'Scharade nicht erraten' : 'Challenge gescheitert')} · ${coinText} Münzen`
+      : `${actionCode === 'watchSuccess' ? (charade ? 'Charade guessed' : 'Challenge succeeded') : (charade ? 'Charade not guessed' : 'Challenge failed')} · ${coinText} coins`;
   }
   if (['drawTask', 'singleTask', 'teamTask', 'treasureAndTask'].includes(actionCode)) {
     const resolvedInstance = engine.state.turn.phase === 'resolved' && engine.state.turn.resolvedTaskId
@@ -7473,12 +7488,13 @@ function renderWatchCard(engine, language) {
   const mandatory = challenge.mandatory;
   const cooperative = challenge.cooperative;
   const skillCheck = challenge.skillCheck;
+  const charade = challenge.charade;
   const failurePreview = skillCheck ? engine.coinLossPreview(challenge.failureCoins) : null;
   const failureCoins = skillCheck ? Math.abs(failurePreview.amount) : 0;
   const skillScoreText = skillCheck
     ? (language === 'de'
-      ? `Erfolg +${challenge.successCoins} · Scheitern −${failureCoins} Münzen`
-      : `Success +${challenge.successCoins} · failure −${failureCoins} coins`)
+      ? `${charade ? 'Erraten' : 'Erfolg'} +${challenge.successCoins} · ${charade ? 'nicht erraten' : 'Scheitern'} −${failureCoins} Münzen`
+      : `${charade ? 'Guessed' : 'Success'} +${challenge.successCoins} · ${charade ? 'not guessed' : 'failure'} −${failureCoins} coins`)
     : '';
   const cooperativeNames = [engine.activePlayer.id, ...(challenge.partnerPlayerIds ?? [])]
     .map((playerId) => engine.state.players.find((player) => player.id === playerId)?.name)
@@ -7529,10 +7545,12 @@ function renderWatchCard(engine, language) {
         ? `<span>${language === 'de' ? 'Noch nicht gestartet' : 'Not started yet'}</span>`
         : mandatory ? `<span>${language === 'de' ? 'Jetzt verbindlich ausführen' : 'Carry out now'}</span>` : ongoing ? `<span>${durationText}</span>`
         : `<span class="timer" data-watch-timer>${formatDuration(seconds)}</span>`}<strong>${skillCheck ? skillScoreText : challenge.coins > 0 ? `+${challenge.coins} ${language === 'de' ? 'Münzen nach Abschluss' : 'coins after completion'}` : (language === 'de' ? 'echte Pause' : 'real break')}</strong></div>
-      <div class="card-effect">${skillCheck
-        ? (language === 'de' ? 'Führt genau den beschriebenen Versuch aus und wertet ehrlich. Drückt danach genau einen der beiden Ergebnis-Buttons.' : 'Perform the described attempt exactly and score it honestly. Then press exactly one of the two result buttons.')
-        : awaitingSecretStart
+      <div class="card-effect">${awaitingSecretStart
           ? (language === 'de' ? 'Lies die aufgeklappte Anweisung, klappe sie wieder zu und starte das geheime Event erst dann. Die Aktion beginnt erst mit dem Startknopf.' : 'Read the expanded instruction, collapse it again, and only then start the secret event. The action begins only with the start button.')
+        : skillCheck
+          ? charade
+            ? (language === 'de' ? 'Die übrige Crew rät jetzt eine Minute. Drückt danach ehrlich „Erraten“ oder „Nicht erraten“.' : 'The rest of the crew now has one minute to guess. Afterwards, honestly press “Guessed” or “Not guessed.”')
+            : (language === 'de' ? 'Führt genau den beschriebenen Versuch aus und wertet ehrlich. Drückt danach genau einen der beiden Ergebnis-Buttons.' : 'Perform the described attempt exactly and score it honestly. Then press exactly one of the two result buttons.')
         : mandatory
         ? (language === 'de' ? 'Führe die verbindliche Anweisung jetzt aus und bestätige sie anschließend.' : 'Carry out the mandatory instruction now, then confirm it.')
         : ongoing
@@ -7540,9 +7558,11 @@ function renderWatchCard(engine, language) {
         : challenge.secret
             ? (language === 'de' ? 'Die geheime Challenge läuft jetzt. Führe sie aus, ohne der Gruppe die Karte zu erklären.' : 'The secret challenge is now running. Carry it out without explaining the card to the group.')
             : (language === 'de' ? 'Erledigt die kurze Aktion jetzt; laufende Küchen-Challenges bleiben davon unberührt.' : 'Complete the short action now; running kitchen challenges continue independently.')}</div>
-      ${skillCheck ? `<div class="button-row skill-check-actions">
-        <button class="primary-button" type="button" data-action="resolve-watch-outcome" data-outcome="success">${language === 'de' ? `Hat geklappt · +${challenge.successCoins} Münzen` : `Succeeded · +${challenge.successCoins} coins`}</button>
-        <button class="secondary-button" type="button" data-action="resolve-watch-outcome" data-outcome="failure">${language === 'de' ? `Gescheitert · −${failureCoins} Münzen` : `Failed · −${failureCoins} coins`}</button>
+      ${awaitingSecretStart
+        ? `<button class="primary-button" type="button" data-action="start-watch">${language === 'de' ? 'Geheimes Event starten' : 'Start secret event'}</button>`
+        : skillCheck ? `<div class="button-row skill-check-actions">
+        <button class="primary-button" type="button" data-action="resolve-watch-outcome" data-outcome="success">${language === 'de' ? `${charade ? 'Erraten' : 'Hat geklappt'} · +${challenge.successCoins} Münzen` : `${charade ? 'Guessed' : 'Succeeded'} · +${challenge.successCoins} coins`}</button>
+        <button class="secondary-button" type="button" data-action="resolve-watch-outcome" data-outcome="failure">${language === 'de' ? `${charade ? 'Nicht erraten' : 'Gescheitert'} · −${failureCoins} Münzen` : `${charade ? 'Not guessed' : 'Failed'} · −${failureCoins} coins`}</button>
       </div>` : `<button class="primary-button" type="button" data-action="${ongoing ? 'activate-watch' : awaitingSecretStart ? 'start-watch' : 'complete-watch'}">${ongoing
         ? challenge.secret
           ? (language === 'de' ? 'Geheime Challenge starten & Tablet weitergeben' : 'Start secret challenge & pass the tablet')
