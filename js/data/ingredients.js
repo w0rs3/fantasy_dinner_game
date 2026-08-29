@@ -142,7 +142,7 @@ export const INGREDIENTS = Object.freeze([
 
   item('pumpkin', 'vegetable', 'Kürbis', 'Pumpkin', q(1, 1, 'klein', 'small'), ['soup', 'salad', 'main'], { effect: 'rerollDie' }),
   item('asparagus', 'vegetable', 'Spargel', 'Asparagus', q(400, 500, 'g'), ['soup', 'salad', 'main'], { effect: 'shuffleVegetables' }),
-  item('potatoes', 'vegetable', 'Kartoffeln', 'Potatoes', q(1, 1.5, 'kg'), ['soup', 'salad', 'main'], { effect: 'ignoreIngredient' }),
+  item('potatoes', 'vegetable', 'Kartoffeln', 'Potatoes', q(1, 1.5, 'kg'), ['soup', 'main'], { effect: 'ignoreIngredient' }),
   item('carrots', 'vegetable', 'Möhren', 'Carrots', q(.75, 1, 'kg'), ['soup', 'salad', 'main'], { effect: 'repeatNextIngredient' }),
   item('kohlrabi', 'vegetable', 'Kohlrabi', 'Kohlrabi', q(2, 2, 'Stück', 'pieces'), ['soup', 'salad', 'main'], { effect: 'swapTopCards' }),
   item('peppers', 'vegetable', 'Paprika', 'Bell peppers', q(5, 7, 'Stück', 'pieces'), ['soup', 'salad', 'main'], { effect: 'drawVegetable' }),
@@ -150,7 +150,7 @@ export const INGREDIENTS = Object.freeze([
   item('onions', 'vegetable', 'Zwiebeln', 'Onions', q(6, 8, 'Stück', 'pieces'), ['soup', 'salad', 'main'], { effect: 'disablePassive' }),
   item('garlic', 'vegetable', 'Knoblauch', 'Garlic', q(2, 2, 'Knollen', 'bulbs'), ['soup', 'salad', 'main'], { effect: 'ignoreEvent' }),
   item('ginger', 'vegetable', 'Ingwer', 'Ginger', q(100, 100, 'g'), ['soup', 'salad', 'main', 'dessert', 'cocktails'], { effect: 'adjustDie' }),
-  item('chestnuts', 'pantry', 'Maronen', 'Chestnuts', q(200, 300, 'g'), ['soup', 'salad', 'main', 'dessert'], { effect: 'drawIngredient' }),
+  item('chestnuts', 'pantry', 'Maronen', 'Chestnuts', q(200, 300, 'g'), ['soup', 'main', 'dessert'], { effect: 'drawIngredient' }),
   item('lettuce', 'vegetable', 'Blattsalat', 'Mixed leaves', q(500, 800, 'g'), ['salad'], { effect: 'coins3' }),
   item('cucumber', 'vegetable', 'Gurke', 'Cucumber', q(1, 2, 'Stück', 'pieces'), ['salad', 'main'], { effect: 'shuffleVegetables' }),
   item('chicken', 'meat', 'Hähnchen', 'Chicken', q(450, 600, 'g'), ['soup', 'salad', 'main'], { effect: 'drawIngredient' }),

@@ -33,7 +33,7 @@ export const CHAPTERS = Object.freeze([
     course: { de: 'Salat', en: 'Salad' },
     subtitle: { de: 'Der grüne Tempelpfad', en: 'The green temple path' },
     atmosphere: { de: 'Warme Blätter, alte Ruinen und frische Früchte säumen den Pfad.', en: 'Warm leaves, old ruins, and fresh fruit line the path.' },
-    description: { de: 'Blattsalat, Gemüse, Früchte, Kerne und ein erspieltes Dressing.', en: 'Leaf salad, vegetables, fruit, seeds, and a dressing chosen by play.' },
+    description: { de: 'Blattsalat, roh essbares Gemüse, Früchte, Kerne und ein erspieltes Dressing.', en: 'Leaf salad, vegetables suitable for eating raw, fruit, seeds, and a dressing chosen by play.' },
     locations: [
       { de: 'Dschungeltor', en: 'Jungle Gate' }, { de: 'Tempelgarten', en: 'Temple Garden' },
       { de: 'Papageienpfad', en: 'Parrot Trail' }, { de: 'Wasserfall', en: 'Waterfall' },

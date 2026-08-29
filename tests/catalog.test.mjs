@@ -217,6 +217,8 @@ test('ingredient planner keeps a tagged global pool and only fixes Tapas', () =>
   assert.deepEqual(INGREDIENTS.filter((ingredient) => ['coins3', 'coins5'].includes(ingredient.effect)).map((ingredient) => ingredient.id), ['lettuce', 'honey', 'vanilla-ice', 'mineral-water']);
   assert.deepEqual(INGREDIENTS.find((ingredient) => ingredient.id === 'peppermint').courseTags, ['salad', 'dessert', 'cocktails']);
   assert.deepEqual(INGREDIENTS.find((ingredient) => ingredient.id === 'cucumber').courseTags, ['salad', 'main']);
+  assert.ok(!INGREDIENTS.find((ingredient) => ingredient.id === 'potatoes').courseTags.includes('salad'), 'potatoes require cooking and cannot be assigned to the salad');
+  assert.ok(!INGREDIENTS.find((ingredient) => ingredient.id === 'chestnuts').courseTags.includes('salad'), 'chestnuts require cooking and cannot be assigned to the salad');
   for (let playerCount = 6; playerCount <= 10; playerCount += 1) {
     const { plan } = buildIngredientPlan(1200 + playerCount, playerCount);
     const validation = validateIngredientPlan(plan);
