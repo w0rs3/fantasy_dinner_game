@@ -130,6 +130,28 @@ test('saved voyages retire broth from the played pool and add peppermint globall
   assert.deepEqual(restoredPeppermint.courseTags, ['salad', 'dessert', 'cocktails']);
 });
 
+test('saved voyages discard removed task cards without trapping the active turn', () => {
+  const engine = GameEngine.create({ names, title: 'Legacy dessert task', defaultLanguage: 'de', seed: 434 }, 1_800_000_000_000);
+  const legacy = engine.snapshot();
+  legacy.tasks.push({
+    instanceId: 'legacy-cool-watch',
+    taskId: 'A5-11',
+    chapterIndex: 4,
+    assignedPlayerIds: [legacy.players[0].id],
+    status: 'queued',
+    basketIngredientIds: []
+  });
+  legacy.turn.phase = 'taskBriefing';
+  legacy.turn.assignedTaskId = 'legacy-cool-watch';
+  legacy.turn.taskBriefingEndsTurn = true;
+
+  const restored = new GameEngine(legacy);
+  assert.equal(restored.state.tasks.some((task) => task.instanceId === 'legacy-cool-watch'), false);
+  assert.equal(restored.state.turn.assignedTaskId, null);
+  assert.equal(restored.state.turn.taskBriefingEndsTurn, false);
+  assert.equal(restored.state.turn.phase, 'draw');
+});
+
 test('saved voyages return an unlocked cucumber from the soup basket', () => {
   const engine = GameEngine.create({ names, title: 'Legacy cucumber soup', defaultLanguage: 'de', seed: 432 }, 1_800_000_000_000);
   engine.state.turn.phase = 'eating';

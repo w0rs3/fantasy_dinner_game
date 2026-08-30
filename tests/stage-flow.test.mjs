@@ -34,6 +34,20 @@ function beginSecondCourse(engine) {
   resolvePendingLocationStories(engine, now + 1_021);
 }
 
+test('the dessert treasure-plan card names the exact people in both subteams', () => {
+  const engine = create(70);
+  engine.state.chapterIndex = 4;
+  const card = TASK_DECKS[4].find((candidate) => candidate.title.de === 'Die zwei Schatzpläne');
+  const instance = {
+    taskId: card.id,
+    chapterIndex: 4,
+    assignedPlayerIds: engine.state.players.slice(0, 4).map((player) => player.id)
+  };
+  const instruction = engine.getTaskCard(instance).instruction.de;
+  assert.match(instruction, /Frucht-Team: Ada, Ben\./);
+  assert.match(instruction, /Schatz-Team: Cleo, Dario\./);
+});
+
 test('every later course starts by clearing the previous table before ingredient selection', () => {
   const engine = create(70);
   engine.state.tasks.forEach((task) => { task.status = 'done'; });

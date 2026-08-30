@@ -441,20 +441,28 @@ test('cocktail spirits remain independent optional choices in the global pool', 
   assert.equal(engine.state.turn.phase, 'draw');
   assert.equal(engine.currentEventStage(), 'ingredients');
   assert.equal(engine.prepareIngredientChoice('alcohol', 'event', { all: true }), true);
-  assert.deepEqual(new Set(engine.state.turn.pendingIngredientIds), new Set(['rum', 'gin', 'vodka']));
+  assert.deepEqual(new Set(engine.state.turn.pendingIngredientIds), new Set(['rum', 'gin', 'vodka', 'amaretto', 'triple-sec']));
   assert.equal(engine.chooseIngredient('rum'), true);
   assert.equal(engine.getIngredient('rum').status, 'discovered');
   assert.equal(engine.getIngredient('rum').chapterIndex, 5);
   assert.equal(engine.getIngredient('gin').status, 'available');
   assert.equal(engine.getIngredient('second-ice').essential, false);
   assert.equal(engine.getIngredient('ice-cubes'), undefined, 'ice is required basic stock, not an ingredient card');
-  assert.equal(engine.courseRule().target, 6);
-  assert.equal(engine.courseRule().optionalLimit, 4);
+  assert.equal(engine.courseRule().target, 5);
+  assert.equal(engine.courseRule().optionalLimit, 6);
   assert.equal(engine.courseRule().categoryLimits.alcohol, 3);
+  assert.equal(engine.courseRule().categoryLimits.drinks, 3);
   assert.equal(engine.courseRule().categoryMinimums.drinks, 2);
   assert.equal(engine.removeIngredientFromBasket('rum'), true);
   assert.equal(engine.getIngredient('rum').status, 'available');
   assert.equal(engine.getIngredient('rum').chapterIndex, null);
+});
+
+test('apple, orange, and cherry juice are separate optional cocktail ingredients', () => {
+  const juices = INGREDIENTS.filter((ingredient) => ingredient.category === 'drinks' && !ingredient.essential);
+  assert.deepEqual(juices.map((ingredient) => ingredient.id).sort(), ['apple-juice', 'cherry-juice', 'orange-juice']);
+  assert.ok(juices.every((ingredient) => ingredient.courseTags.includes('cocktails')));
+  assert.equal(INGREDIENTS.some((ingredient) => ingredient.id === 'juices'), false);
 });
 
 test('the optional dessert spirit task appears only when alcohol was assigned to dessert', () => {

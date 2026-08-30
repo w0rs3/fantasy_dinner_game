@@ -997,14 +997,14 @@ const shoppingStaple = (id, nameDe, nameEn, quantity, noteDe, noteEn, courseTags
 });
 
 const COURSE_INGREDIENT_RULES = Object.freeze({
-  // The five flexible courses consume exactly all 36 essential, non-Tapas
+  // The five flexible courses consume exactly all 35 essential, non-Tapas
   // ingredients. Optional cocktail extras do not count towards these targets.
   tapas: { target: 9, optionalLimit: 0, categoryMinimums: {}, categoryLimits: {} },
   soup: { target: 5, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
   salad: { target: 8, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
   main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
   dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
-  cocktails: { target: 6, optionalLimit: 4, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3 } }
+  cocktails: { target: 5, optionalLimit: 6, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3, drinks: 3 } }
 });
 
 const INGREDIENT_EFFECT_TEXT = Object.freeze({
@@ -1168,8 +1168,12 @@ const INGREDIENTS = Object.freeze([
   item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'chain' }),
   item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
   item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'replaceIngredient' }),
+  item('amaretto', 'alcohol', 'Amaretto', 'Amaretto', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'repeatIngredient' }),
+  item('triple-sec', 'alcohol', 'Triple Sec', 'Triple sec', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
   item('mineral-water', 'drinks', 'Mineralwasser', 'Mineral water', q(3, 4, 'l'), ['cocktails'], { effect: 'coins3' }),
-  item('juices', 'drinks', 'Säfte', 'Juices', q(2, 4, 'l'), ['cocktails'], { effect: 'nextPlayer' })
+  item('apple-juice', 'drinks', 'Apfelsaft', 'Apple juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'nextPlayer' }),
+  item('orange-juice', 'drinks', 'Orangensaft', 'Orange juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'replaceEvent' }),
+  item('cherry-juice', 'drinks', 'Kirschsaft', 'Cherry juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'extraTurn' })
 ]);
 
 const COURSE_INDEX = Object.freeze({ tapas: 0, soup: 1, salad: 2, main: 3, dessert: 4, cocktails: 5 });
@@ -1734,7 +1738,11 @@ const task = (titleDe, titleEn, instructionDe, instructionEn, area, people = [1,
   repeatOnRelief: options.repeatOnRelief ?? false,
   automatic: options.automatic ?? false,
   unassigned: options.unassigned ?? false,
-  completionLabel: options.completionLabel ?? null
+  completionLabel: options.completionLabel ?? null,
+  cocktailTeam: options.cocktailTeam ?? null,
+  usesCocktailTechnique: options.usesCocktailTechnique ?? false,
+  dessertTeamSplit: options.dessertTeamSplit ?? false,
+  cardNumber: options.cardNumber ?? null
 });
 
 const DEFAULT_ESTIMATED_MINUTES = Object.freeze({
@@ -1807,41 +1815,43 @@ const BLUEPRINTS = Object.freeze({
     task('Das große Feuerpaket befüllen', 'Fill the Great Fire Parcel', 'Legt den Bratschlauch nach Packungsangabe in die Form. Gebt Gemüse, Obst, Nüsse oder Kerne und anschließend das Fleisch hinein, verteilt die vorbereitete Sauce darüber und sorgt dafür, dass die Zutaten nicht zu dicht gepresst liegen.', 'Place the roasting bag in the dish according to its instructions. Add vegetables, fruit, nuts or seeds, then the meat; pour over the prepared sauce and keep the ingredients from being packed too tightly.', 'assembly', [2, 3], 0, { estimatedMinutes: 7, challengeMinutes: 8, safety: 'rawMeat' }),
     task('Feuerpaket verschließen und einschiffen', 'Seal and Load the Fire Parcel', 'Verschließt beziehungsweise öffnet den Bratschlauch exakt nach Packungsangabe, legt ihn sicher in die Form und schiebt ihn so in den Ofen, dass die Folie keine Heizfläche berührt. Dieser Schritt endet, sobald die Ofentür geschlossen ist.', 'Seal or vent the roasting bag exactly as its package directs, place it safely in the dish, and put it into the oven without letting the film touch a heating element. This step ends once the oven door is closed.', 'oven', [1, 2], 0, { estimatedMinutes: 3, challengeMinutes: 4, safety: 'hotOven' }),
     task('Bratschlauch backen lassen', 'Let the Roasting Bag Bake', 'Der Bratschlauch gart jetzt nach den Hinweisen für Gerät, Packung und verwendetes Fleisch. Diese Aufgabe ist niemandem zugewiesen und bleibt während des Backens in der Aufgabenliste offen. Kontrolliert bei Bedarf Lage, Flüssigkeit und Garfortschritt, ohne unnötig Hitze entweichen zu lassen. Bestätigt „Backen ist fertig“ erst, wenn alles vollständig und gleichmäßig gegart ist; im Zweifel müssen an allen Stellen mindestens 70 °C für zwei Minuten erreicht sein.', 'The roasting bag now cooks according to the appliance, package, and meat instructions. This task is assigned to nobody and remains open in the task list while baking. Check its position, liquid, and cooking progress when needed without releasing unnecessary heat. Confirm “Baking is finished” only when everything is thoroughly and evenly cooked; if in doubt, verify at least 70 °C for two minutes throughout.', 'oven', [0, 0], 0, { timingMode: 'manual', estimatedMinutes: 45, safety: 'foodTemperature', automatic: true, unassigned: true, completionLabel: { de: 'Backen ist fertig', en: 'Baking is finished' } }),
-    task('Ruhe vor dem Festmahl', 'Rest before the Feast', 'Nehmt die Form vorsichtig heraus und lasst den geschlossenen Bratschlauch fünf Minuten ruhen. Öffnet ihn erst danach mit Abstand und vom Gesicht weg, damit heißer Dampf sicher entweicht.', 'Remove the dish carefully and rest the closed roasting bag for five minutes. Only then open it from a distance and away from your face so hot steam can escape safely.', 'oven', [1, 2], 5, { timingMode: 'background', safety: 'hotSteam' }),
+    task('Ruhe vor dem Festmahl', 'Rest before the Feast', 'Nehmt die Form vorsichtig heraus und lasst den geschlossenen Bratschlauch fünf Minuten ruhen. Öffnet ihn erst danach mit Abstand und vom Gesicht weg, damit heißer Dampf sicher entweicht.', 'Remove the dish carefully and rest the closed roasting bag for five minutes. Only then open it from a distance and away from your face so hot steam can escape safely.', 'oven', [1, 2], 10, { timingMode: 'background', safety: 'hotSteam' }),
     task('Sauce aus dem Bratschlauch vollenden', 'Finish the Roasting-Bag Sauce', 'Fangt die heiße Sauce sicher auf, probiert sie mit einem sauberen Löffel und serviert sie direkt oder reduziert sie kurz. Korrigiert Salz und Säure vorsichtig, da Sojasauce und Garfond bereits kräftig sein können.', 'Collect the hot sauce safely, taste it with a clean spoon, and serve it directly or reduce it briefly. Adjust salt and acidity carefully because soy sauce and cooking juices may already be strong.', 'sauce', [1, 2], 0, { estimatedMinutes: 5, challengeMinutes: 6, safety: 'hotPan' }),
     task('Platten der Feuerwache', 'Platters of the Fire Watch', 'Richtet Fleisch, Gemüse, Obst und weitere Bestandteile gemeinsam mit der Sauce übersichtlich an und haltet rohe Kontaktflächen konsequent fern.', 'Arrange the meat, vegetables, fruit, other components, and sauce clearly while keeping raw-contact surfaces strictly away.', 'serving', [2, 3]),
     task('Die gereinigte Schmiede', 'The Clean Forge', 'Reinigt alle Flächen und Werkzeuge mit Rohfleischkontakt gründlich, entsorgt den Bratschlauch sicher und räumt heiße Geräte erst nach dem Abkühlen weg.', 'Clean every surface and tool that touched raw meat, dispose of the roasting bag safely, and put hot equipment away only after it has cooled.', 'cleanup', [2, 3], 0, { safety: 'rawMeat' }),
     task('Salatteller abräumen', 'Clear the Salad Plates', 'Sammelt Salatschalen, Teller, Besteck und Servierlöffel ein, stellt Reste kühl und wischt den Tisch vollständig frei. Erst danach beginnt die Zutatenwahl für den Hauptgang.', 'Collect salad bowls, plates, cutlery, and serving spoons, refrigerate leftovers, and wipe the table completely clear. Main-course ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
   ],
   dessert: [
-    task('Zwei Crews an der Lagune', 'Two Crews at the Lagoon', 'Teilt euch in zwei möglichst gleich große Teams und gebt jeder Gruppe einen eigenen Arbeitsbereich.', 'Split into two similar-sized teams and give each one its own work area.', 'planning', [2, 3]),
-    task('Früchte der Plantage', 'Plantation Fruit', 'Wascht und schneidet die geplanten Früchte; haltet Garnitur und zu verarbeitende Stücke getrennt.', 'Wash and cut the planned fruit; keep garnish separate from fruit to be processed.', 'fruit', [2, 3], 0, { safety: 'knife' }),
-    task('Die warme Fruchtbeute', 'Warm Fruit Treasure', 'Entscheidet zwischen karamellisiertem Obst, Obstsalat oder Püree und bereitet eine Variante in kleinen Schritten vor.', 'Choose caramelised fruit, fruit salad, or purée and prepare one option in small steps.', 'fruit', [2, 2], 8, { safety: 'hotSugar' }),
-    task('Eis aus der Höhle', 'Ice from the Cave', 'Plant Vanilleeis und – falls zugeordnet – die zweite Eissorte so, dass beide Kreationen ausreichend und unterscheidbar bleiben.', 'Plan the vanilla ice cream and, if assigned, the second flavour so both creations remain sufficient and distinct.', 'cold', [1, 2]),
-    task('Die zwei Schatzpläne', 'The Two Treasure Plans', 'Ein Team entwickelt eine fruchtige Richtung; das andere kombiniert die übrigen zugeordneten Zutaten zu einer klar unterscheidbaren Variante.', 'One team develops a fruity direction; the other combines the remaining assigned ingredients into a clearly distinct variation.', 'assembly', [4, 6]),
-    task('Kühle Wache', 'The Cool Watch', 'Stellt vorbereitete Bestandteile zehn Minuten kühl. Die Kühlzeit läuft als Erinnerung im Hintergrund und ist keine Münz-Challenge.', 'Chill prepared components for ten minutes. The chilling time is a background reminder, not a coin challenge.', 'cold', [1, 2], 10, { timingMode: 'background' }),
-    task('Süße Wolken', 'Sweet Clouds', 'Bereitet eine luftige oder cremige Komponente aus euren Grundvorräten vor und haltet sie bis zum Servieren kalt.', 'Prepare an airy or creamy component from your basic pantry and keep it cold until serving.', 'cold', [1, 2]),
-    task('Garnitur aus der Truhe', 'Garnish from the Chest', 'Bereitet die zugeordneten Streusel, Schokolade, Nüsse oder Kerne getrennt vor, damit beide Teams bewusst dosieren können.', 'Prepare the assigned sprinkles, chocolate, nuts, or seeds separately so both teams can dose them deliberately.', 'garnish', [1, 2], 0, { ingredientRequirement: { ids: ['sprinkles', 'chocolate', 'nuts', 'seeds'] } }),
-    task('Die erste Lagunenprobe', 'The First Lagoon Tasting', 'Prüft Süße, Temperatur und Textur beider Kreationen und ändert nur einen Punkt gleichzeitig.', 'Check sweetness, temperature, and texture of both creations and change only one point at a time.', 'quality', [2, 2]),
-    task('Optionale Geisterbeute', 'Optional Spirit Treasure', 'Falls gewünscht, gebt die dem Dessert zugeordnete Spirituose nur in klar gekennzeichnete Erwachsenenportionen.', 'If desired, add the spirit assigned to the dessert only to clearly marked adult portions.', 'optional', [1, 2], 0, { ingredientRequirement: { categories: ['alcohol'] } }),
-    task('Zwei Reihen am Sonnenpavillon', 'Two Rows at the Sun Pavilion', 'Richtet beide Dessertvarianten erkennbar getrennt und mit gleichmäßigen Portionen an.', 'Plate both dessert variations separately and in even portions.', 'serving', [2, 3]),
-    task('Die kalte Kombüse', 'The Cold Galley', 'Stellt Eis sofort zurück, lagert Obst kühl und wischt klebrige Arbeitsflächen.', 'Return ice cream immediately, refrigerate fruit, and wipe sticky worktops.', 'cleanup', [1, 2]),
-    task('Hauptgang abräumen', 'Clear the Main Course', 'Sammelt Teller, Besteck, Platten und Saucengefäße ein, bringt Reste sicher in die Küche und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für das Dessert.', 'Collect plates, cutlery, platters, and sauce dishes, take leftovers safely to the kitchen, and wipe the table clear. Dessert ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7 })
+    task('Zwei Crews an der Lagune', 'Two Crews at the Lagoon', 'Teilt euch in zwei möglichst gleich große Teams und gebt jeder Gruppe einen eigenen Arbeitsbereich.', 'Split into two similar-sized teams and give each one its own work area.', 'planning', [2, 3], 0, { cardNumber: 1 }),
+    task('Früchte der Plantage', 'Plantation Fruit', 'Wascht und schneidet die geplanten Früchte; haltet Garnitur und zu verarbeitende Stücke getrennt.', 'Wash and cut the planned fruit; keep garnish separate from fruit to be processed.', 'fruit', [2, 3], 0, { safety: 'knife', cardNumber: 3 }),
+    task('Die warme Fruchtbeute', 'Warm Fruit Treasure', 'Entscheidet zwischen karamellisiertem Obst, Obstsalat oder Püree und bereitet eine Variante in kleinen Schritten vor. Karamellisiertes Obst darf bis zum Anrichten leicht warm bleiben.', 'Choose caramelised fruit, fruit salad, or purée and prepare one option in small steps. Caramelised fruit may remain slightly warm until plating.', 'fruit', [2, 2], 8, { safety: 'hotSugar', cardNumber: 5 }),
+    task('Eis aus der Höhle', 'Ice from the Cave', 'Holt Vanilleeis und – falls zugeordnet – die zweite Eissorte erst jetzt aus der Kühlung. Verteilt das Eis unmittelbar auf die beiden Kreationen, haltet die Varianten unterscheidbar und richtet danach ohne weitere Wartezeit an.', 'Only now take the vanilla ice cream and, if assigned, the second flavour out of cold storage. Add the ice cream to both creations immediately, keep the variants distinct, and plate without any further waiting.', 'cold', [1, 2], 0, { ingredientRequirement: { ids: ['vanilla-ice', 'second-ice'] }, cardNumber: 7 }),
+    task('Die zwei Schatzpläne', 'The Two Treasure Plans', 'Die auf dieser Karte genannten Personen werden eindeutig aufgeteilt: Das Frucht-Team entwickelt die fruchtige Kreation; das Schatz-Team kombiniert die übrigen zugeordneten Zutaten zu einer klar unterscheidbaren zweiten Variante.', 'The players named on this card are split explicitly: the fruit team develops the fruit-led creation; the treasure team combines the remaining assigned ingredients into a clearly distinct second version.', 'assembly', [4, 6], 0, { dessertTeamSplit: true, cardNumber: 9 }),
+    task('Süße Wolken', 'Sweet Clouds', 'Bereitet eine luftige oder cremige Komponente aus euren Grundvorräten vor und haltet sie bis zum Servieren kalt.', 'Prepare an airy or creamy component from your basic pantry and keep it cold until serving.', 'cold', [1, 2], 0, { cardNumber: 13 }),
+    task('Garnitur aus der Truhe', 'Garnish from the Chest', 'Bereitet die zugeordneten Streusel, Schokolade, Nüsse oder Kerne getrennt vor, damit beide Teams bewusst dosieren können.', 'Prepare the assigned sprinkles, chocolate, nuts, or seeds separately so both teams can dose them deliberately.', 'garnish', [1, 2], 0, { ingredientRequirement: { ids: ['sprinkles', 'chocolate', 'nuts', 'seeds'] }, cardNumber: 15 }),
+    task('Optionale Geisterbeute', 'Optional Spirit Treasure', 'Falls gewünscht, gebt die dem Dessert zugeordnete Spirituose nur in klar gekennzeichnete Erwachsenenportionen.', 'If desired, add the spirit assigned to the dessert only to clearly marked adult portions.', 'optional', [1, 2], 0, { ingredientRequirement: { categories: ['alcohol'] }, cardNumber: 19 }),
+    task('Zwei Reihen am Sonnenpavillon', 'Two Rows at the Sun Pavilion', 'Richtet beide Dessertvarianten direkt nach dem Eis erkennbar getrennt und mit gleichmäßigen Portionen an.', 'Immediately after adding the ice cream, plate both dessert variations separately and in even portions.', 'serving', [2, 3], 0, { cardNumber: 21 }),
+    task('Die kalte Kombüse', 'The Cold Galley', 'Stellt Eis sofort zurück, lagert Obst kühl und wischt klebrige Arbeitsflächen.', 'Return ice cream immediately, refrigerate fruit, and wipe sticky worktops.', 'cleanup', [1, 2], 0, { cardNumber: 23 }),
+    task('Hauptgang abräumen', 'Clear the Main Course', 'Sammelt Teller, Besteck, Platten und Saucengefäße ein, bringt Reste sicher in die Küche und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für das Dessert.', 'Collect plates, cutlery, platters, and sauce dishes, take leftovers safely to the kitchen, and wipe the table clear. Dessert ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7, cardNumber: 25 })
   ],
   cocktails: [
-    task('Der Plan des Barkeepers', 'The Bartender’s Plan', 'Die zu Beginn dieses Gangs gewählten Cocktail-Teams übernehmen ihre jeweilige Mischung; gemeinsame Grundlagen bereitet die ganze Crew vor.', 'The cocktail teams chosen at the start of this course take charge of their respective mixes; the whole crew prepares shared bases.', 'planning', [2, 3]),
-    task('Früchte aus der Piratenkiste', 'Fruit from the Pirate Crate', 'Wascht und schneidet übrige Früchte; reserviert schöne Stücke für die Garnitur.', 'Wash and cut remaining fruit; reserve attractive pieces for garnish.', 'fruit', [2, 3], 0, { safety: 'knife' }),
-    task('Saft aus dem Schiffswrack', 'Juice from the Shipwreck', 'Presst oder zerdrückt geeignete Früchte und verteilt den Grundsaft auf beide Teams.', 'Press or crush suitable fruit and divide the base juice between both teams.', 'mixing', [2, 2]),
-    task('Mischung der Freibeuter', 'The Freebooter Mix', 'Das alkoholische Team baut seine Mischung mit den ein bis drei zugeordneten Spirituosensorten schrittweise aus Saft, Säure und Wasser auf und probiert die Balance selbst.', 'The alcoholic team gradually builds its mix with the one to three assigned spirits, juice, acidity, and water and tastes the balance themselves.', 'alcoholic', [2, 3]),
-    task('Mischung der Steuermänner', 'The Helmsman Mix', 'Baut die alkoholfreie Mischung mit Saft, Frucht, Säure und Mineralwasser eigenständig auf.', 'Build the alcohol-free mix independently with juice, fruit, acidity, and mineral water.', 'alcohol-free', [2, 3]),
-    task('Das letzte Glas', 'The Final Glass', 'Kennzeichnet beide Varianten eindeutig, verteilt den verbindlichen Eiswürfel-Grundvorrat und serviert alle Gläser gemeinsam.', 'Label both versions unmistakably, distribute the required ice-cube supply, and serve every glass together.', 'serving', [2, 3]),
-    task('Vorrat aus der Eishöhle', 'Supply from the Ice Cave', 'Stellt den verbindlichen Eiswürfel-Grundvorrat für beide Cocktails bereit, ohne den Arbeitsbereich mit Schmelzwasser zu überfluten.', 'Set out the required ice-cube supply for both cocktails without flooding the workspace with meltwater.', 'cold', [1, 2]),
-    task('Süße Beute', 'Sweet Treasure', 'Passt Süße in kleinen Schritten an und probiert nach jeder Änderung mit einem frischen Löffel.', 'Adjust sweetness in small steps and taste after every change with a fresh spoon.', 'quality', [1, 2]),
-    task('Säure der Brandung', 'Acidity of the Surf', 'Balanciert beide Varianten getrennt mit Zitrone, Limette oder anderer Fruchtsäure.', 'Balance both versions separately with lemon, lime, or another fruit acidity.', 'quality', [1, 2]),
-    task('Die gewählte Mischtechnik', 'The Chosen Mixing Technique', 'Setzt für beide Cocktails die zuvor verbindlich gewählte Technik um: gerührte Mischungen werden im Krug gründlich kalt gerührt, gemixte Mischungen portionsweise im Mixer verarbeitet.', 'Carry out the previously chosen technique for both cocktails: stir stirred mixes thoroughly and cold in a jug, and blend mixed drinks in batches.', 'mixing', [2, 2]),
-    task('Flaggen der beiden Crews', 'Flags of the Two Crews', 'Kennzeichnet alkoholische und alkoholfreie Gläser dauerhaft und verwechslungssicher.', 'Mark alcoholic and alcohol-free glasses permanently and unmistakably.', 'safety', [1, 2]),
-    task('Freie Fläche hinter der Bar', 'Clear Space behind the Bar', 'Verschließt Flaschen, räumt Messer weg und wischt klebrige oder nasse Flächen.', 'Close bottles, put away knives, and wipe sticky or wet surfaces.', 'cleanup', [1, 2]),
-    task('Desserttisch abräumen', 'Clear the Dessert Table', 'Sammelt Dessertschalen, Löffel und Garniturschälchen ein, stellt Eis und empfindliche Reste sofort kalt und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für die Cocktails.', 'Collect dessert bowls, spoons, and garnish dishes, return ice cream and delicate leftovers to the cold immediately, and wipe the table clear. Cocktail ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6 })
+    task('Der Plan des Barkeepers', 'The Bartender’s Plan', 'Die zu Beginn dieses Gangs gewählten Cocktail-Teams übernehmen ausschließlich ihre jeweilige Rezeptlinie. Sicherheit und das gemeinsame Servieren bleiben Crew-Aufgaben.', 'The cocktail teams chosen at the start of this course work exclusively on their own recipe line. Safety and final serving remain whole-crew jobs.', 'planning', [2, 3], 0, { cardNumber: 1 }),
+    task('Früchte der Freibeuter', 'Freebooter Fruit', 'Das alkoholische Team wäscht und schneidet nur die Früchte aus seiner Zutatenliste und reserviert passende Garnitur.', 'The alcoholic team washes and cuts only the fruit from its ingredient list and reserves suitable garnish.', 'fruit', [1, 3], 0, { safety: 'knife', cocktailTeam: 'alcoholic', cardNumber: 3 }),
+    task('Früchte der Steuermänner', 'Helmsman Fruit', 'Das alkoholfreie Team wäscht und schneidet nur die Früchte aus seiner Zutatenliste und reserviert passende Garnitur.', 'The alcohol-free team washes and cuts only the fruit from its ingredient list and reserves suitable garnish.', 'fruit', [1, 3], 0, { safety: 'knife', cocktailTeam: 'alcohol-free', cardNumber: 27 }),
+    task('Eis der Freibeuter', 'Freebooter Ice', 'Das alkoholische Team stellt Eiswürfel nur für seine eigene Mischung bereit.', 'The alcoholic team sets out ice cubes only for its own drink.', 'cold', [1, 2], 0, { cocktailTeam: 'alcoholic', cardNumber: 13 }),
+    task('Eis der Steuermänner', 'Helmsman Ice', 'Das alkoholfreie Team stellt Eiswürfel nur für seine eigene Mischung bereit.', 'The alcohol-free team sets out ice cubes only for its own drink.', 'cold', [1, 2], 0, { cocktailTeam: 'alcohol-free', cardNumber: 29 }),
+    task('Mischung der Freibeuter', 'The Freebooter Mix', 'Das alkoholische Team baut seine Mischung mit den zugeordneten Spirituosen und den übrigen Zutaten seiner Liste auf.', 'The alcoholic team builds its drink using its assigned spirits and the other ingredients on its list.', 'mixing', [1, 3], 0, { cocktailTeam: 'alcoholic', usesCocktailTechnique: true, cardNumber: 7 }),
+    task('Mischung der Steuermänner', 'The Helmsman Mix', 'Das alkoholfreie Team baut seine Mischung ausschließlich aus den Zutaten seiner Liste auf.', 'The alcohol-free team builds its drink using only the ingredients on its list.', 'mixing', [1, 3], 0, { cocktailTeam: 'alcohol-free', usesCocktailTechnique: true, cardNumber: 9 }),
+    task('Süße der Freibeuter', 'Freebooter Sweetness', 'Das alkoholische Team passt nur die Süße seiner Mischung in kleinen Schritten an.', 'The alcoholic team adjusts only the sweetness of its own drink in small steps.', 'quality', [1, 2], 0, { cocktailTeam: 'alcoholic', cardNumber: 15 }),
+    task('Süße der Steuermänner', 'Helmsman Sweetness', 'Das alkoholfreie Team passt nur die Süße seiner Mischung in kleinen Schritten an.', 'The alcohol-free team adjusts only the sweetness of its own drink in small steps.', 'quality', [1, 2], 0, { cocktailTeam: 'alcohol-free', cardNumber: 31 }),
+    task('Säure der Freibeuter', 'Freebooter Acidity', 'Das alkoholische Team balanciert nur seine Mischung mit Zitrone, Limette oder anderer Fruchtsäure.', 'The alcoholic team balances only its own drink with lemon, lime, or another fruit acid.', 'quality', [1, 2], 0, { cocktailTeam: 'alcoholic', cardNumber: 17 }),
+    task('Säure der Steuermänner', 'Helmsman Acidity', 'Das alkoholfreie Team balanciert nur seine Mischung mit Zitrone, Limette oder anderer Fruchtsäure.', 'The alcohol-free team balances only its own drink with lemon, lime, or another fruit acid.', 'quality', [1, 2], 0, { cocktailTeam: 'alcohol-free', cardNumber: 33 }),
+    task('Abschmecken der Freibeuter', 'Freebooter Tasting', 'Mindestens eine Person aus dem alkoholischen Team probiert die fertige Mischung und bestätigt Süße, Säure, Temperatur und Stärke.', 'At least one member of the alcoholic team tastes the finished drink and confirms its sweetness, acidity, temperature, and strength.', 'quality', [1, 2], 0, { cocktailTeam: 'alcoholic', cardNumber: 35 }),
+    task('Abschmecken der Steuermänner', 'Helmsman Tasting', 'Mindestens eine Person aus dem alkoholfreien Team probiert die fertige Mischung und bestätigt Süße, Säure und Temperatur.', 'At least one member of the alcohol-free team tastes the finished drink and confirms its sweetness, acidity, and temperature.', 'quality', [1, 2], 0, { cocktailTeam: 'alcohol-free', cardNumber: 37 }),
+    task('Flaggen der beiden Crews', 'Flags of the Two Crews', 'Kennzeichnet alkoholische und alkoholfreie Gläser dauerhaft und verwechslungssicher.', 'Mark alcoholic and alcohol-free glasses permanently and unmistakably.', 'safety', [1, 2], 0, { cardNumber: 21 }),
+    task('Das letzte Glas', 'The Final Glass', 'Kontrolliert die Kennzeichnung und serviert beide fertigen Varianten gemeinsam, ohne die Zutatenlisten oder Gläser zu vertauschen.', 'Check the labels and serve both finished versions together without mixing up their ingredient lists or glasses.', 'serving', [2, 3], 0, { cardNumber: 11 }),
+    task('Freie Fläche hinter der Bar', 'Clear Space behind the Bar', 'Verschließt Flaschen, räumt Messer weg und wischt klebrige oder nasse Flächen.', 'Close bottles, put away knives, and wipe sticky or wet surfaces.', 'cleanup', [1, 2], 0, { cardNumber: 23 }),
+    task('Desserttisch abräumen', 'Clear the Dessert Table', 'Sammelt Dessertschalen, Löffel und Garniturschälchen ein, stellt Eis und empfindliche Reste sofort kalt und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für die Cocktails.', 'Collect dessert bowls, spoons, and garnish dishes, return ice cream and delicate leftovers to the cold immediately, and wipe the table clear. Cocktail ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 5, challengeMinutes: 6, cardNumber: 25 })
   ]
 });
 
@@ -1891,8 +1901,8 @@ const QUEST_ASSIGNMENTS = Object.freeze({
   soup: ['plan', 'vegetables', 'vegetables', 'cauldron', 'cauldron', 'finish', 'finish', 'extras', 'finish', 'extras', 'serve', 'cleanup', 'finish', 'reset'],
   salad: ['plan', 'leaves', 'fruit', 'dressing', 'assemble', 'serve', 'vegetables', 'crunch', 'dressing', 'seasoning', 'serve', 'cleanup', 'reset', 'protein', 'protein'],
   main: ['plan', 'meat', 'vegetables', 'fruit', 'sauce', 'preheat', 'assembly', 'oven', 'oven', 'finish', 'finish', 'serve', 'cleanup', 'reset'],
-  dessert: ['plan', 'fruit', 'fruit', 'cold', 'cold', 'cold', 'cold', 'finish', 'finish', 'finish', 'serve', 'cleanup', 'reset'],
-  cocktails: ['plan', 'fruit', 'fruit', 'alcoholic', 'alcohol-free', 'serve', 'finish', 'finish', 'finish', 'mixes', 'finish', 'cleanup', 'reset']
+  dessert: ['plan', 'fruit', 'fruit', 'cold', 'cold', 'cold', 'finish', 'finish', 'serve', 'cleanup', 'reset'],
+  cocktails: ['plan', 'alcoholic', 'alcohol-free', 'alcoholic', 'alcohol-free', 'alcoholic', 'alcohol-free', 'alcoholic', 'alcohol-free', 'alcoholic', 'alcohol-free', 'alcoholic', 'alcohol-free', 'finish', 'serve', 'cleanup', 'reset']
 });
 
 /*
@@ -1939,16 +1949,18 @@ const WORKFLOW = Object.freeze({
   dessert: {
     skip: [0],
     requires: {
-      2: [[1, 'done']], 4: [[1, 'done'], [3, 'done']], 5: [[2, 'done'], [4, 'done']],
-      8: [[5, 'done'], [6, 'done'], [7, 'done']], 9: [[8, 'done']], 10: [[8, 'done'], [9, 'done']], 11: [[10, 'done']]
+      1: [[4, 'done']], 2: [[1, 'done']], 5: [[4, 'done']], 6: [[4, 'done']], 7: [[4, 'done']],
+      3: [[2, 'done'], [4, 'done'], [5, 'done'], [6, 'done'], [7, 'done']],
+      8: [[3, 'done']], 9: [[8, 'done']]
     }
   },
   cocktails: {
     skip: [0],
     requires: {
-      2: [[1, 'done']], 3: [[2, 'done']], 4: [[2, 'done']],
-      7: [[3, 'done'], [4, 'done']], 8: [[3, 'done'], [4, 'done']], 9: [[3, 'done'], [4, 'done']],
-      5: [[7, 'done'], [8, 'done'], [9, 'done'], [10, 'done']], 11: [[5, 'done']]
+      5: [[1, 'done'], [3, 'done']], 6: [[2, 'done'], [4, 'done']],
+      7: [[5, 'done']], 8: [[6, 'done']], 9: [[7, 'done']], 10: [[8, 'done']],
+      11: [[9, 'done']], 12: [[10, 'done']], 13: [[11, 'done'], [12, 'done']],
+      14: [[13, 'done']], 15: [[14, 'done']]
     }
   }
 });
@@ -1958,7 +1970,7 @@ function buildTaskDeck(chapterIndex) {
   const blueprints = BLUEPRINTS[chapter.id];
   const questSteps = new Map();
   const deck = blueprints.map((blueprint, blueprintIndex) => {
-    const number = blueprintIndex * 2 + 1;
+    const number = blueprint.cardNumber ?? blueprintIndex * 2 + 1;
     const estimatedMinutes = blueprint.estimatedMinutes || blueprint.backgroundMinutes || DEFAULT_ESTIMATED_MINUTES[blueprint.area] || 4;
     const questId = QUEST_ASSIGNMENTS[chapter.id][blueprintIndex] ?? 'plan';
     const questStep = (questSteps.get(questId) ?? 0) + 1;
@@ -2378,7 +2390,7 @@ const MAX_INGREDIENTS_PER_TURN = 2;
 const DEFAULT_FUN_CARDS_PER_CHAPTER = 16;
 const MAIN_FUN_CARDS_PER_CHAPTER = 24;
 const MAX_EVENT_CHAIN_DEPTH = 2;
-const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates']);
+const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'juices']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
 const CURRENT_INGREDIENT_IDS = new Set(CURRENT_INGREDIENTS_BY_ID.keys());
 const CURRENT_SHOPPING_STAPLE_IDS = new Set(SHOPPING_STAPLES.map((staple) => staple.id));
@@ -2666,6 +2678,19 @@ class GameEngine {
         .map((ingredient) => ingredient.id);
       return [...retained, ...missing];
     });
+    const retiredTaskInstanceIds = new Set(this.state.tasks
+      .filter((taskInstance) => !taskById(taskInstance.taskId))
+      .map((taskInstance) => taskInstance.instanceId));
+    this.state.tasks = this.state.tasks.filter((taskInstance) => !retiredTaskInstanceIds.has(taskInstance.instanceId));
+    if (retiredTaskInstanceIds.has(this.state.turn.assignedTaskId)) {
+      this.state.turn.assignedTaskId = null;
+      this.state.turn.taskBriefingEndsTurn = false;
+      if (this.state.turn.phase === 'taskBriefing') this.state.turn.phase = 'draw';
+    }
+    if (this.state.turn.pendingTaskAssignment && !taskById(this.state.turn.pendingTaskAssignment.taskId)) {
+      this.state.turn.pendingTaskAssignment = null;
+      if (this.state.turn.phase === 'taskAssigneeChoice') this.state.turn.phase = 'draw';
+    }
     this.state.tasks.forEach((task) => {
       task.basketIngredientIds = (task.basketIngredientIds ?? []).filter((ingredientId) =>
         !RETIRED_INGREDIENT_IDS.has(ingredientId) && !(staleSoupCucumber && ingredientId === 'cucumber')
@@ -3312,6 +3337,13 @@ class GameEngine {
     const expiring = this.expiringIngredientCandidates();
     if (!expiring.length) return [];
 
+    const cocktailUseCounts = { alcoholic: 0, 'alcohol-free': 0 };
+    if (this.currentChapter.id === 'cocktails') {
+      this.courseIngredients().forEach((ingredient) => {
+        if (ingredient.cocktailUse === 'alcoholic') cocktailUseCounts.alcoholic += 1;
+        if (ingredient.cocktailUse === 'alcohol-free') cocktailUseCounts['alcohol-free'] += 1;
+      });
+    }
     expiring.forEach((ingredient) => {
       ingredient.status = 'locked';
       ingredient.chapterIndex = this.state.chapterIndex;
@@ -3321,7 +3353,10 @@ class GameEngine {
       ingredient.lockedBy = null;
       ingredient.autoLockedChapterIndex = this.state.chapterIndex;
       if (this.currentChapter.id === 'cocktails') {
-        ingredient.cocktailUse = this.defaultCocktailUseForIngredient(ingredient);
+        ingredient.cocktailUse = ingredient.category === 'alcohol'
+          ? 'alcoholic'
+          : cocktailUseCounts.alcoholic <= cocktailUseCounts['alcohol-free'] ? 'alcoholic' : 'alcohol-free';
+        cocktailUseCounts[ingredient.cocktailUse] += 1;
       }
     });
     const ingredientIds = expiring.map((ingredient) => ingredient.id);
@@ -3344,6 +3379,9 @@ class GameEngine {
       ingredient.essential && ingredient.status === 'available' &&
       ingredient.id !== excludingIngredientId && ingredient.courseTags.includes(chapter.id)
     );
+    const categoryCandidates = this.state.ingredients.filter((ingredient) =>
+      ingredient.status === 'available' && ingredient.id !== excludingIngredientId && ingredient.courseTags.includes(chapter.id)
+    );
     const categories = new Map();
     candidates.forEach((ingredient) => categories.set(ingredient.category, (categories.get(ingredient.category) ?? 0) + 1));
     const capacity = [...categories.entries()].reduce((total, [category, count]) => {
@@ -3352,7 +3390,7 @@ class GameEngine {
     }, 0);
     if (capacity < rule.target) return false;
     return Object.entries(rule.categoryMinimums ?? {}).every(([category, minimum]) =>
-      (categories.get(category) ?? 0) >= minimum
+      categoryCandidates.filter((ingredient) => ingredient.category === category).length >= minimum
     );
   }
 
@@ -3388,27 +3426,31 @@ class GameEngine {
     const planned = this.requiredCourseIngredients().filter((entry) =>
       ['discovered', 'locked', 'used'].includes(entry.status)
     );
+    const allPlanned = this.courseIngredients().filter((entry) =>
+      ['discovered', 'locked', 'used'].includes(entry.status)
+    );
     const slotsAfter = rule.target - planned.length - 1;
     if (slotsAfter < 0) return false;
 
     const mandatory = this.expiringIngredientCandidates().filter((entry) => entry.id !== ingredient.id);
     if (mandatory.length > slotsAfter) return false;
     const counts = new Map();
-    [...planned, ingredient, ...mandatory].forEach((entry) =>
+    [...allPlanned, ingredient, ...mandatory].forEach((entry) =>
       counts.set(entry.category, (counts.get(entry.category) ?? 0) + 1)
     );
-    let extraSlotsNeeded = 0;
+    let extraEssentialSlotsNeeded = 0;
     for (const [category, minimum] of Object.entries(rule.categoryMinimums ?? {})) {
       const deficit = Math.max(0, minimum - (counts.get(category) ?? 0));
       const availableInCategory = this.state.ingredients.filter((entry) =>
-        entry.essential && entry.status === 'available' && entry.id !== ingredient.id &&
+        entry.status === 'available' && entry.id !== ingredient.id &&
         !mandatory.some((mandatoryEntry) => mandatoryEntry.id === entry.id) &&
         entry.category === category && entry.courseTags.includes(this.currentChapter.id)
-      ).length;
-      if (availableInCategory < deficit) return false;
-      extraSlotsNeeded += deficit;
+      );
+      if (availableInCategory.length < deficit) return false;
+      const optionalAvailable = availableInCategory.filter((entry) => !entry.essential).length;
+      extraEssentialSlotsNeeded += Math.max(0, deficit - optionalAvailable);
     }
-    return mandatory.length + extraSlotsNeeded <= slotsAfter;
+    return mandatory.length + extraEssentialSlotsNeeded <= slotsAfter;
   }
 
   courseIngredientCandidates(category = null) {
@@ -3418,6 +3460,9 @@ class GameEngine {
       .filter((ingredient) => ingredient?.status === 'available' && this.ingredientAllowedInCurrentCourse(ingredient) &&
         this.selectionKeepsCurrentCourseFeasible(ingredient) &&
         this.preservesFutureCourseCapacity(ingredient) && (!category || ingredient.category === category));
+    if (this.currentChapter.id === 'cocktails' && this.activePlayer.cocktailTeam === 'alcohol-free') {
+      candidates = candidates.filter((ingredient) => ingredient.category !== 'alcohol');
+    }
     return candidates;
   }
 
@@ -3474,10 +3519,10 @@ class GameEngine {
   defaultCocktailUseForIngredient(ingredient) {
     if (this.currentChapter.id !== 'cocktails') return null;
     if (ingredient.category === 'alcohol') return 'alcoholic';
-    const hasAlcoholFreeFlavour = this.courseIngredients().some((entry) =>
-      entry.id !== ingredient.id && entry.cocktailUse === 'alcohol-free' && !['alcohol', 'drinks'].includes(entry.category)
-    );
-    if (!hasAlcoholFreeFlavour && !['alcohol', 'drinks'].includes(ingredient.category)) return 'alcohol-free';
+    if (['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)) return ingredient.cocktailUse;
+    const discoverer = this.state.players.find((player) => player.id === ingredient.discoveredBy);
+    if (['alcoholic', 'alcohol-free'].includes(discoverer?.cocktailTeam)) return discoverer.cocktailTeam;
+    if (['alcoholic', 'alcohol-free'].includes(this.activePlayer?.cocktailTeam)) return this.activePlayer.cocktailTeam;
     return 'shared';
   }
 
@@ -3487,9 +3532,26 @@ class GameEngine {
     const validUses = new Set(['alcoholic', 'alcohol-free', 'shared']);
     const spiritTarget = this.state.chapter.cocktailSpiritTarget;
     const spiritCount = fixed.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.cocktailUse === 'alcoholic').length;
+    const hasTeamBase = (team) => fixed.some((ingredient) =>
+      [team, 'shared'].includes(ingredient.cocktailUse) && ingredient.category !== 'alcohol'
+    );
     return fixed.length > 0 && fixed.every((ingredient) => validUses.has(ingredient.cocktailUse)) &&
       Number.isInteger(spiritTarget) && spiritTarget >= 1 && spiritTarget <= 3 && spiritCount === spiritTarget &&
-      fixed.some((ingredient) => ingredient.cocktailUse === 'alcohol-free' && !['alcohol', 'drinks'].includes(ingredient.category));
+      hasTeamBase('alcoholic') && hasTeamBase('alcohol-free') &&
+      fixed.some((ingredient) => ['alcohol-free', 'shared'].includes(ingredient.cocktailUse) && !['alcohol', 'drinks'].includes(ingredient.category));
+  }
+
+  activateCocktailDecisionTeam(team) {
+    if (!['alcoholic', 'alcohol-free'].includes(team)) return false;
+    if (this.activePlayer?.cocktailTeam === team) return true;
+    const selectionOrder = this.state.chapter.cocktailTeamSelectionPlayerIds ?? [];
+    const decisionPlayerId = selectionOrder.find((playerId) =>
+      this.state.players.find((player) => player.id === playerId)?.cocktailTeam === team
+    ) ?? this.cocktailTeamMembers(team)[0]?.id;
+    const playerIndex = this.state.players.findIndex((player) => player.id === decisionPlayerId);
+    if (playerIndex < 0) return false;
+    this.state.activePlayerIndex = playerIndex;
+    return true;
   }
 
   cocktailTeamsReady() {
@@ -3588,6 +3650,7 @@ class GameEngine {
   startCocktailSpiritCountChoice(now = Date.now()) {
     if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
       Number.isInteger(this.state.chapter.cocktailSpiritTarget)) return false;
+    if (!this.activateCocktailDecisionTeam('alcoholic')) return false;
     this.state.turn.phase = 'courseDecision';
     this.state.turn.courseDecisionType = 'cocktailSpiritCount';
     this.state.turn.pendingCocktailTeam = null;
@@ -3608,10 +3671,11 @@ class GameEngine {
     const spiritCount = Number(count);
     if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
       this.state.turn.phase !== 'courseDecision' || this.state.turn.courseDecisionType !== 'cocktailSpiritCount' ||
+      this.activePlayer.cocktailTeam !== 'alcoholic' ||
       !this.availableCocktailSpiritCounts().includes(spiritCount)) return false;
     this.state.chapter.cocktailSpiritTarget = spiritCount;
     this.state.turn = freshTurn();
-    this.log('cocktailSpiritCountChosen', { count: spiritCount }, now);
+    this.log('cocktailSpiritCountChosen', { count: spiritCount, playerId: this.activePlayer.id }, now);
     this.syncCourseLocations(now);
     return true;
   }
@@ -3640,6 +3704,7 @@ class GameEngine {
       !this.ingredientsLockedForCourse() || !this.cocktailCompositionReady()) return false;
     const team = this.nextCocktailTechniqueTeam();
     if (!team) return false;
+    if (!this.activateCocktailDecisionTeam(team)) return false;
     this.state.turn.phase = 'courseDecision';
     this.state.turn.courseDecisionType = 'cocktailTechnique';
     this.state.turn.pendingCocktailTeam = team;
@@ -3651,13 +3716,15 @@ class GameEngine {
     if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
       this.state.turn.phase !== 'courseDecision' || this.state.turn.courseDecisionType !== 'cocktailTechnique' ||
       this.state.turn.pendingCocktailTeam !== team ||
+      this.activePlayer.cocktailTeam !== team ||
       !['alcoholic', 'alcohol-free'].includes(team) || !['mixed', 'stirred'].includes(technique)) return false;
     this.state.chapter.cocktailTechniques[team] = technique;
     this.state.menu[this.state.chapterIndex].cocktailTechniques = clone(this.state.chapter.cocktailTechniques);
-    this.log('cocktailTechniqueChosen', { team, technique }, now);
+    this.log('cocktailTechniqueChosen', { team, technique, playerId: this.activePlayer.id }, now);
 
     const nextTeam = this.nextCocktailTechniqueTeam();
     if (nextTeam) {
+      if (!this.activateCocktailDecisionTeam(nextTeam)) return false;
       this.state.turn.pendingCocktailTeam = nextTeam;
       this.state.turn.courseDecisionType = 'cocktailTechnique';
       this.log('cocktailTechniqueChoiceStarted', { team: nextTeam }, now);
@@ -3676,7 +3743,8 @@ class GameEngine {
     if (this.currentChapter.id !== 'cocktails' || this.state.chapter.stage !== 'ingredients' ||
       !['alcoholic', 'alcohol-free', 'shared'].includes(use)) return false;
     const ingredient = this.courseIngredients().find((entry) => entry.id === ingredientId && entry.status === 'locked');
-    if (!ingredient || (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
+    if (!ingredient || (ingredient.category === 'alcohol' && use !== 'alcoholic') ||
+      (use !== 'shared' && this.activePlayer.cocktailTeam !== use)) return false;
     ingredient.cocktailUse = use;
     this.log('cocktailIngredientAssigned', { ingredientId, use }, now);
     this.updateChapterStage(now);
@@ -3906,6 +3974,7 @@ class GameEngine {
 
   cocktailTeamForTask(card) {
     if (card?.chapterId !== 'cocktails') return null;
+    if (['alcoholic', 'alcohol-free'].includes(card.cocktailTeam)) return card.cocktailTeam;
     if (card.area === 'alcoholic') return 'alcoholic';
     if (card.area === 'alcohol-free') return 'alcohol-free';
     return null;
@@ -4499,8 +4568,11 @@ class GameEngine {
     const alreadyDrawn = new Set(this.state.eventsDrawn);
     const appropriate = (eventId) => {
       const candidate = eventById(eventId);
-      return !alreadyDrawn.has(eventId) &&
-        !(stage === 'cooking' && this.hasUnassignedCourseTasks() && candidate?.archetype === 'watch');
+      if (!candidate || alreadyDrawn.has(eventId) ||
+        (stage === 'cooking' && this.hasUnassignedCourseTasks() && candidate.archetype === 'watch')) return false;
+      const contextualized = this.contextualizeEvent(candidate);
+      const actions = contextualized.type === 'choice' ? contextualized.options : contextualized.outcomes;
+      return (actions ?? []).length > 0;
     };
     const controlSignature = (event) => event
       ? `${event.type}:${[...new Set(event.options ?? event.outcomes ?? [])].sort().join('|')}`
@@ -4560,6 +4632,10 @@ class GameEngine {
           this.log('fallbackIngredientChoice', {}, now);
           return { fallback: true, action: 'discoverIngredient' };
         }
+        this.state.turn.outcomeCode = 'quietHandover';
+        this.state.turn.phase = 'resolved';
+        this.log('quietHandover', { playerId: this.activePlayer.id, reason: 'noIngredientActionForPlayer' }, now);
+        return { fallback: true, action: 'quietHandover' };
       }
       if (stage === 'tasks' && this.assignableTaskCards().length) {
         const task = this.assignTask({ group, now });
@@ -4821,7 +4897,7 @@ class GameEngine {
       }
     }
     const outcomeIndex = value <= 2 ? 0 : value <= 4 ? 1 : 2;
-    const actionCode = event.outcomes[outcomeIndex] ?? this.fallbackActions(event.stage)[0];
+    const actionCode = event.outcomes[outcomeIndex] ?? event.outcomes.at(-1) ?? this.fallbackActions(event.stage)[0];
     if (!actionCode) return false;
     const needsChoice = this.applyAction(actionCode, now, 'event');
     this.state.turn.outcomeCode = actionCode;
@@ -5081,13 +5157,20 @@ class GameEngine {
     ingredient.basketCourseIndex = this.state.chapterIndex;
     ingredient.discoveredAt = now;
     ingredient.discoveredBy = this.activePlayer.id;
+    if (this.currentChapter.id === 'cocktails') {
+      ingredient.cocktailUse = this.defaultCocktailUseForIngredient(ingredient);
+    }
     this.state.previousIngredientId = previousIngredientId;
     this.state.lastIngredientId = ingredient.id;
     this.state.turn.ingredientsAddedThisTurn = (this.state.turn.ingredientsAddedThisTurn ?? 0) + 1;
     this.state.turn.pendingIngredientIds = [];
     this.state.turn.resolvedIngredientId = ingredient.id;
     this.state.turn.resolvedIngredientEffect = ingredient.effect;
-    this.log('ingredientDiscovered', { ingredientId, chapterIndex: this.state.chapterIndex }, now);
+    this.log('ingredientDiscovered', {
+      ingredientId,
+      chapterIndex: this.state.chapterIndex,
+      cocktailUse: ingredient.cocktailUse ?? null
+    }, now);
 
     if (ignoreEffect) {
       const key = `cook-ignore-${this.state.chapterIndex}`;
@@ -5247,7 +5330,9 @@ class GameEngine {
     const previous = ingredientId
       ? this.openCourseIngredient(ingredientId)
       : this.openCourseIngredient(this.state.lastIngredientId) ?? this.latestUnlockedCourseIngredient();
-    if (!previous) return false;
+    if (!previous || (this.currentChapter.id === 'cocktails' &&
+      ['alcoholic', 'alcohol-free'].includes(previous.cocktailUse) &&
+      this.activePlayer.cocktailTeam !== previous.cocktailUse)) return false;
     const alternatives = this.swapIngredientAlternatives(previous);
     if (!alternatives.length) return false;
     const selected = alternatives[0];
@@ -5261,6 +5346,7 @@ class GameEngine {
     selected.basketCourseIndex = this.state.chapterIndex;
     selected.discoveredAt = now;
     selected.discoveredBy = this.activePlayer.id;
+    if (this.currentChapter.id === 'cocktails') selected.cocktailUse = previous.cocktailUse;
     this.state.lastIngredientId = selected.id;
     this.state.turn.resolvedPreviousIngredientId = previous.id;
     this.state.turn.resolvedIngredientId = selected.id;
@@ -5281,8 +5367,10 @@ class GameEngine {
         ).length;
         if (!Number.isInteger(spiritTarget) || otherFixedSpirits >= spiritTarget) return false;
       }
-      const use = cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
-      if (!['alcoholic', 'alcohol-free', 'shared'].includes(use) || (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
+      const use = cocktailUse ?? ingredient.cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
+      if (!['alcoholic', 'alcohol-free', 'shared'].includes(use) ||
+        (ingredient.cocktailUse && cocktailUse && ingredient.cocktailUse !== cocktailUse) ||
+        (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
     }
     return true;
   }
@@ -5293,7 +5381,7 @@ class GameEngine {
       : this.openCourseIngredient(this.state.lastIngredientId) ?? this.latestUnlockedCourseIngredient();
     if (!this.canLockIngredient(ingredient, cocktailUse)) return false;
     if (this.currentChapter.id === 'cocktails') {
-      ingredient.cocktailUse = cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
+      ingredient.cocktailUse = cocktailUse ?? ingredient.cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
     }
     ingredient.status = 'locked';
     ingredient.basketCourseIndex = null;
@@ -5368,6 +5456,9 @@ class GameEngine {
   }
 
   ingredientCategoriesForTask(card) {
+    if (card?.chapterId === 'cocktails' && card.usesCocktailTechnique) {
+      return ['alcohol', 'drinks', 'fruit', 'vegetable', 'pantry', 'dessert'];
+    }
     const mapping = {
       vegetables: ['vegetable'], fruit: ['fruit'], protein: card?.chapterId === 'soup' ? ['meat', 'vegetable', 'pantry'] : ['meat'], dressing: ['pantry'],
       seasoning: [], garnish: ['pantry', 'dessert'],
@@ -6252,9 +6343,26 @@ class GameEngine {
   getTaskCard(instance) {
     const card = taskById(instance.taskId);
     const team = this.cocktailTeamForTask(card);
-    const technique = team ? this.cocktailTechniqueForTeam(team, instance.chapterIndex ?? this.state.chapterIndex) : null;
+    const technique = team && card?.usesCocktailTechnique
+      ? this.cocktailTechniqueForTeam(team, instance.chapterIndex ?? this.state.chapterIndex)
+      : null;
     if (!card) return card;
-    const contextualizedCard = this.contextualizeIngredientText(card);
+    let contextualizedCard = this.contextualizeIngredientText(card);
+    if (card.dessertTeamSplit && (instance.assignedPlayerIds?.length ?? 0) >= 2) {
+      const assignedNames = instance.assignedPlayerIds
+        .map((playerId) => this.state.players.find((player) => player.id === playerId)?.name)
+        .filter(Boolean);
+      const splitIndex = Math.ceil(assignedNames.length / 2);
+      const fruitTeam = assignedNames.slice(0, splitIndex).join(', ');
+      const treasureTeam = assignedNames.slice(splitIndex).join(', ');
+      contextualizedCard = {
+        ...contextualizedCard,
+        instruction: {
+          de: `${contextualizedCard.instruction.de} Frucht-Team: ${fruitTeam}. Schatz-Team: ${treasureTeam}.`,
+          en: `${contextualizedCard.instruction.en} Fruit team: ${fruitTeam}. Treasure team: ${treasureTeam}.`
+        }
+      };
+    }
     if (!technique) return contextualizedCard;
     const techniqueInstruction = technique === 'mixed'
       ? {
@@ -6819,20 +6927,30 @@ function renderCourseBasket(engine, language) {
     ? engine.courseCategoryCount('alcohol', ['discovered', 'locked', 'used'])
     : 0;
   const cocktailSpiritTarget = engine.state.chapter.cocktailSpiritTarget;
+  const renderCocktailRecipeList = (team, title, tone) => {
+    const ingredients = locked.filter((ingredient) => [team, 'shared'].includes(ingredient.cocktailUse));
+    return `<section class="cocktail-recipe-list" data-team="${team}">
+      <div class="card-row"><h4>${title}</h4>${statusTag(`${ingredients.length} ${language === 'de' ? 'Zutaten' : 'ingredients'}`, tone)}</div>
+      ${ingredients.length ? ingredients.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong><small>${ingredient.cocktailUse === 'shared' ? (language === 'de' ? 'Gemeinsame Grundlage · steht auch in der anderen Liste' : 'Shared base · also appears in the other list') : (language === 'de' ? 'Nur für dieses Rezept' : 'For this recipe only')}</small><small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small></div></article>`).join('') : `<p class="muted">${language === 'de' ? 'Noch keine Zutat festgelegt.' : 'No ingredient locked yet.'}</p>`}
+    </section>`;
+  };
+  const cocktailRecipeLists = cocktailCourse && locked.length
+    ? `<div class="cocktail-recipe-lists">${renderCocktailRecipeList('alcoholic', language === 'de' ? 'Zutatenliste · alkoholisch' : 'Ingredient list · alcoholic', 'coral')}${renderCocktailRecipeList('alcohol-free', language === 'de' ? 'Zutatenliste · alkoholfrei' : 'Ingredient list · alcohol-free', 'green')}</div>`
+    : '';
   return `<section class="course-basket panel">
     <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Vorläufige Auswahl' : 'Draft selection'}</p><h3>${language === 'de' ? 'Gangkorb' : 'Course basket'}</h3></div>${statusTag(`${essentialLocked}/${target} ${language === 'de' ? 'Pflichtzutaten' : 'required'}`, essentialLocked >= target ? 'green' : 'gold')}</div>
     <p class="muted">${language === 'de' ? `Dieser Gang braucht genau ${target} Pflichtzutaten${optionalLimit ? ` und erlaubt höchstens ${optionalLimit} optionales Extra` : ''}. Pflichtzutaten ohne späteren möglichen Gang werden zu Rundenbeginn automatisch festgelegt; alle übrigen Zutaten können nur durch Karten verbindlich festgelegt oder aus dem offenen Korb zurückgelegt werden. Vor dem Wechsel zu den Aufgaben muss der offene Korb leer sein.` : `This course needs exactly ${target} required ingredients${optionalLimit ? ` and allows at most ${optionalLimit} optional extra` : ''}. Required ingredients with no later eligible course are locked automatically at the start of the round; all other ingredients can only be locked in or returned from the open basket by cards. The open basket must be empty before tasks begin.`}</p>
     ${automaticallyLocked.length ? `<div class="card-effect"><strong>${language === 'de' ? 'Automatisch für diesen Gang festgelegt' : 'Automatically locked for this course'}</strong><span>${language === 'de' ? 'Diese Pflichtzutaten können in keinem späteren Gang mehr verwendet werden und sind deshalb nicht erst im offenen Korb gelandet.' : 'These required ingredients cannot be used in any later course, so they bypassed the open basket.'}</span></div>` : ''}
-    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei echte Rezeptkörbe' : 'Two real recipe baskets'}</strong><span>${language === 'de' ? 'Beim verbindlichen Festlegen ordnet die Karte jede Zutat der alkoholischen Mischung, der alkoholfreien Mischung oder beiden zu. Die gewählten ein bis drei Spirituosensorten bleiben immer ausschließlich im alkoholischen Rezept; mindestens eine Geschmackszutat gehört ausschließlich zur alkoholfreien Variante.' : 'When an ingredient is locked in, the card assigns it to the alcoholic mix, the alcohol-free mix, or both. The selected one to three spirits always remain exclusive to the alcoholic recipe; at least one flavour ingredient belongs exclusively to the alcohol-free version.'}</span></div>` : ''}
+    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei getrennte Zutatenlisten' : 'Two separate ingredient lists'}</strong><span>${language === 'de' ? 'Wer eine Zutat auswählt, entscheidet damit für das eigene Cocktail-Team. Mitglieder des alkoholfreien Teams bekommen keine Spirituosen zur Auswahl. Automatisch festgelegte gemeinsame Grundlagen werden fair auf beide Listen verteilt.' : 'Choosing an ingredient adds it to the active player’s own cocktail team. Alcohol-free team members are never offered spirits. Automatically locked bases are distributed fairly between both lists.'}</span></div>` : ''}
     ${profile || cocktailCourse ? `<div class="stat-strip">${profile}${cocktailCourse ? statusTag(language === 'de' ? `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} Spirituosensorten für die alkoholische Mischung` : `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} spirits for the alcoholic mix`, Number.isInteger(cocktailSpiritTarget) && cocktailSpiritCount === cocktailSpiritTarget ? 'green' : 'gold') : ''}</div>` : ''}
     ${basket.length ? `<div class="course-basket-list">${basket.map((ingredient) => `<article>
       <strong>${t(ingredient.name, language)}</strong>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : `<small>${language === 'de' ? 'Kein zusätzlicher Karteneffekt.' : 'No additional card effect.'}</small>`}
-      <small>${language === 'de' ? 'Wartet auf die nächste passende Kartenentscheidung.' : 'Waiting for the next applicable card decision.'}</small>
+      <small>${cocktailCourse ? `${cocktailUseLabel(ingredient.cocktailUse)} · ` : ''}${language === 'de' ? 'Wartet auf die nächste passende Kartenentscheidung.' : 'Waiting for the next applicable card decision.'}</small>
     </article>`).join('')}</div>` : `<p class="muted">${language === 'de' ? 'Gefundene Zutaten landen zuerst hier und werden anschließend ausschließlich durch Karten festgelegt oder zurückgelegt.' : 'Discovered ingredients land here first and are then locked in or returned exclusively by cards.'}</p>`}
-    ${locked.length ? `<div class="cocktail-ingredient-assignments"><h4>${cocktailCourse
+    ${cocktailRecipeLists || (locked.length ? `<div class="cocktail-ingredient-assignments"><h4>${cocktailCourse
       ? (language === 'de' ? 'Bereits festgelegte Cocktailzutaten' : 'Locked cocktail ingredients')
-      : (language === 'de' ? 'Bereits festgelegte Zutaten' : 'Locked ingredients')}</h4>${locked.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong>${ingredient.autoLockedChapterIndex === engine.state.chapterIndex ? `<small>${language === 'de' ? 'Automatisch festgelegt · letzter möglicher Gang' : 'Automatically locked · final eligible course'}</small>` : ''}${cocktailCourse ? `<small>${cocktailUseLabel(ingredient.cocktailUse)}</small>` : ''}<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small></div></article>`).join('')}</div>` : ''}
+      : (language === 'de' ? 'Bereits festgelegte Zutaten' : 'Locked ingredients')}</h4>${locked.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong>${ingredient.autoLockedChapterIndex === engine.state.chapterIndex ? `<small>${language === 'de' ? 'Automatisch festgelegt · letzter möglicher Gang' : 'Automatically locked · final eligible course'}</small>` : ''}<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small></div></article>`).join('')}</div>` : '')}
   </section>`;
 }
 
@@ -6852,7 +6970,7 @@ function renderCocktailTeams(engine, language) {
   return `<section class="cocktail-team-board" aria-label="${language === 'de' ? 'Cocktail-Teams' : 'Cocktail teams'}">
     ${team('alcoholic', language === 'de' ? 'Mit Alkohol' : 'Alcoholic', 'coral')}
     ${team('alcohol-free', language === 'de' ? 'Alkoholfrei' : 'Alcohol-free', 'green')}
-    <p>${language === 'de' ? 'Nur die beiden Misch-Aufträge sind teamgebunden. Grundlagen, Eis, Sicherheit und Servieren bleiben gemeinsame Crew-Aufgaben.' : 'Only the two mixing jobs are team-specific. Bases, ice, safety, and serving remain shared crew jobs.'}</p>
+    <p>${language === 'de' ? 'Früchte, Eis, Mischen, Süße, Säure und Abschmecken werden für jedes Team getrennt vergeben. Nur Kennzeichnung, Servieren und Aufräumen bleiben gemeinsame Crew-Aufgaben.' : 'Fruit, ice, mixing, sweetness, acidity, and tasting are assigned separately to each team. Only labelling, serving, and cleanup remain shared crew jobs.'}</p>
   </section>`;
 }
 
@@ -7142,6 +7260,12 @@ function renderRolledCard(engine, language) {
 
 function renderIngredientChoice(engine, language) {
   const event = engine.currentEvent;
+  const cocktailTeam = engine.currentChapter.id === 'cocktails' ? engine.activePlayer.cocktailTeam : null;
+  const cocktailChoiceNote = cocktailTeam === 'alcoholic'
+    ? (language === 'de' ? `Die Auswahl wird der alkoholischen Zutatenliste von ${escapeHtml(engine.activePlayer.name)}s Team zugeordnet.` : `The choice is added to ${escapeHtml(engine.activePlayer.name)}’s alcoholic ingredient list.`)
+    : cocktailTeam === 'alcohol-free'
+      ? (language === 'de' ? `Die Auswahl wird der alkoholfreien Zutatenliste von ${escapeHtml(engine.activePlayer.name)}s Team zugeordnet; Spirituosen werden hier nicht angeboten.` : `The choice is added to ${escapeHtml(engine.activePlayer.name)}’s alcohol-free ingredient list; spirits are not offered here.`)
+      : null;
   const choices = engine.state.turn.pendingIngredientIds.map((ingredientId) => {
     const ingredient = engine.getIngredient(ingredientId);
     const effect = INGREDIENT_EFFECT_TEXT[ingredient.effect] ?? { de: 'Kein zusätzlicher Karteneffekt.', en: 'No additional card effect.' };
@@ -7163,7 +7287,7 @@ function renderIngredientChoice(engine, language) {
       ${renderCourseFlow(engine, language)}
       <p class="eyebrow">${language === 'de' ? 'Vorratsereignis · aktive Entscheidung' : 'Provision event · active decision'}</p>
       <h2>${event ? t(event.title, language) : (language === 'de' ? 'Welchen Proviant nehmt ihr mit?' : 'Which provision do you take?')}</h2>
-      <p class="card-story">${language === 'de' ? 'Besprecht die angebotenen Zutaten. Die aktive Person wählt eine Karte; sie bleibt veränderbar, bis ein späteres Ereignis sie festlegt.' : 'Discuss the offered ingredients. The active player chooses one card; it remains changeable until a later event locks it.'}</p>
+      <p class="card-story">${language === 'de' ? 'Besprecht die angebotenen Zutaten. Die aktive Person wählt eine Karte; sie bleibt veränderbar, bis ein späteres Ereignis sie festlegt.' : 'Discuss the offered ingredients. The active player chooses one card; it remains changeable until a later event locks it.'}${cocktailChoiceNote ? ` ${cocktailChoiceNote}` : ''}</p>
       <div class="choice-list">${choices}</div>
     </article>`;
 }
@@ -7197,8 +7321,8 @@ function renderCocktailTechniqueChoice(engine, language) {
     <p class="eyebrow">${language === 'de' ? 'Cocktail-Quest · verbindliche Rezeptentscheidung' : 'Cocktail quest · required recipe decision'}</p>
     <h2>${language === 'de' ? `Wird der ${teamName} gemixt oder gerührt?` : `Will the ${teamName} be blended or stirred?`}</h2>
     <p class="card-story">${language === 'de'
-      ? 'Diese Wahl gilt für den gesamten Rezeptkorb und wird dem zuständigen Cocktail-Team später im Mischauftrag angezeigt. Eis ist für beide Varianten verbindlicher Grundvorrat und keine erspielbare Zutatenkarte.'
-      : 'This choice applies to the entire recipe basket and will be shown to the responsible cocktail team in its mixing job. Ice is required basic stock for both versions, not a playable ingredient card.'}</p>
+      ? `${escapeHtml(engine.activePlayer.name)} trifft diese Entscheidung als Mitglied des zuständigen Teams. Die Wahl gilt für dessen gesamte Zutatenliste und wird später im Mischauftrag angezeigt. Eis ist für beide Varianten verbindlicher Grundvorrat und keine erspielbare Zutatenkarte.`
+      : `${escapeHtml(engine.activePlayer.name)} makes this decision as a member of the responsible team. It applies to that team’s entire ingredient list and is shown later in its mixing job. Ice is required basic stock for both versions, not a playable ingredient card.`}</p>
     <div class="choice-list">
       <button class="choice-button" type="button" data-action="choose-cocktail-technique" data-team="${team}" data-technique="mixed"><strong>${language === 'de' ? 'Mixen' : 'Blend'}</strong><small>&nbsp;– ${language === 'de' ? 'Portionsweise im Mixer gleichmäßig verbinden.' : 'Combine evenly in batches using a blender.'}</small></button>
       <button class="choice-button" type="button" data-action="choose-cocktail-technique" data-team="${team}" data-technique="stirred"><strong>${language === 'de' ? 'Rühren' : 'Stir'}</strong><small>&nbsp;– ${language === 'de' ? 'Mit Eis im Krug gründlich kalt rühren.' : 'Stir thoroughly with ice in a jug until cold.'}</small></button>
@@ -7218,8 +7342,8 @@ function renderCocktailSpiritCountChoice(engine, language) {
     <p class="eyebrow">${language === 'de' ? 'Cocktail-Quest · Spirituosenauswahl' : 'Cocktail quest · spirit selection'}</p>
     <h2>${language === 'de' ? 'Wie viele Spirituosensorten kommen in den alkoholischen Cocktail?' : 'How many spirits go into the alcoholic cocktail?'}</h2>
     <p class="card-story">${language === 'de'
-      ? 'Legt verbindlich fest, ob eine, zwei oder drei verschiedene noch verfügbare Spirituosensorten erspielt werden. Alle gewählten Sorten gehören ausschließlich in den alkoholischen Rezeptkorb.'
-      : 'Choose whether one, two, or three different remaining spirits must be played. Every selected spirit belongs exclusively in the alcoholic recipe basket.'}</p>
+      ? `${escapeHtml(engine.activePlayer.name)} entscheidet als Mitglied des alkoholischen Teams, ob eine, zwei oder drei verschiedene noch verfügbare Spirituosensorten erspielt werden. Nur Mitglieder dieses Teams bekommen Spirituosen bei der Zutatenwahl angeboten.`
+      : `${escapeHtml(engine.activePlayer.name)} decides as a member of the alcoholic team whether one, two, or three remaining spirits must be played. Only members of that team are offered spirits during ingredient selection.`}</p>
     <div class="choice-list">
       ${availableCounts.map((count) => `<button class="choice-button" type="button" data-action="choose-cocktail-spirit-count" data-count="${count}"><strong>${count} ${language === 'de' ? (count === 1 ? 'Spirituosensorte' : 'Spirituosensorten') : (count === 1 ? 'spirit' : 'spirits')}</strong><small>&nbsp;– ${language === 'de' ? 'wird anschließend durch Zutatenkarten verbindlich festgelegt.' : 'will then be locked in through ingredient cards.'}</small></button>`).join('')}
     </div>
@@ -7686,13 +7810,23 @@ function renderEating(engine, language) {
         return statusTag(`${teamLabel}: ${techniqueLabel}`, team === 'alcoholic' ? 'coral' : 'green');
       }).join('')
     : '';
+  const cocktailIngredientLists = course.id === 'cocktails'
+    ? `<div class="cocktail-recipe-lists eating-recipe-lists">${['alcoholic', 'alcohol-free'].map((team) => {
+        const teamIngredients = ingredients.filter((ingredient) => [team, 'shared'].includes(ingredient.cocktailUse));
+        const title = team === 'alcoholic'
+          ? (language === 'de' ? 'Zutatenliste · alkoholisch' : 'Ingredient list · alcoholic')
+          : (language === 'de' ? 'Zutatenliste · alkoholfrei' : 'Ingredient list · alcohol-free');
+        return `<section class="cocktail-recipe-list" data-team="${team}"><h3>${title}</h3><div class="stat-strip">${teamIngredients.map((ingredient) => statusTag(t(ingredient.name, language), team === 'alcoholic' ? 'coral' : 'green')).join('')}</div></section>`;
+      }).join('')}</div>`
+    : '';
   return `
     <section class="hero-screen">
       <div class="panel hero-card">
         <p class="eyebrow">${tx('serveCourse', language)}</p>
         <h1 style="font-size:clamp(2.5rem,7vw,5rem)">${t(course.course, language)}</h1>
         <p class="lead">${t(course.description, language)}</p>
-        <div class="stat-strip">${ingredients.slice(0, 12).map((ingredient) => statusTag(t(ingredient.name, language), ingredient.essential ? 'green' : '')).join('')}${cocktailTechniques}</div>
+        ${cocktailIngredientLists || `<div class="stat-strip">${ingredients.slice(0, 12).map((ingredient) => statusTag(t(ingredient.name, language), ingredient.essential ? 'green' : '')).join('')}</div>`}
+        ${cocktailTechniques ? `<div class="stat-strip">${cocktailTechniques}</div>` : ''}
         <p>${language === 'de' ? 'Genießt den Gang ohne Zeitdruck. Laufende Aufgaben-Challenges bleiben in der Aufgabenliste sichtbar.' : 'Enjoy the course without a time limit. Running task challenges remain visible in the task list.'}</p>
         ${renderPreparationSummary(engine, language)}
         <button class="primary-button" type="button" data-action="next-chapter">${tx('nextCourse', language)}</button>
@@ -7709,7 +7843,7 @@ function renderComplete(engine, language) {
     <section class="hero-screen">
       <div class="panel hero-card">
         <p class="eyebrow">Adventure Dinner · Seafaring Adventure</p>
-        <h1 style="font-size:clamp(2.6rem,8vw,5.4rem)">${tx('gameCompleteTitle', language)}</h1>
+        <h1 class="game-complete-title">${tx('gameCompleteTitle', language)}</h1>
         <p class="lead">${tx('gameCompleteLead', language)}</p>
         <div class="stat-strip">
           ${statusTag(`${engine.state.players.reduce((sum, player) => sum + player.turns, 0)} ${language === 'de' ? 'Züge' : 'turns'}`, 'gold')}
@@ -9129,7 +9263,13 @@ async function handleAction(target) {
       if (engine.chooseSoupStyle(target.dataset.style)) { audio.play('move'); persist(); render(); }
       break;
     case 'choose-cocktail-technique':
-      if (engine.chooseCocktailTechnique(target.dataset.team, target.dataset.technique)) { audio.play('move'); persist(); render(); }
+      {
+        const previousPlayerId = engine.activePlayer.id;
+        if (engine.chooseCocktailTechnique(target.dataset.team, target.dataset.technique)) {
+          audio.play('move'); persist(); render();
+          if (engine.activePlayer.id !== previousPlayerId) showHandover();
+        }
+      }
       break;
     case 'choose-cocktail-spirit-count':
       if (engine.chooseCocktailSpiritCount(Number(target.dataset.count))) { audio.play('move'); persist(); render(); }

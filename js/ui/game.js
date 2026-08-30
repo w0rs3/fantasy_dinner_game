@@ -295,20 +295,30 @@ function renderCourseBasket(engine, language) {
     ? engine.courseCategoryCount('alcohol', ['discovered', 'locked', 'used'])
     : 0;
   const cocktailSpiritTarget = engine.state.chapter.cocktailSpiritTarget;
+  const renderCocktailRecipeList = (team, title, tone) => {
+    const ingredients = locked.filter((ingredient) => [team, 'shared'].includes(ingredient.cocktailUse));
+    return `<section class="cocktail-recipe-list" data-team="${team}">
+      <div class="card-row"><h4>${title}</h4>${statusTag(`${ingredients.length} ${language === 'de' ? 'Zutaten' : 'ingredients'}`, tone)}</div>
+      ${ingredients.length ? ingredients.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong><small>${ingredient.cocktailUse === 'shared' ? (language === 'de' ? 'Gemeinsame Grundlage · steht auch in der anderen Liste' : 'Shared base · also appears in the other list') : (language === 'de' ? 'Nur für dieses Rezept' : 'For this recipe only')}</small><small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small></div></article>`).join('') : `<p class="muted">${language === 'de' ? 'Noch keine Zutat festgelegt.' : 'No ingredient locked yet.'}</p>`}
+    </section>`;
+  };
+  const cocktailRecipeLists = cocktailCourse && locked.length
+    ? `<div class="cocktail-recipe-lists">${renderCocktailRecipeList('alcoholic', language === 'de' ? 'Zutatenliste · alkoholisch' : 'Ingredient list · alcoholic', 'coral')}${renderCocktailRecipeList('alcohol-free', language === 'de' ? 'Zutatenliste · alkoholfrei' : 'Ingredient list · alcohol-free', 'green')}</div>`
+    : '';
   return `<section class="course-basket panel">
     <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Vorläufige Auswahl' : 'Draft selection'}</p><h3>${language === 'de' ? 'Gangkorb' : 'Course basket'}</h3></div>${statusTag(`${essentialLocked}/${target} ${language === 'de' ? 'Pflichtzutaten' : 'required'}`, essentialLocked >= target ? 'green' : 'gold')}</div>
     <p class="muted">${language === 'de' ? `Dieser Gang braucht genau ${target} Pflichtzutaten${optionalLimit ? ` und erlaubt höchstens ${optionalLimit} optionales Extra` : ''}. Pflichtzutaten ohne späteren möglichen Gang werden zu Rundenbeginn automatisch festgelegt; alle übrigen Zutaten können nur durch Karten verbindlich festgelegt oder aus dem offenen Korb zurückgelegt werden. Vor dem Wechsel zu den Aufgaben muss der offene Korb leer sein.` : `This course needs exactly ${target} required ingredients${optionalLimit ? ` and allows at most ${optionalLimit} optional extra` : ''}. Required ingredients with no later eligible course are locked automatically at the start of the round; all other ingredients can only be locked in or returned from the open basket by cards. The open basket must be empty before tasks begin.`}</p>
     ${automaticallyLocked.length ? `<div class="card-effect"><strong>${language === 'de' ? 'Automatisch für diesen Gang festgelegt' : 'Automatically locked for this course'}</strong><span>${language === 'de' ? 'Diese Pflichtzutaten können in keinem späteren Gang mehr verwendet werden und sind deshalb nicht erst im offenen Korb gelandet.' : 'These required ingredients cannot be used in any later course, so they bypassed the open basket.'}</span></div>` : ''}
-    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei echte Rezeptkörbe' : 'Two real recipe baskets'}</strong><span>${language === 'de' ? 'Beim verbindlichen Festlegen ordnet die Karte jede Zutat der alkoholischen Mischung, der alkoholfreien Mischung oder beiden zu. Die gewählten ein bis drei Spirituosensorten bleiben immer ausschließlich im alkoholischen Rezept; mindestens eine Geschmackszutat gehört ausschließlich zur alkoholfreien Variante.' : 'When an ingredient is locked in, the card assigns it to the alcoholic mix, the alcohol-free mix, or both. The selected one to three spirits always remain exclusive to the alcoholic recipe; at least one flavour ingredient belongs exclusively to the alcohol-free version.'}</span></div>` : ''}
+    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei getrennte Zutatenlisten' : 'Two separate ingredient lists'}</strong><span>${language === 'de' ? 'Wer eine Zutat auswählt, entscheidet damit für das eigene Cocktail-Team. Mitglieder des alkoholfreien Teams bekommen keine Spirituosen zur Auswahl. Automatisch festgelegte gemeinsame Grundlagen werden fair auf beide Listen verteilt.' : 'Choosing an ingredient adds it to the active player’s own cocktail team. Alcohol-free team members are never offered spirits. Automatically locked bases are distributed fairly between both lists.'}</span></div>` : ''}
     ${profile || cocktailCourse ? `<div class="stat-strip">${profile}${cocktailCourse ? statusTag(language === 'de' ? `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} Spirituosensorten für die alkoholische Mischung` : `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} spirits for the alcoholic mix`, Number.isInteger(cocktailSpiritTarget) && cocktailSpiritCount === cocktailSpiritTarget ? 'green' : 'gold') : ''}</div>` : ''}
     ${basket.length ? `<div class="course-basket-list">${basket.map((ingredient) => `<article>
       <strong>${t(ingredient.name, language)}</strong>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : `<small>${language === 'de' ? 'Kein zusätzlicher Karteneffekt.' : 'No additional card effect.'}</small>`}
-      <small>${language === 'de' ? 'Wartet auf die nächste passende Kartenentscheidung.' : 'Waiting for the next applicable card decision.'}</small>
+      <small>${cocktailCourse ? `${cocktailUseLabel(ingredient.cocktailUse)} · ` : ''}${language === 'de' ? 'Wartet auf die nächste passende Kartenentscheidung.' : 'Waiting for the next applicable card decision.'}</small>
     </article>`).join('')}</div>` : `<p class="muted">${language === 'de' ? 'Gefundene Zutaten landen zuerst hier und werden anschließend ausschließlich durch Karten festgelegt oder zurückgelegt.' : 'Discovered ingredients land here first and are then locked in or returned exclusively by cards.'}</p>`}
-    ${locked.length ? `<div class="cocktail-ingredient-assignments"><h4>${cocktailCourse
+    ${cocktailRecipeLists || (locked.length ? `<div class="cocktail-ingredient-assignments"><h4>${cocktailCourse
       ? (language === 'de' ? 'Bereits festgelegte Cocktailzutaten' : 'Locked cocktail ingredients')
-      : (language === 'de' ? 'Bereits festgelegte Zutaten' : 'Locked ingredients')}</h4>${locked.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong>${ingredient.autoLockedChapterIndex === engine.state.chapterIndex ? `<small>${language === 'de' ? 'Automatisch festgelegt · letzter möglicher Gang' : 'Automatically locked · final eligible course'}</small>` : ''}${cocktailCourse ? `<small>${cocktailUseLabel(ingredient.cocktailUse)}</small>` : ''}<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small></div></article>`).join('')}</div>` : ''}
+      : (language === 'de' ? 'Bereits festgelegte Zutaten' : 'Locked ingredients')}</h4>${locked.map((ingredient) => `<article><div><strong>${t(ingredient.name, language)}</strong>${ingredient.autoLockedChapterIndex === engine.state.chapterIndex ? `<small>${language === 'de' ? 'Automatisch festgelegt · letzter möglicher Gang' : 'Automatically locked · final eligible course'}</small>` : ''}<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small></div></article>`).join('')}</div>` : '')}
   </section>`;
 }
 
@@ -328,7 +338,7 @@ function renderCocktailTeams(engine, language) {
   return `<section class="cocktail-team-board" aria-label="${language === 'de' ? 'Cocktail-Teams' : 'Cocktail teams'}">
     ${team('alcoholic', language === 'de' ? 'Mit Alkohol' : 'Alcoholic', 'coral')}
     ${team('alcohol-free', language === 'de' ? 'Alkoholfrei' : 'Alcohol-free', 'green')}
-    <p>${language === 'de' ? 'Nur die beiden Misch-Aufträge sind teamgebunden. Grundlagen, Eis, Sicherheit und Servieren bleiben gemeinsame Crew-Aufgaben.' : 'Only the two mixing jobs are team-specific. Bases, ice, safety, and serving remain shared crew jobs.'}</p>
+    <p>${language === 'de' ? 'Früchte, Eis, Mischen, Süße, Säure und Abschmecken werden für jedes Team getrennt vergeben. Nur Kennzeichnung, Servieren und Aufräumen bleiben gemeinsame Crew-Aufgaben.' : 'Fruit, ice, mixing, sweetness, acidity, and tasting are assigned separately to each team. Only labelling, serving, and cleanup remain shared crew jobs.'}</p>
   </section>`;
 }
 
@@ -618,6 +628,12 @@ function renderRolledCard(engine, language) {
 
 function renderIngredientChoice(engine, language) {
   const event = engine.currentEvent;
+  const cocktailTeam = engine.currentChapter.id === 'cocktails' ? engine.activePlayer.cocktailTeam : null;
+  const cocktailChoiceNote = cocktailTeam === 'alcoholic'
+    ? (language === 'de' ? `Die Auswahl wird der alkoholischen Zutatenliste von ${escapeHtml(engine.activePlayer.name)}s Team zugeordnet.` : `The choice is added to ${escapeHtml(engine.activePlayer.name)}’s alcoholic ingredient list.`)
+    : cocktailTeam === 'alcohol-free'
+      ? (language === 'de' ? `Die Auswahl wird der alkoholfreien Zutatenliste von ${escapeHtml(engine.activePlayer.name)}s Team zugeordnet; Spirituosen werden hier nicht angeboten.` : `The choice is added to ${escapeHtml(engine.activePlayer.name)}’s alcohol-free ingredient list; spirits are not offered here.`)
+      : null;
   const choices = engine.state.turn.pendingIngredientIds.map((ingredientId) => {
     const ingredient = engine.getIngredient(ingredientId);
     const effect = INGREDIENT_EFFECT_TEXT[ingredient.effect] ?? { de: 'Kein zusätzlicher Karteneffekt.', en: 'No additional card effect.' };
@@ -639,7 +655,7 @@ function renderIngredientChoice(engine, language) {
       ${renderCourseFlow(engine, language)}
       <p class="eyebrow">${language === 'de' ? 'Vorratsereignis · aktive Entscheidung' : 'Provision event · active decision'}</p>
       <h2>${event ? t(event.title, language) : (language === 'de' ? 'Welchen Proviant nehmt ihr mit?' : 'Which provision do you take?')}</h2>
-      <p class="card-story">${language === 'de' ? 'Besprecht die angebotenen Zutaten. Die aktive Person wählt eine Karte; sie bleibt veränderbar, bis ein späteres Ereignis sie festlegt.' : 'Discuss the offered ingredients. The active player chooses one card; it remains changeable until a later event locks it.'}</p>
+      <p class="card-story">${language === 'de' ? 'Besprecht die angebotenen Zutaten. Die aktive Person wählt eine Karte; sie bleibt veränderbar, bis ein späteres Ereignis sie festlegt.' : 'Discuss the offered ingredients. The active player chooses one card; it remains changeable until a later event locks it.'}${cocktailChoiceNote ? ` ${cocktailChoiceNote}` : ''}</p>
       <div class="choice-list">${choices}</div>
     </article>`;
 }
@@ -673,8 +689,8 @@ function renderCocktailTechniqueChoice(engine, language) {
     <p class="eyebrow">${language === 'de' ? 'Cocktail-Quest · verbindliche Rezeptentscheidung' : 'Cocktail quest · required recipe decision'}</p>
     <h2>${language === 'de' ? `Wird der ${teamName} gemixt oder gerührt?` : `Will the ${teamName} be blended or stirred?`}</h2>
     <p class="card-story">${language === 'de'
-      ? 'Diese Wahl gilt für den gesamten Rezeptkorb und wird dem zuständigen Cocktail-Team später im Mischauftrag angezeigt. Eis ist für beide Varianten verbindlicher Grundvorrat und keine erspielbare Zutatenkarte.'
-      : 'This choice applies to the entire recipe basket and will be shown to the responsible cocktail team in its mixing job. Ice is required basic stock for both versions, not a playable ingredient card.'}</p>
+      ? `${escapeHtml(engine.activePlayer.name)} trifft diese Entscheidung als Mitglied des zuständigen Teams. Die Wahl gilt für dessen gesamte Zutatenliste und wird später im Mischauftrag angezeigt. Eis ist für beide Varianten verbindlicher Grundvorrat und keine erspielbare Zutatenkarte.`
+      : `${escapeHtml(engine.activePlayer.name)} makes this decision as a member of the responsible team. It applies to that team’s entire ingredient list and is shown later in its mixing job. Ice is required basic stock for both versions, not a playable ingredient card.`}</p>
     <div class="choice-list">
       <button class="choice-button" type="button" data-action="choose-cocktail-technique" data-team="${team}" data-technique="mixed"><strong>${language === 'de' ? 'Mixen' : 'Blend'}</strong><small>&nbsp;– ${language === 'de' ? 'Portionsweise im Mixer gleichmäßig verbinden.' : 'Combine evenly in batches using a blender.'}</small></button>
       <button class="choice-button" type="button" data-action="choose-cocktail-technique" data-team="${team}" data-technique="stirred"><strong>${language === 'de' ? 'Rühren' : 'Stir'}</strong><small>&nbsp;– ${language === 'de' ? 'Mit Eis im Krug gründlich kalt rühren.' : 'Stir thoroughly with ice in a jug until cold.'}</small></button>
@@ -694,8 +710,8 @@ function renderCocktailSpiritCountChoice(engine, language) {
     <p class="eyebrow">${language === 'de' ? 'Cocktail-Quest · Spirituosenauswahl' : 'Cocktail quest · spirit selection'}</p>
     <h2>${language === 'de' ? 'Wie viele Spirituosensorten kommen in den alkoholischen Cocktail?' : 'How many spirits go into the alcoholic cocktail?'}</h2>
     <p class="card-story">${language === 'de'
-      ? 'Legt verbindlich fest, ob eine, zwei oder drei verschiedene noch verfügbare Spirituosensorten erspielt werden. Alle gewählten Sorten gehören ausschließlich in den alkoholischen Rezeptkorb.'
-      : 'Choose whether one, two, or three different remaining spirits must be played. Every selected spirit belongs exclusively in the alcoholic recipe basket.'}</p>
+      ? `${escapeHtml(engine.activePlayer.name)} entscheidet als Mitglied des alkoholischen Teams, ob eine, zwei oder drei verschiedene noch verfügbare Spirituosensorten erspielt werden. Nur Mitglieder dieses Teams bekommen Spirituosen bei der Zutatenwahl angeboten.`
+      : `${escapeHtml(engine.activePlayer.name)} decides as a member of the alcoholic team whether one, two, or three remaining spirits must be played. Only members of that team are offered spirits during ingredient selection.`}</p>
     <div class="choice-list">
       ${availableCounts.map((count) => `<button class="choice-button" type="button" data-action="choose-cocktail-spirit-count" data-count="${count}"><strong>${count} ${language === 'de' ? (count === 1 ? 'Spirituosensorte' : 'Spirituosensorten') : (count === 1 ? 'spirit' : 'spirits')}</strong><small>&nbsp;– ${language === 'de' ? 'wird anschließend durch Zutatenkarten verbindlich festgelegt.' : 'will then be locked in through ingredient cards.'}</small></button>`).join('')}
     </div>
@@ -1162,13 +1178,23 @@ export function renderEating(engine, language) {
         return statusTag(`${teamLabel}: ${techniqueLabel}`, team === 'alcoholic' ? 'coral' : 'green');
       }).join('')
     : '';
+  const cocktailIngredientLists = course.id === 'cocktails'
+    ? `<div class="cocktail-recipe-lists eating-recipe-lists">${['alcoholic', 'alcohol-free'].map((team) => {
+        const teamIngredients = ingredients.filter((ingredient) => [team, 'shared'].includes(ingredient.cocktailUse));
+        const title = team === 'alcoholic'
+          ? (language === 'de' ? 'Zutatenliste · alkoholisch' : 'Ingredient list · alcoholic')
+          : (language === 'de' ? 'Zutatenliste · alkoholfrei' : 'Ingredient list · alcohol-free');
+        return `<section class="cocktail-recipe-list" data-team="${team}"><h3>${title}</h3><div class="stat-strip">${teamIngredients.map((ingredient) => statusTag(t(ingredient.name, language), team === 'alcoholic' ? 'coral' : 'green')).join('')}</div></section>`;
+      }).join('')}</div>`
+    : '';
   return `
     <section class="hero-screen">
       <div class="panel hero-card">
         <p class="eyebrow">${tx('serveCourse', language)}</p>
         <h1 style="font-size:clamp(2.5rem,7vw,5rem)">${t(course.course, language)}</h1>
         <p class="lead">${t(course.description, language)}</p>
-        <div class="stat-strip">${ingredients.slice(0, 12).map((ingredient) => statusTag(t(ingredient.name, language), ingredient.essential ? 'green' : '')).join('')}${cocktailTechniques}</div>
+        ${cocktailIngredientLists || `<div class="stat-strip">${ingredients.slice(0, 12).map((ingredient) => statusTag(t(ingredient.name, language), ingredient.essential ? 'green' : '')).join('')}</div>`}
+        ${cocktailTechniques ? `<div class="stat-strip">${cocktailTechniques}</div>` : ''}
         <p>${language === 'de' ? 'Genießt den Gang ohne Zeitdruck. Laufende Aufgaben-Challenges bleiben in der Aufgabenliste sichtbar.' : 'Enjoy the course without a time limit. Running task challenges remain visible in the task list.'}</p>
         ${renderPreparationSummary(engine, language)}
         <button class="primary-button" type="button" data-action="next-chapter">${tx('nextCourse', language)}</button>
@@ -1185,7 +1211,7 @@ export function renderComplete(engine, language) {
     <section class="hero-screen">
       <div class="panel hero-card">
         <p class="eyebrow">Adventure Dinner · Seafaring Adventure</p>
-        <h1 style="font-size:clamp(2.6rem,8vw,5.4rem)">${tx('gameCompleteTitle', language)}</h1>
+        <h1 class="game-complete-title">${tx('gameCompleteTitle', language)}</h1>
         <p class="lead">${tx('gameCompleteLead', language)}</p>
         <div class="stat-strip">
           ${statusTag(`${engine.state.players.reduce((sum, player) => sum + player.turns, 0)} ${language === 'de' ? 'Züge' : 'turns'}`, 'gold')}

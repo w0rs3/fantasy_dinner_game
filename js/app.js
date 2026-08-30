@@ -440,7 +440,13 @@ async function handleAction(target) {
       if (engine.chooseSoupStyle(target.dataset.style)) { audio.play('move'); persist(); render(); }
       break;
     case 'choose-cocktail-technique':
-      if (engine.chooseCocktailTechnique(target.dataset.team, target.dataset.technique)) { audio.play('move'); persist(); render(); }
+      {
+        const previousPlayerId = engine.activePlayer.id;
+        if (engine.chooseCocktailTechnique(target.dataset.team, target.dataset.technique)) {
+          audio.play('move'); persist(); render();
+          if (engine.activePlayer.id !== previousPlayerId) showHandover();
+        }
+      }
       break;
     case 'choose-cocktail-spirit-count':
       if (engine.chooseCocktailSpiritCount(Number(target.dataset.count))) { audio.play('move'); persist(); render(); }

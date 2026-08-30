@@ -101,6 +101,14 @@ test('the shared start and eating backdrop keeps the complete island map width v
   assert.match(css, /\.hero-screen::before[\s\S]*?background-size:\s*cover,\s*100% auto;/);
 });
 
+test('the long German completion title has a dedicated responsive layout', async () => {
+  const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
+  const game = await readFile(join(root, 'js', 'ui', 'game.js'), 'utf8');
+  assert.match(game, /class="game-complete-title"/);
+  assert.doesNotMatch(game, /gameCompleteTitle[\s\S]{0,80}font-size:/);
+  assert.match(css, /\.hero-card \.game-complete-title\s*\{[\s\S]*?max-width:\s*100%;[\s\S]*?overflow-wrap:\s*break-word;/);
+});
+
 test('location board uses cinematic scene assets without player circles and the die stays three-dimensional', async () => {
   const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
   const game = await readFile(join(root, 'js', 'ui', 'game.js'), 'utf8');

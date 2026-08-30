@@ -116,6 +116,14 @@
   text-shadow: 0 5px 28px rgba(0,0,0,.6);
 }
 
+.hero-card .game-complete-title {
+  max-width: 100%;
+  padding-right: .08em;
+  font-size: clamp(1.85rem, 6vw, 4.55rem);
+  line-height: 1.02;
+  overflow-wrap: break-word;
+}
+
 .hero-card .lead {
   max-width: 42rem;
   color: #f5ecd8;
@@ -423,9 +431,42 @@ button[disabled] {
 .cocktail-ingredient-assignments article > div:first-child { display: grid; gap: .2rem; }
 .cocktail-ingredient-assignments small { color: var(--ink-muted); }
 
+.cocktail-recipe-lists {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: .75rem;
+  margin-top: 1rem;
+}
+
+.cocktail-recipe-list {
+  display: grid;
+  gap: .55rem;
+  align-content: start;
+  padding: .75rem;
+  background: rgba(3, 18, 25, .32);
+  border: 1px solid var(--line);
+  border-radius: var(--radius-sm);
+}
+
+.cocktail-recipe-list h3,
+.cocktail-recipe-list h4,
+.cocktail-recipe-list p { margin: 0; }
+
+.cocktail-recipe-list article {
+  padding: .6rem;
+  background: rgba(255, 255, 255, .035);
+  border: 1px solid rgba(255, 255, 255, .08);
+  border-radius: var(--radius-sm);
+}
+
+.cocktail-recipe-list article > div { display: grid; gap: .2rem; }
+.cocktail-recipe-list small { color: var(--ink-muted); }
+.eating-recipe-lists { width: 100%; margin-bottom: 1rem; text-align: left; }
+
 @media (max-width: 680px) {
   .cocktail-team-board,
-  .cocktail-ingredient-assignments article { grid-template-columns: 1fr; }
+  .cocktail-ingredient-assignments article,
+  .cocktail-recipe-lists { grid-template-columns: 1fr; }
 }
 
 .board-overlay {
@@ -1270,6 +1311,7 @@ button[disabled] {
   .hero-screen { align-items: end; }
   .hero-card { padding: 1rem 0 2rem; }
   .hero-card h1 { font-size: clamp(2.5rem, 15vw, 4rem); }
+  .hero-card .game-complete-title { font-size: clamp(1.75rem, 9vw, 3.25rem); }
   .board-overlay { grid-template-columns: repeat(2, 1fr); }
   .course-board { min-height: 0; }
   .course-node strong { font-size: .72rem; }

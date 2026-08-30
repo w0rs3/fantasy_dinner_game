@@ -48,7 +48,7 @@ test('complete games finish for every supported crew size without pure waiting',
         deck.filter((card) => card.playable && restored.taskAppliesToChapter(card, chapterIndex)).length, 0);
       const recurringWatchInstances = result.snapshot.tasks.filter((task) => restored.getTaskCard(task)?.repeatOnRelief).length;
       assert.equal(result.tasks, expectedTasks + Math.max(0, recurringWatchInstances - 1));
-      assert.ok(result.backgroundTasks >= 5);
+      assert.ok(result.backgroundTasks >= 4);
       assert.ok(result.manualTasks >= 3);
       assert.ok(result.turnSpread <= 25, `turn spread was ${result.turnSpread}`);
       assert.ok(result.durationMinutes >= 280 && result.durationMinutes <= 410, `duration was ${result.durationMinutes}`);

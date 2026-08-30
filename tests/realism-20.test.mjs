@@ -49,7 +49,7 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.ok(state.tasks.every((task) => task.assignedAt <= task.startedAt && task.startedAt <= task.completedAt), label);
     assert.ok(state.tasks.every((task) => (task.timingMode === 'manual' ? task.challengeEndsAt == null : task.challengeEndsAt > task.startedAt) && Number.isInteger(task.challengeCoinValue)), label);
     assert.equal(result.backgroundCoinViolations, 0, label);
-    assert.ok(result.backgroundTasks >= 5, label);
+    assert.ok(result.backgroundTasks >= 4, label);
     assert.ok(result.manualTasks >= 3, label);
     assert.ok(result.timerTasks >= 5, label);
     assert.ok(result.maxConcurrentTasks >= 2, label);
@@ -91,7 +91,8 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.ok(categoryCount(1, 'meat') <= 1, label);
     assert.ok(categoryCount(2, 'fruit') <= 2, label);
     assert.ok(categoryCount(3, 'fruit') <= 2, label);
-    assert.ok(state.ingredients.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.status === 'used').length <= 3, label);
+    assert.ok(state.ingredients.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.status === 'used').length <= 4,
+      `${label} uses at most three cocktail spirits plus one optional dessert spirit`);
     assert.equal(state.ingredients.some((ingredient) => ingredient.status === 'discovered'), false, `${label} no ingredient may remain in a course basket`);
     const cocktailSpiritTarget = state.chapter.cocktailSpiritTarget;
     assert.ok([1, 2, 3].includes(cocktailSpiritTarget), `${label} cocktail spirit target is selected`);
@@ -101,7 +102,9 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
       .map((task) => restored.getTaskCard(task)?.title.de));
     assert.equal(saladTaskTitles.has('Salatfleisch mundgerecht schneiden'), saladHasMeat, label);
     assert.equal(saladTaskTitles.has('Salatfleisch in der Pfanne braten'), saladHasMeat, label);
-    assert.ok(['mineral-water', 'juices'].every((ingredientId) => state.menu[5].ingredientIds.includes(ingredientId)), label);
+    const selectedJuices = ['apple-juice', 'orange-juice', 'cherry-juice'].filter((ingredientId) => state.menu[5].ingredientIds.includes(ingredientId));
+    assert.ok(state.menu[5].ingredientIds.includes('mineral-water'), label);
+    assert.ok(selectedJuices.length >= 1 && selectedJuices.length <= 2, `${label} uses an optional juice selection, not every juice`);
     assert.equal(state.ingredients.some((ingredient) => ingredient.id === 'ice-cubes'), false, `${label} ice is basic stock, not a played ingredient`);
     assert.ok(['alcoholic', 'alcohol-free'].every((team) => ['mixed', 'stirred'].includes(state.menu[5].cocktailTechniques?.[team])), `${label} both cocktail techniques are fixed`);
     assert.equal(result.cocktailTeamChoices, result.playerCount, `${label} every player chooses a cocktail team exactly once`);

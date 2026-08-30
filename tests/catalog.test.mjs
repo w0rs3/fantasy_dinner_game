@@ -82,15 +82,15 @@ test('interludes reserve privacy for linked surprises, alongside drinks, co-op c
   assert.ok(interludes.every((event) => !event.options.includes('treasure')));
 });
 
-test('catalog contains 85 unique, ordered quest steps including five between-course clearing jobs', () => {
+test('catalog contains 87 unique, ordered quest steps including five between-course clearing jobs', () => {
   const result = validateTaskCatalog();
-  assert.equal(result.total, 85);
-  assert.equal(result.uniqueIds, 85);
-  assert.equal(result.uniqueGermanTitles, 85);
-  assert.equal(result.uniqueEnglishTitles, 85);
+  assert.equal(result.total, 87);
+  assert.equal(result.uniqueIds, 87);
+  assert.equal(result.uniqueGermanTitles, 87);
+  assert.equal(result.uniqueEnglishTitles, 87);
   assert.equal(result.valid, true);
-  assert.deepEqual(TASK_DECKS.map((deck) => deck.length), [16, 14, 15, 14, 13, 13]);
-  assert.deepEqual(TASK_DECKS.map((deck) => deck.filter((card) => card.playable).length), [13, 13, 14, 13, 12, 12]);
+  assert.deepEqual(TASK_DECKS.map((deck) => deck.length), [16, 14, 15, 14, 11, 17]);
+  assert.deepEqual(TASK_DECKS.map((deck) => deck.filter((card) => card.playable).length), [13, 13, 14, 13, 10, 16]);
   assert.equal(TASK_DECKS.flat().filter((card) => card.playable && card.questId === 'reset').length, 5);
   assert.ok(TASK_DECKS.flat().filter((card) => card.playable).every((card) =>
     !['planning', 'story'].includes(card.area) && (card.area !== 'optional' || card.ingredientRequirement)
@@ -145,16 +145,22 @@ test('the main-course workflow prepares in parallel and opens one unassigned bak
   assert.ok(baking.prerequisites.some((entry) => entry.requiredBlueprintIndex === load.blueprintIndex));
   assert.ok(rest.prerequisites.some((entry) => entry.requiredBlueprintIndex === baking.blueprintIndex));
   assert.equal(rest.timingMode, 'background');
+  assert.equal(rest.backgroundMinutes, 10);
+  assert.match(rest.instruction.de, /fünf Minuten ruhen/);
   assert.ok(sauceFinish.prerequisites.some((entry) => entry.requiredBlueprintIndex === rest.blueprintIndex));
 
   const dessert = TASK_DECKS[4];
-  const tasting = dessert.find((card) => card.title.de === 'Die erste Lagunenprobe');
+  const ice = dessert.find((card) => card.title.de === 'Eis aus der Höhle');
+  const warmFruit = dessert.find((card) => card.title.de === 'Die warme Fruchtbeute');
+  const plans = dessert.find((card) => card.title.de === 'Die zwei Schatzpläne');
   const spirit = dessert.find((card) => card.title.de === 'Optionale Geisterbeute');
+  assert.equal(dessert.some((card) => card.title.de === 'Kühle Wache'), false);
+  assert.equal(dessert.some((card) => card.title.de === 'Die erste Lagunenprobe'), false);
+  assert.ok(ice.prerequisites.some((entry) => entry.requiredBlueprintIndex === warmFruit.blueprintIndex && entry.state === 'done'));
+  assert.ok(ice.prerequisites.some((entry) => entry.requiredBlueprintIndex === plans.blueprintIndex && entry.state === 'done'));
+  assert.deepEqual(ice.ingredientRequirement.ids, ['vanilla-ice', 'second-ice']);
   assert.equal(spirit.playable, true);
   assert.deepEqual(spirit.ingredientRequirement, { categories: ['alcohol'] });
-  assert.ok(spirit.prerequisites.some((entry) =>
-    entry.requiredBlueprintIndex === tasting.blueprintIndex && entry.state === 'done'
-  ));
 });
 
 test('bacon dates are fried actively in a pan instead of baked in the oven', () => {
@@ -205,18 +211,20 @@ test('all thirteen roles are unique and have finite active uses', () => {
 });
 
 test('ingredient planner keeps a tagged global pool and only fixes Tapas', () => {
-  assert.equal(INGREDIENTS.length, 49);
-  assert.deepEqual(INGREDIENTS.filter((ingredient) => !ingredient.essential).map((ingredient) => ingredient.id).sort(), ['gin', 'rum', 'second-ice', 'vodka']);
+  assert.equal(INGREDIENTS.length, 53);
+  assert.deepEqual(INGREDIENTS.filter((ingredient) => !ingredient.essential).map((ingredient) => ingredient.id).sort(), ['amaretto', 'apple-juice', 'cherry-juice', 'gin', 'orange-juice', 'rum', 'second-ice', 'triple-sec', 'vodka']);
   assert.ok(['mince', 'milk', 'butter', 'yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'cooking-cream', 'whipping-cream', 'olive-oil'].every((id) => !INGREDIENTS.some((ingredient) => ingredient.id === id)));
-  assert.equal(Object.entries(COURSE_INGREDIENT_RULES).filter(([course]) => course !== 'tapas').reduce((sum, [, rule]) => sum + rule.target, 0), 36);
+  assert.equal(Object.entries(COURSE_INGREDIENT_RULES).filter(([course]) => course !== 'tapas').reduce((sum, [, rule]) => sum + rule.target, 0), 35);
   assert.equal(COURSE_INGREDIENT_RULES.main.target, 11);
   assert.equal(COURSE_INGREDIENT_RULES.dessert.target, 6);
   assert.deepEqual(COURSE_INGREDIENT_RULES.cocktails.categoryMinimums, { fruit: 1, drinks: 2 });
-  assert.equal(COURSE_INGREDIENT_RULES.cocktails.target, 6);
+  assert.equal(COURSE_INGREDIENT_RULES.cocktails.target, 5);
   assert.ok(INGREDIENTS.filter((ingredient) => ingredient.category !== 'tapas').every((ingredient) => ingredient.effect), 'every flexible ingredient must have a card effect');
   assert.deepEqual(INGREDIENTS.filter((ingredient) => ['coins3', 'coins5'].includes(ingredient.effect)).map((ingredient) => ingredient.id), ['lettuce', 'honey', 'vanilla-ice', 'mineral-water']);
   assert.deepEqual(INGREDIENTS.find((ingredient) => ingredient.id === 'peppermint').courseTags, ['salad', 'dessert', 'cocktails']);
   assert.deepEqual(INGREDIENTS.find((ingredient) => ingredient.id === 'cucumber').courseTags, ['salad', 'main']);
+  assert.ok(!INGREDIENTS.some((ingredient) => ingredient.id === 'juices'));
+  assert.deepEqual(INGREDIENTS.filter((ingredient) => ingredient.category === 'drinks' && !ingredient.essential).map((ingredient) => ingredient.id).sort(), ['apple-juice', 'cherry-juice', 'orange-juice']);
   assert.ok(!INGREDIENTS.find((ingredient) => ingredient.id === 'potatoes').courseTags.includes('salad'), 'potatoes require cooking and cannot be assigned to the salad');
   assert.ok(!INGREDIENTS.find((ingredient) => ingredient.id === 'chestnuts').courseTags.includes('salad'), 'chestnuts require cooking and cannot be assigned to the salad');
   for (let playerCount = 6; playerCount <= 10; playerCount += 1) {

@@ -10,14 +10,14 @@ const shoppingStaple = (id, nameDe, nameEn, quantity, noteDe, noteEn, courseTags
 });
 
 export const COURSE_INGREDIENT_RULES = Object.freeze({
-  // The five flexible courses consume exactly all 36 essential, non-Tapas
+  // The five flexible courses consume exactly all 35 essential, non-Tapas
   // ingredients. Optional cocktail extras do not count towards these targets.
   tapas: { target: 9, optionalLimit: 0, categoryMinimums: {}, categoryLimits: {} },
   soup: { target: 5, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
   salad: { target: 8, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
   main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
   dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
-  cocktails: { target: 6, optionalLimit: 4, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3 } }
+  cocktails: { target: 5, optionalLimit: 6, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3, drinks: 3 } }
 });
 
 export const INGREDIENT_EFFECT_TEXT = Object.freeze({
@@ -181,8 +181,12 @@ export const INGREDIENTS = Object.freeze([
   item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'chain' }),
   item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
   item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'replaceIngredient' }),
+  item('amaretto', 'alcohol', 'Amaretto', 'Amaretto', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'repeatIngredient' }),
+  item('triple-sec', 'alcohol', 'Triple Sec', 'Triple sec', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
   item('mineral-water', 'drinks', 'Mineralwasser', 'Mineral water', q(3, 4, 'l'), ['cocktails'], { effect: 'coins3' }),
-  item('juices', 'drinks', 'Säfte', 'Juices', q(2, 4, 'l'), ['cocktails'], { effect: 'nextPlayer' })
+  item('apple-juice', 'drinks', 'Apfelsaft', 'Apple juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'nextPlayer' }),
+  item('orange-juice', 'drinks', 'Orangensaft', 'Orange juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'replaceEvent' }),
+  item('cherry-juice', 'drinks', 'Kirschsaft', 'Cherry juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'extraTurn' })
 ]);
 
 const COURSE_INDEX = Object.freeze({ tapas: 0, soup: 1, salad: 2, main: 3, dessert: 4, cocktails: 5 });
