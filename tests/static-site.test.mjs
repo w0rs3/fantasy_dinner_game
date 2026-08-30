@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { access, readFile, stat } from 'node:fs/promises';
+import { access, readFile, readdir, stat } from 'node:fs/promises';
 import { join } from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
 import { Script } from 'node:vm';
@@ -11,12 +11,7 @@ test('service worker app shell contains every runtime module and required asset'
   const worker = await readFile(join(root, 'service-worker.js'), 'utf8');
   const required = [
     'index.html', 'manifest.webmanifest', 'assets/seafaring-adventure.webp',
-    'assets/location-scenes/tapas-harbour-basin.jpg',
-    'assets/location-scenes/tapas-lighthouse.jpg',
-    'assets/location-scenes/tapas-village-square.jpg',
-    'assets/location-scenes/tapas-market-lane.jpg',
-    'assets/location-scenes/tapas-olive-grove.jpg',
-    'assets/location-scenes/tapas-smugglers-pier.jpg',
+    'assets/location-scenes/tapas-locations-atlas.jpg',
     'assets/location-scenes/soup-locations-atlas.jpg',
     'assets/location-scenes/salad-locations-atlas.jpg',
     'assets/location-scenes/main-locations-atlas.jpg',
@@ -112,6 +107,15 @@ test('the long German completion title has a dedicated responsive layout', async
 test('location board uses cinematic scene assets without player circles and the die stays three-dimensional', async () => {
   const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
   const game = await readFile(join(root, 'js', 'ui', 'game.js'), 'utf8');
+  const sceneFiles = (await readdir(join(root, 'assets', 'location-scenes'))).sort();
+  assert.deepEqual(sceneFiles, [
+    'cocktails-locations-atlas.jpg',
+    'dessert-locations-atlas.jpg',
+    'main-locations-atlas.jpg',
+    'salad-locations-atlas.jpg',
+    'soup-locations-atlas.jpg',
+    'tapas-locations-atlas.jpg'
+  ], 'every island is represented by exactly one atlas');
   assert.match(css, /\.station-scene\[data-atlas="true"\][\s\S]*?background-size:\s*cover,\s*200% 300%/);
   assert.match(css, /\.station-caption/);
   assert.match(css, /\.voyage-map/);
@@ -121,7 +125,11 @@ test('location board uses cinematic scene assets without player circles and the 
   assert.match(css, /transform-style:\s*preserve-3d/);
   assert.match(css, /\.die-front[\s\S]*?\.die-back[\s\S]*?\.die-right[\s\S]*?\.die-left[\s\S]*?\.die-top[\s\S]*?\.die-bottom/);
   assert.match(game, /LOCATION_SCENES/);
+  assert.match(game, /location-scenes\/tapas-locations-atlas\.jpg/);
   assert.match(game, /location-scenes\/soup-locations-atlas\.jpg/);
+  assert.equal((game.match(/location-scenes\/[a-z]+-locations-atlas\.jpg/g) ?? []).length, 6,
+    'every island uses exactly one six-location atlas');
+  assert.doesNotMatch(game, /tapas-(?:harbour|lighthouse|village|market|olive|smugglers)/);
   assert.ok(game.indexOf('class="active-course-heading"') < game.indexOf('class="voyage-map"'), 'the active course heading is rendered above the island map');
   assert.ok(game.indexOf('class="voyage-map"') < game.indexOf('class="station-scene"'), 'the island map is rendered above the current location scene');
   assert.match(game, /t\(engine\.currentChapter\.course, language\)/);

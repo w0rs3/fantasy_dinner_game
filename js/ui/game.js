@@ -30,14 +30,7 @@ const STAGE_COPY = Object.freeze({
 });
 
 const LOCATION_SCENES = Object.freeze({
-  tapas: Object.freeze([
-    '../assets/location-scenes/tapas-harbour-basin.jpg',
-    '../assets/location-scenes/tapas-lighthouse.jpg',
-    '../assets/location-scenes/tapas-village-square.jpg',
-    '../assets/location-scenes/tapas-market-lane.jpg',
-    '../assets/location-scenes/tapas-olive-grove.jpg',
-    '../assets/location-scenes/tapas-smugglers-pier.jpg'
-  ]),
+  tapas: '../assets/location-scenes/tapas-locations-atlas.jpg',
   soup: '../assets/location-scenes/soup-locations-atlas.jpg',
   salad: '../assets/location-scenes/salad-locations-atlas.jpg',
   main: '../assets/location-scenes/main-locations-atlas.jpg',
@@ -47,9 +40,6 @@ const LOCATION_SCENES = Object.freeze({
 
 function locationScene(chapterId, locationIndex) {
   const source = LOCATION_SCENES[chapterId];
-  if (Array.isArray(source)) {
-    return { source: source[locationIndex] ?? source[0], atlas: false, x: 50, y: 50 };
-  }
   return {
     source,
     atlas: true,
