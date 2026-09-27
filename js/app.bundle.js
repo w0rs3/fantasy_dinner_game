@@ -1576,6 +1576,128 @@ const challenge = (id, de, en, options = {}) => ({
   requirements: options.requirements ?? (SECRET_CHARADE_IDS.has(id) ? ['twoFreeGuessers'] : [])
 });
 
+const LONG_COURSE_SOLO_THEMES = Object.freeze([
+  ['captains-shadow', 'Der Schatten des Kapitäns', 'The Captain’s Shadow'],
+  ['ghost-telescope', 'Das Geisterfernrohr', 'The Ghost Telescope'],
+  ['talking-compass', 'Der sprechende Kompass', 'The Talking Compass'],
+  ['moonlit-map', 'Die Seekarte im Mondlicht', 'The Moonlit Sea Chart'],
+  ['polite-kraken', 'Der höfliche Kraken', 'The Polite Kraken'],
+  ['singing-anchor', 'Der singende Anker', 'The Singing Anchor'],
+  ['backwards-harbour', 'Der rückwärts gebaute Hafen', 'The Backwards Harbour'],
+  ['cloud-pirates', 'Die Piraten über den Wolken', 'The Pirates above the Clouds'],
+  ['tiny-lighthouse', 'Der winzige Leuchtturm', 'The Tiny Lighthouse'],
+  ['golden-parrot', 'Der goldene Papagei', 'The Golden Parrot'],
+  ['sleepy-storm', 'Der schläfrige Sturm', 'The Sleepy Storm'],
+  ['invisible-island', 'Die unsichtbare Insel', 'The Invisible Island'],
+  ['captains-breakfast', 'Das Frühstück des Kapitäns', 'The Captain’s Breakfast'],
+  ['dancing-sails', 'Die tanzenden Segel', 'The Dancing Sails'],
+  ['whispering-waves', 'Die flüsternden Wellen', 'The Whispering Waves'],
+  ['lost-ship-bell', 'Die verlorene Schiffsglocke', 'The Lost Ship’s Bell'],
+  ['friendly-cannon', 'Die freundliche Kanone', 'The Friendly Cannon'],
+  ['treasure-with-legs', 'Der Schatz auf Beinen', 'The Treasure with Legs'],
+  ['seagull-captain', 'Die Möwe als Kapitän', 'The Seagull Captain'],
+  ['harbour-in-a-bottle', 'Der Hafen in der Flasche', 'The Harbour in a Bottle'],
+  ['storm-in-a-cup', 'Der Sturm in der Teetasse', 'The Storm in a Teacup'],
+  ['wooden-whale', 'Der Wal aus Holz', 'The Wooden Whale'],
+  ['upside-down-flag', 'Die kopfstehende Flagge', 'The Upside-Down Flag'],
+  ['midnight-market', 'Der Mitternachtsmarkt', 'The Midnight Market'],
+  ['seashell-crown', 'Die Krone aus Muscheln', 'The Seashell Crown'],
+  ['hiccup-compass', 'Der Kompass mit Schluckauf', 'The Compass with Hiccups'],
+  ['cloud-anchor', 'Der Anker in den Wolken', 'The Anchor in the Clouds'],
+  ['laughing-map', 'Die lachende Schatzkarte', 'The Laughing Treasure Map'],
+  ['pirate-librarian', 'Der Pirat als Bibliothekar', 'The Pirate Librarian'],
+  ['floating-galley', 'Die schwebende Kombüse', 'The Floating Galley'],
+  ['sleepwalking-parrot', 'Der schlafwandelnde Papagei', 'The Sleepwalking Parrot'],
+  ['captains-missing-hat', 'Der verschwundene Kapitänshut', 'The Captain’s Missing Hat'],
+  ['island-on-wheels', 'Die Insel auf Rädern', 'The Island on Wheels'],
+  ['whistling-treasure', 'Der pfeifende Schatz', 'The Whistling Treasure'],
+  ['backwards-clock', 'Die rückwärts laufende Borduhr', 'The Backwards Ship’s Clock'],
+  ['rainbow-sails', 'Die Regenbogensegel', 'The Rainbow Sails'],
+  ['crab-navigator', 'Die Krabbe als Navigator', 'The Crab Navigator'],
+  ['bottle-lighthouse', 'Der Leuchtturm in der Flasche', 'The Lighthouse in a Bottle'],
+  ['captains-cloud-chair', 'Der Wolkenstuhl des Kapitäns', 'The Captain’s Cloud Chair'],
+  ['treasure-sneezes', 'Der Schatz, der niesen muss', 'The Treasure That Sneezes']
+]);
+
+const LONG_COURSE_PAIR_THEMES = Object.freeze([
+  ['double-lookout', 'Die doppelte Ausguckwache', 'The Double Lookout'],
+  ['map-and-wind', 'Seekarte und Wind', 'Sea Chart and Wind'],
+  ['two-captains', 'Zwei Kapitäne, ein Schiff', 'Two Captains, One Ship'],
+  ['lighthouse-dialogue', 'Gespräch der Leuchttürme', 'Dialogue of the Lighthouses'],
+  ['shared-telescope', 'Das geteilte Fernrohr', 'The Shared Telescope'],
+  ['anchor-debate', 'Der große Ankerstreit', 'The Great Anchor Debate'],
+  ['storm-reporters', 'Reporter im Sturm', 'Reporters in the Storm'],
+  ['pirate-translators', 'Die Piratendolmetscher', 'The Pirate Interpreters'],
+  ['two-part-shanty', 'Das zweiteilige Seemannslied', 'The Two-Part Shanty'],
+  ['mirror-helms', 'Die gespiegelten Steuerräder', 'The Mirrored Helms'],
+  ['coin-with-two-sides', 'Die Münze mit zwei Geschichten', 'The Coin with Two Stories'],
+  ['rope-of-riddles', 'Das Tau der Rätsel', 'The Rope of Riddles'],
+  ['moon-and-tide', 'Mond und Gezeiten', 'Moon and Tide'],
+  ['parrot-detectives', 'Die Papageien-Detektive', 'The Parrot Detectives'],
+  ['two-weather-oracles', 'Die zwei Wetterorakel', 'The Two Weather Oracles'],
+  ['captain-and-ghost', 'Kapitän und Schiffsgeist', 'Captain and Ship’s Ghost'],
+  ['shared-crown', 'Die geteilte Piratenkrone', 'The Shared Pirate Crown'],
+  ['harbour-architects', 'Die Hafenbaumeister', 'The Harbour Architects'],
+  ['wave-conductors', 'Die Dirigenten der Wellen', 'The Wave Conductors'],
+  ['treasure-witnesses', 'Die Zeugen des Schatzes', 'The Treasure Witnesses'],
+  ['sail-tailors', 'Die Schneider der Segel', 'The Sail Tailors'],
+  ['deck-photographers', 'Die Fotografen an Deck', 'The Deck Photographers'],
+  ['island-guides', 'Die Reiseführer der Insel', 'The Island Guides'],
+  ['cannon-poets', 'Die Dichter der Kanone', 'The Cannon Poets']
+]);
+
+const LONG_COURSE_TRIO_THEMES = Object.freeze([
+  ['three-part-storm', 'Der Sturm in drei Teilen', 'The Three-Part Storm'],
+  ['harbour-council', 'Der Rat des Hafens', 'The Harbour Council'],
+  ['lighthouse-crew', 'Die Leuchtturmcrew', 'The Lighthouse Crew'],
+  ['three-clue-island', 'Die Insel mit drei Hinweisen', 'The Island of Three Clues'],
+  ['pirate-news-team', 'Das Piraten-Nachrichtenteam', 'The Pirate News Team'],
+  ['treasure-auction', 'Die Versteigerung der Beute', 'The Treasure Auction'],
+  ['wind-wave-ship', 'Wind, Welle und Schiff', 'Wind, Wave, and Ship'],
+  ['three-voice-voyage', 'Die Reise mit drei Stimmen', 'The Three-Voice Voyage'],
+  ['three-captain-portrait', 'Das Bild der drei Kapitäne', 'Portrait of the Three Captains'],
+  ['storm-jury', 'Das Gericht über den Sturm', 'The Storm Jury'],
+  ['island-radio', 'Das Inselradio', 'Island Radio'],
+  ['three-part-map', 'Die Karte aus drei Teilen', 'The Three-Part Map'],
+  ['parrot-orchestra', 'Das Papageienorchester', 'The Parrot Orchestra'],
+  ['harbour-theatre', 'Das Hafentheater', 'The Harbour Theatre'],
+  ['treasure-committee', 'Das Schatzkomitee', 'The Treasure Committee'],
+  ['three-lighthouse-keepers', 'Die drei Leuchtturmwärter', 'The Three Lighthouse Keepers']
+]);
+
+const LONG_COURSE_CHALLENGES = Object.freeze([
+  ...LONG_COURSE_SOLO_THEMES.map(([id, deTitle, enTitle], index) => {
+    const prompts = [
+      [`Erfinde eine kurze Borddurchsage über „${deTitle}“ und trage sie in höchstens dreißig Sekunden vor.`, `Invent a short shipboard announcement about “${enTitle}” and perform it in no more than thirty seconds.`],
+      [`Stelle „${deTitle}“ zehn Sekunden pantomimisch dar. Bleib sicher am eigenen Platz.`, `Mime “${enTitle}” for ten seconds. Stay safely in your own place.`],
+      [`Beschreibe „${deTitle}“ in genau zwei Sätzen, als stünde es heute im Logbuch.`, `Describe “${enTitle}” in exactly two sentences as if it appeared in today’s logbook.`],
+      [`Gib „${deTitle}“ eine unverwechselbare Stimme und sage damit einen kurzen, freundlichen Satz zur Crew.`, `Give “${enTitle}” a distinctive voice and use it to say one short, friendly sentence to the crew.`]
+    ];
+    const [de, en] = prompts[index % prompts.length];
+    return challenge(`long-solo-${id}`, de, en, { durationSeconds: 30, title: { de: deTitle, en: enTitle } });
+  }),
+  ...LONG_COURSE_PAIR_THEMES.map(([id, deTitle, enTitle], index) => {
+    const prompts = [
+      [`{activePlayer} und {partner}: Erzählt abwechselnd eine vier Sätze lange Geschichte über „${deTitle}“. Jede Person sagt zwei Sätze.`, `{activePlayer} and {partner}: Alternate telling a four-sentence story about “${enTitle}.” Each person says two sentences.`],
+      [`{activePlayer} und {partner}: Stellt „${deTitle}“ gemeinsam zehn Sekunden als sicheres Standbild am Platz dar.`, `{activePlayer} and {partner}: Together, hold a safe ten-second tableau of “${enTitle}” in your own places.`],
+      [`{activePlayer} und {partner}: Diskutiert dreißig Sekunden, warum „${deTitle}“ auf einer Piratenreise nützlich oder völlig nutzlos wäre.`, `{activePlayer} and {partner}: Debate for thirty seconds why “${enTitle}” would be useful or completely useless on a pirate voyage.`],
+      [`{activePlayer} und {partner}: Führt einen kurzen Dialog zwischen zwei Figuren aus „${deTitle}“. Jede Person spricht genau zweimal.`, `{activePlayer} and {partner}: Perform a short dialogue between two characters from “${enTitle}.” Each person speaks exactly twice.`]
+    ];
+    const [de, en] = prompts[index % prompts.length];
+    return challenge(`long-pair-${id}`, de, en, { cooperative: true, partnerCount: 1, durationSeconds: 45, title: { de: deTitle, en: enTitle } });
+  }),
+  ...LONG_COURSE_TRIO_THEMES.map(([id, deTitle, enTitle], index) => {
+    const prompts = [
+      [`{activePlayer}, {partner} und {partner2}: Erzählt „${deTitle}“ in genau drei Sätzen. Jede Person übernimmt einen Satz.`, `{activePlayer}, {partner}, and {partner2}: Tell “${enTitle}” in exactly three sentences. Each person contributes one sentence.`],
+      [`{activePlayer}, {partner} und {partner2}: Bildet am Platz ein sicheres Standbild zu „${deTitle}“. Jede Person stellt einen anderen Teil der Szene dar.`, `{activePlayer}, {partner}, and {partner2}: Make a safe tableau of “${enTitle}” in place. Each person represents a different part of the scene.`],
+      [`{activePlayer}, {partner} und {partner2}: Beratet dreißig Sekunden, welche wichtigste Regel zu „${deTitle}“ ins Logbuch gehört, und einigt euch auf eine.`, `{activePlayer}, {partner}, and {partner2}: Deliberate for thirty seconds on the most important rule for “${enTitle}” and agree on one.`],
+      [`{activePlayer}, {partner} und {partner2}: Erzeugt gemeinsam zehn Sekunden die Geräuschkulisse von „${deTitle}“. Jede Person verwendet ein anderes leises Geräusch.`, `{activePlayer}, {partner}, and {partner2}: Create a ten-second soundscape for “${enTitle}.” Each person uses a different quiet sound.`]
+    ];
+    const [de, en] = prompts[index % prompts.length];
+    return challenge(`long-trio-${id}`, de, en, { cooperative: true, partnerCount: 2, durationSeconds: 45, title: { de: deTitle, en: enTitle } });
+  })
+]);
+
 const WATCH_CHALLENGES = Object.freeze([
   challenge('clear-surface', 'Die aktive Person erfindet in 60 Sekunden einen Piratennamen für eine sichtbare, gerade freie Ablagefläche. Niemand unterbricht dafür die Küchenarbeit oder räumt etwas um.', 'The active player has 60 seconds to invent a pirate name for a visible, currently unused surface. Nobody interrupts kitchen work or moves anything for it.', { title: { de: 'Die geheime Schatzablage', en: 'The Secret Treasure Shelf' } }),
   challenge('next-steps', 'Prüft alle laufenden Aufgaben und nennt laut, was als Nächstes gebraucht wird.', 'Review every active task and say aloud what will be needed next.', { requirements: ['openTask'], title: { de: 'Der Blick voraus', en: 'A Look Ahead' } }),
@@ -1723,6 +1845,7 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('coop-compliment-chain', '{activePlayer} macht {partner} ein ehrliches Kompliment, {partner} macht {partner2} eines und {partner2} schließt die Kette mit einem Kompliment an {activePlayer}.', '{activePlayer} gives {partner} a genuine compliment, {partner} gives one to {partner2}, and {partner2} closes the chain by complimenting {activePlayer}.', { cooperative: true, partnerCount: 2, title: { de: 'Die Komplimentkette', en: 'The Compliment Chain' } }),
   challenge('coop-human-compass', '{activePlayer}, {partner} und {partner2}: Wählt gemeinsam Norden, Osten und Westen im Raum. Auf Kommando zeigt jede Person gleichzeitig in eine andere vereinbarte Richtung.', '{activePlayer}, {partner}, and {partner2}: Agree where north, east, and west are in the room. On command, each points simultaneously in a different agreed direction.', { cooperative: true, partnerCount: 2, title: { de: 'Der dreiköpfige Kompass', en: 'The Three-Headed Compass' } }),
   challenge('coop-mini-orchestra', '{activePlayer}, {partner} und {partner2}: Spielt fünfzehn Sekunden als Mini-Bordorchester. Eine Person summt, eine klopft mit zwei Fingern den Takt und eine macht leise Windgeräusche.', '{activePlayer}, {partner}, and {partner2}: Perform for fifteen seconds as a tiny deck orchestra. One hums, one taps the beat with two fingers, and one makes quiet wind sounds.', { cooperative: true, partnerCount: 2, title: { de: 'Das Mini-Bordorchester', en: 'The Tiny Deck Orchestra' } }),
+  ...LONG_COURSE_CHALLENGES,
   challenge('five-minute-break', 'Fünf Minuten Pause: Trinkt etwas, setzt euch hin und lasst die Küche sicher ruhen. Laufende Geräte bleiben natürlich beaufsichtigt.', 'Five-minute break: have a drink, sit down, and let the kitchen rest safely. Running appliances must of course remain supervised.', { minutes: 5, coins: 0, title: { de: 'Ruhiges Fahrwasser', en: 'Calm Waters' } })
 ]);
 
@@ -2416,7 +2539,9 @@ const clone = (value) => typeof structuredClone === 'function'
 const TASK_ASSIGNEE_CHOICE_INTERVAL = 3;
 const MAX_INGREDIENTS_PER_TURN = 2;
 const DEFAULT_FUN_CARDS_PER_CHAPTER = 16;
-const MAIN_FUN_CARDS_PER_CHAPTER = 24;
+const MAIN_FUN_CARDS_PER_CHAPTER = 144;
+const DEFAULT_STORY_QUIZZES_PER_CHAPTER = 3;
+const MAIN_STORY_QUIZZES_PER_CHAPTER = 6;
 const MAX_EVENT_CHAIN_DEPTH = 2;
 const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'juices']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
@@ -4464,8 +4589,14 @@ class GameEngine {
 
   storyQuizDue() {
     return this.state.turn.chainDepth === 0 &&
-      (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < 3 &&
+      (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < this.storyQuizLimit() &&
       this.state.chapter.eventsResolved >= this.state.chapter.nextStoryQuizAt;
+  }
+
+  storyQuizLimit() {
+    return this.currentChapter.id === 'main'
+      ? MAIN_STORY_QUIZZES_PER_CHAPTER
+      : DEFAULT_STORY_QUIZZES_PER_CHAPTER;
   }
 
   openStoryCard(card, now = Date.now()) {
@@ -4672,6 +4803,29 @@ class GameEngine {
         this.briefTask(task, true, now);
         this.log('fallbackTaskAssigned', { instanceId: task.instanceId }, now);
         return task;
+      }
+      if (!chainActive && this.hasOpenTasks() &&
+        (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < this.storyQuizLimit()) {
+        const fallbackStoryQuiz = this.eligibleStoryQuiz();
+        if (fallbackStoryQuiz) {
+          this.log('fallbackStoryQuizDrawn', {
+            storyQuizId: fallbackStoryQuiz.id,
+            chapterIndex: this.state.chapterIndex,
+            stage
+          }, now);
+          return this.openStoryCard(fallbackStoryQuiz, now);
+        }
+      }
+      if (this.hasOpenTasks() && this.startWatchChallenge('watchChallenge', now, {
+        fallback: true,
+        reason: 'eventDeckExhausted'
+      })) {
+        this.log('fallbackFunCardDrawn', {
+          challengeId: this.currentWatchChallenge.id,
+          chapterIndex: this.state.chapterIndex,
+          stage
+        }, now);
+        return this.currentWatchChallenge;
       }
       if (this.hasOpenTasks()) {
         this.state.busyAfterPlayerIndex = this.state.activePlayerIndex;

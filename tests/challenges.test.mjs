@@ -343,7 +343,9 @@ test('the long main-course oven journey allows more fun cards and prefers availa
   assert.equal(engine.watchChallengeCandidates()[0].id, cooperative.id);
   engine.state.chapter.funCardIdsDrawn = Array.from({ length: 16 }, (_, index) => `main-fun-${index}`);
   assert.ok(engine.watchChallengeCandidates().length > 0, 'the main course remains playful beyond the normal per-course limit');
-  engine.state.chapter.funCardIdsDrawn = Array.from({ length: 24 }, (_, index) => `main-fun-${index}`);
+  engine.state.chapter.funCardIdsDrawn = Array.from({ length: 143 }, (_, index) => `main-fun-${index}`);
+  assert.ok(engine.watchChallengeCandidates().length > 0, 'the main course keeps enough interludes for a long oven run');
+  engine.state.chapter.funCardIdsDrawn = Array.from({ length: 144 }, (_, index) => `main-fun-${index}`);
   assert.equal(engine.watchChallengeCandidates().length, 0);
 });
 
@@ -533,8 +535,8 @@ test('the complete fun-card deck is randomly shuffled per voyage and reproducibl
   const repeated = order(8_001);
   const second = order(8_002);
 
-  assert.equal(first.length, 147);
-  assert.equal(new Set(first).size, 147);
+  assert.equal(first.length, 227);
+  assert.equal(new Set(first).size, 227);
   assert.deepEqual(first, repeated, 'the same seed recreates the same shuffled deck');
   assert.notDeepEqual(first.slice(0, 20), second.slice(0, 20), 'different voyages receive different opening orders');
   assert.equal(new Set(Array.from({ length: 12 }, (_, index) => order(8_100 + index)

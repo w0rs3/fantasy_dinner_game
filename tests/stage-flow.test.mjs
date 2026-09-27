@@ -279,6 +279,34 @@ test('fun events can also be drawn during task rounds and dice outcomes stay dis
   assert.ok(event.outcomes.includes('watchChallenge'));
 });
 
+test('an exhausted event wrapper deck draws an unused global fun card while kitchen work remains open', () => {
+  const engine = create(7231);
+  engine.state.pendingLocationStoryIds = [];
+  engine.state.chapter.stage = 'cooking';
+  engine.state.chapter.storyQuizIdsDrawn = ['used-quiz-1', 'used-quiz-2', 'used-quiz-3'];
+  engine.state.taskQueues[0] = [];
+  const taskCard = TASK_DECKS[0].find((card) => card.playable && card.people[0] > 0);
+  engine.state.tasks = [{
+    instanceId: 'long-running-kitchen-work',
+    taskId: taskCard.id,
+    chapterIndex: 0,
+    groupId: engine.activeGroup.id,
+    assignedPlayerIds: [engine.state.players[1].id],
+    status: 'active',
+    assignedAt: now,
+    startedAt: now
+  }];
+  engine.state.eventQueues[0].cooking.forEach((queue) => queue.splice(0, queue.length));
+
+  const result = engine.beginEvent(now + 2_100);
+  assert.equal(engine.state.turn.phase, 'watch');
+  assert.equal(result.id, engine.currentWatchChallenge.id);
+  assert.equal(engine.state.history.some((entry) => entry.type === 'crewWaitingForTask'), false);
+  const fallbackLog = engine.state.history.find((entry) => entry.type === 'fallbackFunCardDrawn');
+  assert.equal(fallbackLog.data.challengeId, result.id);
+  assert.equal(engine.state.history.find((entry) => entry.type === 'watchChallengeStarted').data.eventId, null);
+});
+
 test('event chains remember every earlier card and cannot alternate forever', () => {
   const engine = create(724);
   resolvePendingLocationStories(engine, now - 10);

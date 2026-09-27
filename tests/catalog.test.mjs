@@ -29,16 +29,16 @@ test('catalog contains 580 uniquely named event cards including an expanded main
 });
 
 test('interludes reserve privacy for linked surprises, alongside drinks, co-op cards, and a real break', () => {
-  assert.equal(WATCH_CHALLENGES.length, 147);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.id)).size, 147);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.de)).size, 147);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.en)).size, 147);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.de)).size, 147);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.en)).size, 147);
+  assert.equal(WATCH_CHALLENGES.length, 227);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.id)).size, 227);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.de)).size, 227);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.en)).size, 227);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.de)).size, 227);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.en)).size, 227);
   const cooperative = WATCH_CHALLENGES.filter((challenge) => challenge.cooperative);
-  assert.equal(cooperative.length, 30);
-  assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 1).length, 20);
-  assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 2).length, 10);
+  assert.equal(cooperative.length, 70);
+  assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 1).length, 44);
+  assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 2).length, 26);
   assert.deepEqual(
     WATCH_CHALLENGES.filter((challenge) => challenge.secret).map((challenge) => challenge.id),
     ['chicken', 'stop-chicken', 'nose-voice', 'stop-nose', 'folded-note',

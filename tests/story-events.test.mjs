@@ -138,6 +138,19 @@ test('memory questions enforce prerequisites and apply character passives to the
   assert.equal(wrong.state.turn.storyCoinDelta, -4);
 });
 
+test('the long main course allows twice the usual number of memory quizzes', () => {
+  const engine = create(91_0041);
+  assert.equal(engine.storyQuizLimit(), 3);
+  engine.state.chapterIndex = 3;
+  assert.equal(engine.storyQuizLimit(), 6);
+  engine.state.chapter.eventsResolved = 20;
+  engine.state.chapter.nextStoryQuizAt = 20;
+  engine.state.chapter.storyQuizIdsDrawn = Array.from({ length: 5 }, (_, index) => `main-quiz-${index}`);
+  assert.equal(engine.storyQuizDue(), true);
+  engine.state.chapter.storyQuizIdsDrawn.push('main-quiz-5');
+  assert.equal(engine.storyQuizDue(), false);
+});
+
 test('the card overview exposes all story groups, requirements, scoring, and current usage', () => {
   const engine = create(91_005);
   engine.beginEvent(now + 1);

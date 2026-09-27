@@ -14,7 +14,9 @@ const clone = (value) => typeof structuredClone === 'function'
 const TASK_ASSIGNEE_CHOICE_INTERVAL = 3;
 const MAX_INGREDIENTS_PER_TURN = 2;
 const DEFAULT_FUN_CARDS_PER_CHAPTER = 16;
-const MAIN_FUN_CARDS_PER_CHAPTER = 24;
+const MAIN_FUN_CARDS_PER_CHAPTER = 144;
+const DEFAULT_STORY_QUIZZES_PER_CHAPTER = 3;
+const MAIN_STORY_QUIZZES_PER_CHAPTER = 6;
 const MAX_EVENT_CHAIN_DEPTH = 2;
 const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'juices']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
@@ -2062,8 +2064,14 @@ export class GameEngine {
 
   storyQuizDue() {
     return this.state.turn.chainDepth === 0 &&
-      (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < 3 &&
+      (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < this.storyQuizLimit() &&
       this.state.chapter.eventsResolved >= this.state.chapter.nextStoryQuizAt;
+  }
+
+  storyQuizLimit() {
+    return this.currentChapter.id === 'main'
+      ? MAIN_STORY_QUIZZES_PER_CHAPTER
+      : DEFAULT_STORY_QUIZZES_PER_CHAPTER;
   }
 
   openStoryCard(card, now = Date.now()) {
@@ -2270,6 +2278,29 @@ export class GameEngine {
         this.briefTask(task, true, now);
         this.log('fallbackTaskAssigned', { instanceId: task.instanceId }, now);
         return task;
+      }
+      if (!chainActive && this.hasOpenTasks() &&
+        (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < this.storyQuizLimit()) {
+        const fallbackStoryQuiz = this.eligibleStoryQuiz();
+        if (fallbackStoryQuiz) {
+          this.log('fallbackStoryQuizDrawn', {
+            storyQuizId: fallbackStoryQuiz.id,
+            chapterIndex: this.state.chapterIndex,
+            stage
+          }, now);
+          return this.openStoryCard(fallbackStoryQuiz, now);
+        }
+      }
+      if (this.hasOpenTasks() && this.startWatchChallenge('watchChallenge', now, {
+        fallback: true,
+        reason: 'eventDeckExhausted'
+      })) {
+        this.log('fallbackFunCardDrawn', {
+          challengeId: this.currentWatchChallenge.id,
+          chapterIndex: this.state.chapterIndex,
+          stage
+        }, now);
+        return this.currentWatchChallenge;
       }
       if (this.hasOpenTasks()) {
         this.state.busyAfterPlayerIndex = this.state.activePlayerIndex;
