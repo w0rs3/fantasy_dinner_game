@@ -91,12 +91,26 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.ok(categoryCount(1, 'meat') <= 1, label);
     assert.ok(categoryCount(2, 'fruit') <= 2, label);
     assert.ok(categoryCount(3, 'fruit') <= 2, label);
-    assert.ok(state.ingredients.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.status === 'used').length <= 4,
-      `${label} uses at most three cocktail spirits plus one optional dessert spirit`);
+    assert.ok(state.ingredients.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.status === 'used').length <= 3,
+      `${label} uses alcohol only for the one-to-three-spirit cocktail selection`);
+    assert.equal(categoryCount(4, 'alcohol'), 0, `${label} dessert stays alcohol-free`);
     assert.equal(state.ingredients.some((ingredient) => ingredient.status === 'discovered'), false, `${label} no ingredient may remain in a course basket`);
     const cocktailSpiritTarget = state.chapter.cocktailSpiritTarget;
     assert.ok([1, 2, 3].includes(cocktailSpiritTarget), `${label} cocktail spirit target is selected`);
     assert.equal(categoryCount(5, 'alcohol'), cocktailSpiritTarget, `${label} cocktail uses the selected number of spirit varieties`);
+    const cocktailIngredients = state.menu[5].ingredientIds.map((ingredientId) =>
+      state.ingredients.find((ingredient) => ingredient.id === ingredientId)
+    );
+    const cocktailNonAlcoholCount = (team) => cocktailIngredients.filter((ingredient) =>
+      ingredient.category !== 'alcohol' && [team, 'shared'].includes(ingredient.cocktailUse)
+    ).length;
+    const cocktailTotalCount = (team) => cocktailIngredients.filter((ingredient) =>
+      [team, 'shared'].includes(ingredient.cocktailUse)
+    ).length;
+    assert.equal(cocktailNonAlcoholCount('alcoholic'), cocktailNonAlcoholCount('alcohol-free'),
+      `${label} both cocktails have equal non-alcohol ingredient counts`);
+    assert.equal(cocktailTotalCount('alcoholic'), cocktailTotalCount('alcohol-free') + cocktailSpiritTarget,
+      `${label} only the selected spirits make the alcoholic recipe longer`);
     const saladHasMeat = categoryCount(2, 'meat') > 0;
     const saladTaskTitles = new Set(state.tasks.filter((task) => task.chapterIndex === 2)
       .map((task) => restored.getTaskCard(task)?.title.de));

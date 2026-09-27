@@ -466,15 +466,53 @@ test('apple, orange, and cherry juice are separate optional cocktail ingredients
   assert.equal(INGREDIENTS.some((ingredient) => ingredient.id === 'juices'), false);
 });
 
-test('the optional dessert spirit task appears only when alcohol was assigned to dessert', () => {
+test('spirits are reserved for cocktails and cannot be offered during dessert', () => {
   const engine = createEngine(951);
-  const spiritTask = TASK_DECKS[4].find((card) => card.id === 'A5-19');
-  assert.equal(spiritTask.title.de, 'Optionale Geisterbeute');
-  assert.equal(engine.taskAppliesToChapter(spiritTask, 4), false);
+  const spirits = INGREDIENTS.filter((ingredient) => ingredient.category === 'alcohol');
+  assert.deepEqual(spirits.map((ingredient) => ingredient.id), ['rum', 'gin', 'vodka', 'amaretto', 'triple-sec']);
+  assert.ok(spirits.every((ingredient) =>
+    ingredient.courseTags.length === 1 && ingredient.courseTags[0] === 'cocktails'
+  ));
+
+  engine.state.chapterIndex = 4;
+  engine.state.chapter.stage = 'ingredients';
+  engine.state.turn.phase = 'draw';
   const vodka = engine.getIngredient('vodka');
-  vodka.status = 'locked';
-  vodka.chapterIndex = 4;
-  assert.equal(engine.taskAppliesToChapter(spiritTask, 4), true);
+  vodka.courseTags.push('dessert');
+  engine.state.ingredientQueues[4].push('vodka');
+  assert.equal(engine.ingredientAllowedInCurrentCourse(vodka), false, 'the engine rejects alcohol even with corrupt course metadata');
+  assert.deepEqual(engine.courseIngredientCandidates('alcohol'), []);
+});
+
+test('loading an older game returns dessert alcohol to the cocktail pool', () => {
+  const engine = createEngine(952);
+  const snapshot = engine.snapshot();
+  const rum = snapshot.ingredients.find((ingredient) => ingredient.id === 'rum');
+  rum.status = 'used';
+  rum.chapterIndex = 4;
+  rum.basketCourseIndex = 4;
+  snapshot.menu[4].ingredientIds = ['rum'];
+
+  const restored = new GameEngine(snapshot);
+  const restoredRum = restored.getIngredient('rum');
+  assert.equal(restoredRum.status, 'available');
+  assert.equal(restoredRum.chapterIndex, null);
+  assert.equal(restoredRum.basketCourseIndex, null);
+  assert.deepEqual(restoredRum.courseTags, ['cocktails']);
+  assert.equal(restored.state.menu[4].ingredientIds.includes('rum'), false);
+});
+
+test('the optional dessert card is alcohol-free and appears only with chocolate', () => {
+  const engine = createEngine(953);
+  const chocolateTask = TASK_DECKS[4].find((card) => card.id === 'A5-17');
+  assert.equal(chocolateTask.title.de, 'Schokoladenschatz');
+  assert.deepEqual(chocolateTask.ingredientRequirement, { ids: ['chocolate'] });
+  assert.equal(engine.taskAppliesToChapter(chocolateTask, 4), false);
+  const chocolate = engine.getIngredient('chocolate');
+  chocolate.status = 'locked';
+  chocolate.chapterIndex = 4;
+  assert.equal(engine.taskAppliesToChapter(chocolateTask, 4), true);
+  assert.equal(TASK_DECKS[4].some((card) => card.ingredientRequirement?.categories?.includes('alcohol')), false);
 });
 
 test('soup and salad accept at most one meat variety, including stale pending choices', () => {

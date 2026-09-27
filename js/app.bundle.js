@@ -1003,7 +1003,7 @@ const COURSE_INGREDIENT_RULES = Object.freeze({
   soup: { target: 5, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
   salad: { target: 8, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
   main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
-  dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
+  dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3, alcohol: 0 } },
   cocktails: { target: 5, optionalLimit: 6, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3, drinks: 3 } }
 });
 
@@ -1165,11 +1165,11 @@ const INGREDIENTS = Object.freeze([
   item('second-ice', 'dessert', 'Zweite Eissorte', 'Second ice-cream flavour', q(750, 1000, 'ml'), ['dessert', 'cocktails'], { essential: false, effect: 'revealEvent' }),
   item('sprinkles', 'dessert', 'Schokostreusel', 'Chocolate sprinkles', q(1, 1, 'Packung', 'packet'), ['dessert'], { effect: 'repeatIngredient' }),
   item('chocolate', 'dessert', 'Schokolade', 'Chocolate', q(200, 300, 'g'), ['dessert', 'cocktails'], { effect: 'drawIngredient' }),
-  item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'chain' }),
-  item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
-  item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'replaceIngredient' }),
-  item('amaretto', 'alcohol', 'Amaretto', 'Amaretto', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'repeatIngredient' }),
-  item('triple-sec', 'alcohol', 'Triple Sec', 'Triple sec', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
+  item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'chain' }),
+  item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'shuffleEvents' }),
+  item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'replaceIngredient' }),
+  item('amaretto', 'alcohol', 'Amaretto', 'Amaretto', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'repeatIngredient' }),
+  item('triple-sec', 'alcohol', 'Triple Sec', 'Triple sec', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'shuffleEvents' }),
   item('mineral-water', 'drinks', 'Mineralwasser', 'Mineral water', q(3, 4, 'l'), ['cocktails'], { effect: 'coins3' }),
   item('apple-juice', 'drinks', 'Apfelsaft', 'Apple juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'nextPlayer' }),
   item('orange-juice', 'drinks', 'Orangensaft', 'Orange juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'replaceEvent' }),
@@ -1980,7 +1980,7 @@ const BLUEPRINTS = Object.freeze({
     task('Die zwei Schatzpläne', 'The Two Treasure Plans', 'Die auf dieser Karte genannten Personen werden eindeutig aufgeteilt: Das Frucht-Team entwickelt die fruchtige Kreation; das Schatz-Team kombiniert die übrigen zugeordneten Zutaten zu einer klar unterscheidbaren zweiten Variante.', 'The players named on this card are split explicitly: the fruit team develops the fruit-led creation; the treasure team combines the remaining assigned ingredients into a clearly distinct second version.', 'assembly', [4, 6], 0, { dessertTeamSplit: true, cardNumber: 9 }),
     task('Süße Wolken', 'Sweet Clouds', 'Bereitet eine luftige oder cremige Komponente aus euren Grundvorräten vor und haltet sie bis zum Servieren kalt.', 'Prepare an airy or creamy component from your basic pantry and keep it cold until serving.', 'cold', [1, 2], 0, { cardNumber: 13 }),
     task('Garnitur aus der Truhe', 'Garnish from the Chest', 'Bereitet die zugeordneten Streusel, Schokolade, Nüsse oder Kerne getrennt vor, damit beide Teams bewusst dosieren können.', 'Prepare the assigned sprinkles, chocolate, nuts, or seeds separately so both teams can dose them deliberately.', 'garnish', [1, 2], 0, { ingredientRequirement: { ids: ['sprinkles', 'chocolate', 'nuts', 'seeds'] }, cardNumber: 15 }),
-    task('Optionale Geisterbeute', 'Optional Spirit Treasure', 'Falls gewünscht, gebt die dem Dessert zugeordnete Spirituose nur in klar gekennzeichnete Erwachsenenportionen.', 'If desired, add the spirit assigned to the dessert only to clearly marked adult portions.', 'optional', [1, 2], 0, { ingredientRequirement: { categories: ['alcohol'] }, cardNumber: 19 }),
+    task('Schokoladenschatz', 'Chocolate Treasure', 'Falls Schokolade zugeordnet ist, schmelzt oder raspelt sie vorsichtig und verteilt sie als alkoholfreie Sauce oder Garnitur auf beide Dessertvarianten.', 'If chocolate was assigned, carefully melt or grate it and share it between both dessert variations as an alcohol-free sauce or garnish.', 'optional', [1, 2], 0, { ingredientRequirement: { ids: ['chocolate'] }, cardNumber: 17 }),
     task('Zwei Reihen am Sonnenpavillon', 'Two Rows at the Sun Pavilion', 'Richtet beide Dessertvarianten direkt nach dem Eis erkennbar getrennt und mit gleichmäßigen Portionen an.', 'Immediately after adding the ice cream, plate both dessert variations separately and in even portions.', 'serving', [2, 3], 0, { cardNumber: 21 }),
     task('Die kalte Kombüse', 'The Cold Galley', 'Stellt Eis sofort zurück, lagert Obst kühl und wischt klebrige Arbeitsflächen.', 'Return ice cream immediately, refrigerate fruit, and wipe sticky worktops.', 'cleanup', [1, 2], 0, { cardNumber: 23 }),
     task('Hauptgang abräumen', 'Clear the Main Course', 'Sammelt Teller, Besteck, Platten und Saucengefäße ein, bringt Reste sicher in die Küche und wischt den Tisch frei. Erst danach beginnt die Zutatenwahl für das Dessert.', 'Collect plates, cutlery, platters, and sauce dishes, take leftovers safely to the kitchen, and wipe the table clear. Dessert ingredient selection begins only afterwards.', 'reset', [2, 3], 0, { estimatedMinutes: 6, challengeMinutes: 7, cardNumber: 25 })
@@ -2543,6 +2543,7 @@ const MAIN_FUN_CARDS_PER_CHAPTER = 144;
 const DEFAULT_STORY_QUIZZES_PER_CHAPTER = 3;
 const MAIN_STORY_QUIZZES_PER_CHAPTER = 6;
 const MAX_EVENT_CHAIN_DEPTH = 2;
+const COCKTAIL_CHAPTER_INDEX = CHAPTERS.findIndex((chapter) => chapter.id === 'cocktails');
 const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'juices']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
 const CURRENT_INGREDIENT_IDS = new Set(CURRENT_INGREDIENTS_BY_ID.keys());
@@ -2806,6 +2807,7 @@ class GameEngine {
       staleSoupCucumber.basketCourseIndex = null;
       staleSoupCucumber.basketTaskId = null;
     }
+    const staleNonCocktailAlcoholIds = new Set();
     this.state.ingredients.forEach((ingredient) => {
       const current = CURRENT_INGREDIENTS_BY_ID.get(ingredient.id);
       if (current) {
@@ -2817,6 +2819,19 @@ class GameEngine {
         } else {
           delete ingredient.customName;
           ingredient.name = clone(current.name);
+        }
+        if (current.category === 'alcohol' && ingredient.chapterIndex != null &&
+          ingredient.chapterIndex !== COCKTAIL_CHAPTER_INDEX) {
+          staleNonCocktailAlcoholIds.add(ingredient.id);
+          ingredient.status = 'available';
+          ingredient.chapterIndex = null;
+          ingredient.basketCourseIndex = null;
+          ingredient.basketTaskId = null;
+          delete ingredient.cocktailUse;
+        }
+        if (current.category !== 'alcohol' && ingredient.chapterIndex === COCKTAIL_CHAPTER_INDEX &&
+          ['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)) {
+          ingredient.cocktailUse = 'shared';
         }
       }
     });
@@ -2847,7 +2862,8 @@ class GameEngine {
     }
     this.state.tasks.forEach((task) => {
       task.basketIngredientIds = (task.basketIngredientIds ?? []).filter((ingredientId) =>
-        !RETIRED_INGREDIENT_IDS.has(ingredientId) && !(staleSoupCucumber && ingredientId === 'cucumber')
+        !RETIRED_INGREDIENT_IDS.has(ingredientId) && !staleNonCocktailAlcoholIds.has(ingredientId) &&
+        !(staleSoupCucumber && ingredientId === 'cucumber')
       );
       const card = taskById(task.taskId);
       if (card && task.status !== 'done') {
@@ -2869,7 +2885,10 @@ class GameEngine {
       }
     });
     this.state.menu.forEach((course) => {
-      course.ingredientIds = course.ingredientIds.filter((ingredientId) => !RETIRED_INGREDIENT_IDS.has(ingredientId));
+      course.ingredientIds = course.ingredientIds.filter((ingredientId) =>
+        !RETIRED_INGREDIENT_IDS.has(ingredientId) &&
+        !(course.chapterId !== 'cocktails' && CURRENT_INGREDIENTS_BY_ID.get(ingredientId)?.category === 'alcohol')
+      );
       if (course.chapterId === 'cocktails') course.cocktailTechniques ??= { alcoholic: null, 'alcohol-free': null };
     });
     const currentCourseId = CHAPTERS[this.state.chapterIndex].id;
@@ -2879,6 +2898,8 @@ class GameEngine {
     });
     if (RETIRED_INGREDIENT_IDS.has(this.state.lastIngredientId)) this.state.lastIngredientId = null;
     if (RETIRED_INGREDIENT_IDS.has(this.state.previousIngredientId)) this.state.previousIngredientId = null;
+    if (staleNonCocktailAlcoholIds.has(this.state.lastIngredientId)) this.state.lastIngredientId = null;
+    if (staleNonCocktailAlcoholIds.has(this.state.previousIngredientId)) this.state.previousIngredientId = null;
     if (this.state.turn.phase === 'ingredientChoice' && this.state.turn.pendingIngredientIds.length === 0) {
       this.state.turn.phase = 'draw';
       this.state.turn.pendingContext = null;
@@ -3452,6 +3473,7 @@ class GameEngine {
 
   ingredientAllowedInCurrentCourse(ingredient) {
     if (!ingredient?.courseTags.includes(this.currentChapter.id)) return false;
+    if (ingredient.category === 'alcohol' && this.currentChapter.id !== 'cocktails') return false;
     const plannedEssential = this.requiredCourseIngredients().filter((entry) =>
       ['discovered', 'locked', 'used'].includes(entry.status)
     ).length;
@@ -3491,13 +3513,6 @@ class GameEngine {
     const expiring = this.expiringIngredientCandidates();
     if (!expiring.length) return [];
 
-    const cocktailUseCounts = { alcoholic: 0, 'alcohol-free': 0 };
-    if (this.currentChapter.id === 'cocktails') {
-      this.courseIngredients().forEach((ingredient) => {
-        if (ingredient.cocktailUse === 'alcoholic') cocktailUseCounts.alcoholic += 1;
-        if (ingredient.cocktailUse === 'alcohol-free') cocktailUseCounts['alcohol-free'] += 1;
-      });
-    }
     expiring.forEach((ingredient) => {
       ingredient.status = 'locked';
       ingredient.chapterIndex = this.state.chapterIndex;
@@ -3507,10 +3522,7 @@ class GameEngine {
       ingredient.lockedBy = null;
       ingredient.autoLockedChapterIndex = this.state.chapterIndex;
       if (this.currentChapter.id === 'cocktails') {
-        ingredient.cocktailUse = ingredient.category === 'alcohol'
-          ? 'alcoholic'
-          : cocktailUseCounts.alcoholic <= cocktailUseCounts['alcohol-free'] ? 'alcoholic' : 'alcohol-free';
-        cocktailUseCounts[ingredient.cocktailUse] += 1;
+        ingredient.cocktailUse = ingredient.category === 'alcohol' ? 'alcoholic' : 'shared';
       }
     });
     const ingredientIds = expiring.map((ingredient) => ingredient.id);
@@ -3673,11 +3685,23 @@ class GameEngine {
   defaultCocktailUseForIngredient(ingredient) {
     if (this.currentChapter.id !== 'cocktails') return null;
     if (ingredient.category === 'alcohol') return 'alcoholic';
-    if (['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)) return ingredient.cocktailUse;
-    const discoverer = this.state.players.find((player) => player.id === ingredient.discoveredBy);
-    if (['alcoholic', 'alcohol-free'].includes(discoverer?.cocktailTeam)) return discoverer.cocktailTeam;
-    if (['alcoholic', 'alcohol-free'].includes(this.activePlayer?.cocktailTeam)) return this.activePlayer.cocktailTeam;
     return 'shared';
+  }
+
+  cocktailNonAlcoholIngredientCounts(statuses = ['discovered', 'locked', 'used'], excludingIngredientId = null) {
+    const counts = { alcoholic: 0, 'alcohol-free': 0 };
+    if (this.currentChapter.id !== 'cocktails') return counts;
+    this.courseIngredients().forEach((ingredient) => {
+      if (ingredient.id === excludingIngredientId || ingredient.category === 'alcohol' ||
+        !statuses.includes(ingredient.status)) return;
+      if (ingredient.cocktailUse === 'shared') {
+        counts.alcoholic += 1;
+        counts['alcohol-free'] += 1;
+      } else if (['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)) {
+        counts[ingredient.cocktailUse] += 1;
+      }
+    });
+    return counts;
   }
 
   cocktailCompositionReady() {
@@ -3686,12 +3710,10 @@ class GameEngine {
     const validUses = new Set(['alcoholic', 'alcohol-free', 'shared']);
     const spiritTarget = this.state.chapter.cocktailSpiritTarget;
     const spiritCount = fixed.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.cocktailUse === 'alcoholic').length;
-    const hasTeamBase = (team) => fixed.some((ingredient) =>
-      [team, 'shared'].includes(ingredient.cocktailUse) && ingredient.category !== 'alcohol'
-    );
+    const nonAlcoholCounts = this.cocktailNonAlcoholIngredientCounts(['locked', 'used']);
     return fixed.length > 0 && fixed.every((ingredient) => validUses.has(ingredient.cocktailUse)) &&
       Number.isInteger(spiritTarget) && spiritTarget >= 1 && spiritTarget <= 3 && spiritCount === spiritTarget &&
-      hasTeamBase('alcoholic') && hasTeamBase('alcohol-free') &&
+      nonAlcoholCounts.alcoholic > 0 && nonAlcoholCounts.alcoholic === nonAlcoholCounts['alcohol-free'] &&
       fixed.some((ingredient) => ['alcohol-free', 'shared'].includes(ingredient.cocktailUse) && !['alcohol', 'drinks'].includes(ingredient.category));
   }
 
@@ -3898,6 +3920,7 @@ class GameEngine {
       !['alcoholic', 'alcohol-free', 'shared'].includes(use)) return false;
     const ingredient = this.courseIngredients().find((entry) => entry.id === ingredientId && entry.status === 'locked');
     if (!ingredient || (ingredient.category === 'alcohol' && use !== 'alcoholic') ||
+      (ingredient.category !== 'alcohol' && use !== 'shared') ||
       (use !== 'shared' && this.activePlayer.cocktailTeam !== use)) return false;
     ingredient.cocktailUse = use;
     this.log('cocktailIngredientAssigned', { ingredientId, use }, now);
@@ -5538,6 +5561,10 @@ class GameEngine {
     this.state.lastIngredientId = selected.id;
     this.state.turn.resolvedPreviousIngredientId = previous.id;
     this.state.turn.resolvedIngredientId = selected.id;
+    this.state.turn.resolvedIngredientIds = [
+      ...(this.state.turn.resolvedIngredientIds ?? []),
+      selected.id
+    ];
     this.log('ingredientSwapped', { from: previous.id, to: selected.id }, now);
     return true;
   }
@@ -5558,7 +5585,8 @@ class GameEngine {
       const use = cocktailUse ?? ingredient.cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
       if (!['alcoholic', 'alcohol-free', 'shared'].includes(use) ||
         (ingredient.cocktailUse && cocktailUse && ingredient.cocktailUse !== cocktailUse) ||
-        (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
+        (ingredient.category === 'alcohol' && use !== 'alcoholic') ||
+        (ingredient.category !== 'alcohol' && use !== 'shared')) return false;
     }
     return true;
   }
@@ -7049,9 +7077,18 @@ function eventActionText(engine, actionCode, language) {
       : t(EFFECT_TEXT[actionCode], language);
   }
   if (actionCode === 'swapIngredient') {
-    const ingredient = engine.state.turn.phase === 'resolved'
+    const resolved = engine.state.turn.phase === 'resolved';
+    const ingredient = resolved
       ? engine.getIngredient(engine.state.turn.resolvedPreviousIngredientId)
       : engine.ingredientActionTarget();
+    const replacement = resolved
+      ? engine.getIngredient(engine.state.turn.resolvedIngredientId)
+      : null;
+    if (ingredient && replacement) {
+      return language === 'de'
+        ? `${t(ingredient.name, language)} wurde durch ${t(replacement.name, language)} ersetzt.`
+        : `${t(ingredient.name, language)} was replaced with ${t(replacement.name, language)}.`;
+    }
     return ingredient
       ? (language === 'de' ? `${t(ingredient.name, language)} gegen eine Alternative tauschen` : `Swap ${t(ingredient.name, language)} for an alternative`)
       : t(EFFECT_TEXT[actionCode], language);
@@ -7126,6 +7163,9 @@ function renderCourseBasket(engine, language) {
     ? engine.courseCategoryCount('alcohol', ['discovered', 'locked', 'used'])
     : 0;
   const cocktailSpiritTarget = engine.state.chapter.cocktailSpiritTarget;
+  const cocktailNonAlcoholCounts = cocktailCourse
+    ? engine.cocktailNonAlcoholIngredientCounts()
+    : { alcoholic: 0, 'alcohol-free': 0 };
   const renderCocktailRecipeList = (team, title, tone) => {
     const ingredients = locked.filter((ingredient) => [team, 'shared'].includes(ingredient.cocktailUse));
     return `<section class="cocktail-recipe-list" data-team="${team}">
@@ -7140,8 +7180,8 @@ function renderCourseBasket(engine, language) {
     <div class="panel-header"><div><p class="eyebrow">${language === 'de' ? 'Vorläufige Auswahl' : 'Draft selection'}</p><h3>${language === 'de' ? 'Gangkorb' : 'Course basket'}</h3></div>${statusTag(`${essentialLocked}/${target} ${language === 'de' ? 'Pflichtzutaten' : 'required'}`, essentialLocked >= target ? 'green' : 'gold')}</div>
     <p class="muted">${language === 'de' ? `Dieser Gang braucht genau ${target} Pflichtzutaten${optionalLimit ? ` und erlaubt höchstens ${optionalLimit} optionales Extra` : ''}. Pflichtzutaten ohne späteren möglichen Gang werden zu Rundenbeginn automatisch festgelegt; alle übrigen Zutaten können nur durch Karten verbindlich festgelegt oder aus dem offenen Korb zurückgelegt werden. Vor dem Wechsel zu den Aufgaben muss der offene Korb leer sein.` : `This course needs exactly ${target} required ingredients${optionalLimit ? ` and allows at most ${optionalLimit} optional extra` : ''}. Required ingredients with no later eligible course are locked automatically at the start of the round; all other ingredients can only be locked in or returned from the open basket by cards. The open basket must be empty before tasks begin.`}</p>
     ${automaticallyLocked.length ? `<div class="card-effect"><strong>${language === 'de' ? 'Automatisch für diesen Gang festgelegt' : 'Automatically locked for this course'}</strong><span>${language === 'de' ? 'Diese Pflichtzutaten können in keinem späteren Gang mehr verwendet werden und sind deshalb nicht erst im offenen Korb gelandet.' : 'These required ingredients cannot be used in any later course, so they bypassed the open basket.'}</span></div>` : ''}
-    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei getrennte Zutatenlisten' : 'Two separate ingredient lists'}</strong><span>${language === 'de' ? 'Wer eine Zutat auswählt, entscheidet damit für das eigene Cocktail-Team. Mitglieder des alkoholfreien Teams bekommen keine Spirituosen zur Auswahl. Automatisch festgelegte gemeinsame Grundlagen werden fair auf beide Listen verteilt.' : 'Choosing an ingredient adds it to the active player’s own cocktail team. Alcohol-free team members are never offered spirits. Automatically locked bases are distributed fairly between both lists.'}</span></div>` : ''}
-    ${profile || cocktailCourse ? `<div class="stat-strip">${profile}${cocktailCourse ? statusTag(language === 'de' ? `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} Spirituosensorten für die alkoholische Mischung` : `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} spirits for the alcoholic mix`, Number.isInteger(cocktailSpiritTarget) && cocktailSpiritCount === cocktailSpiritTarget ? 'green' : 'gold') : ''}</div>` : ''}
+    ${cocktailCourse ? `<div class="card-effect cocktail-composition-hint"><strong>${language === 'de' ? 'Zwei getrennte Zutatenlisten' : 'Two separate ingredient lists'}</strong><span>${language === 'de' ? 'Jede alkoholfreie Zutat ist eine gemeinsame Grundlage und steht deshalb auf beiden Listen. Nur die gewählte Zahl an Spirituosensorten kommt zusätzlich in die alkoholische Liste.' : 'Every non-alcohol ingredient is a shared base and therefore appears on both lists. Only the selected spirits are added exclusively to the alcoholic list.'}</span></div>` : ''}
+    ${profile || cocktailCourse ? `<div class="stat-strip">${profile}${cocktailCourse ? statusTag(language === 'de' ? `${cocktailNonAlcoholCounts.alcoholic}:${cocktailNonAlcoholCounts['alcohol-free']} alkoholfreie Zutaten · müssen gleich sein` : `${cocktailNonAlcoholCounts.alcoholic}:${cocktailNonAlcoholCounts['alcohol-free']} non-alcohol ingredients · must be equal`, cocktailNonAlcoholCounts.alcoholic > 0 && cocktailNonAlcoholCounts.alcoholic === cocktailNonAlcoholCounts['alcohol-free'] ? 'green' : 'gold') : ''}${cocktailCourse ? statusTag(language === 'de' ? `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} Spirituosensorten für die alkoholische Mischung` : `${cocktailSpiritCount}/${cocktailSpiritTarget ?? '1–3'} spirits for the alcoholic mix`, Number.isInteger(cocktailSpiritTarget) && cocktailSpiritCount === cocktailSpiritTarget ? 'green' : 'gold') : ''}</div>` : ''}
     ${basket.length ? `<div class="course-basket-list">${basket.map((ingredient) => `<article>
       <strong>${t(ingredient.name, language)}</strong>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : `<small>${language === 'de' ? 'Kein zusätzlicher Karteneffekt.' : 'No additional card effect.'}</small>`}
@@ -7462,9 +7502,9 @@ function renderIngredientChoice(engine, language) {
   const event = engine.currentEvent;
   const cocktailTeam = engine.currentChapter.id === 'cocktails' ? engine.activePlayer.cocktailTeam : null;
   const cocktailChoiceNote = cocktailTeam === 'alcoholic'
-    ? (language === 'de' ? `Die Auswahl wird der alkoholischen Zutatenliste von ${escapeHtml(engine.activePlayer.name)}s Team zugeordnet.` : `The choice is added to ${escapeHtml(engine.activePlayer.name)}’s alcoholic ingredient list.`)
+    ? (language === 'de' ? 'Alkoholfreie Zutaten kommen als gemeinsame Grundlage auf beide Listen; Spirituosen nur auf die alkoholische.' : 'Non-alcohol ingredients are added to both lists as a shared base; spirits go only to the alcoholic list.')
     : cocktailTeam === 'alcohol-free'
-      ? (language === 'de' ? `Die Auswahl wird der alkoholfreien Zutatenliste von ${escapeHtml(engine.activePlayer.name)}s Team zugeordnet; Spirituosen werden hier nicht angeboten.` : `The choice is added to ${escapeHtml(engine.activePlayer.name)}’s alcohol-free ingredient list; spirits are not offered here.`)
+      ? (language === 'de' ? 'Die Auswahl kommt als gemeinsame alkoholfreie Grundlage auf beide Listen; Spirituosen werden hier nicht angeboten.' : 'The choice is added to both lists as a shared non-alcohol base; spirits are not offered here.')
       : null;
   const choices = engine.state.turn.pendingIngredientIds.map((ingredientId) => {
     const ingredient = engine.getIngredient(ingredientId);

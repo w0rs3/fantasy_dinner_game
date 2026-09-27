@@ -16,7 +16,7 @@ export const COURSE_INGREDIENT_RULES = Object.freeze({
   soup: { target: 5, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
   salad: { target: 8, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
   main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
-  dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3 } },
+  dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3, alcohol: 0 } },
   cocktails: { target: 5, optionalLimit: 6, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3, drinks: 3 } }
 });
 
@@ -178,11 +178,11 @@ export const INGREDIENTS = Object.freeze([
   item('second-ice', 'dessert', 'Zweite Eissorte', 'Second ice-cream flavour', q(750, 1000, 'ml'), ['dessert', 'cocktails'], { essential: false, effect: 'revealEvent' }),
   item('sprinkles', 'dessert', 'Schokostreusel', 'Chocolate sprinkles', q(1, 1, 'Packung', 'packet'), ['dessert'], { effect: 'repeatIngredient' }),
   item('chocolate', 'dessert', 'Schokolade', 'Chocolate', q(200, 300, 'g'), ['dessert', 'cocktails'], { effect: 'drawIngredient' }),
-  item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'chain' }),
-  item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
-  item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'replaceIngredient' }),
-  item('amaretto', 'alcohol', 'Amaretto', 'Amaretto', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'repeatIngredient' }),
-  item('triple-sec', 'alcohol', 'Triple Sec', 'Triple sec', q(1, 1, 'Flasche', 'bottle'), ['dessert', 'cocktails'], { essential: false, effect: 'shuffleEvents' }),
+  item('rum', 'alcohol', 'Rum', 'Rum', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'chain' }),
+  item('gin', 'alcohol', 'Gin', 'Gin', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'shuffleEvents' }),
+  item('vodka', 'alcohol', 'Wodka', 'Vodka', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'replaceIngredient' }),
+  item('amaretto', 'alcohol', 'Amaretto', 'Amaretto', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'repeatIngredient' }),
+  item('triple-sec', 'alcohol', 'Triple Sec', 'Triple sec', q(1, 1, 'Flasche', 'bottle'), ['cocktails'], { essential: false, effect: 'shuffleEvents' }),
   item('mineral-water', 'drinks', 'Mineralwasser', 'Mineral water', q(3, 4, 'l'), ['cocktails'], { effect: 'coins3' }),
   item('apple-juice', 'drinks', 'Apfelsaft', 'Apple juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'nextPlayer' }),
   item('orange-juice', 'drinks', 'Orangensaft', 'Orange juice', q(1, 2, 'l'), ['cocktails'], { essential: false, effect: 'replaceEvent' }),

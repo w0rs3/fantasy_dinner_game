@@ -883,8 +883,14 @@ test('swap ingredient events replace exactly the id named on the event card', ()
   assert.equal(decoy.status, 'discovered');
   assert.equal(stale.status, 'discovered');
   assert.equal(engine.state.turn.resolvedPreviousIngredientId, target.id);
-  assert.equal(engine.getIngredient(engine.state.turn.resolvedIngredientId).status, 'discovered');
+  const replacement = engine.getIngredient(engine.state.turn.resolvedIngredientId);
+  assert.equal(replacement.status, 'discovered');
   assert.notEqual(engine.state.turn.resolvedIngredientId, decoy.id);
+  assert.deepEqual(engine.state.turn.resolvedIngredientIds, [replacement.id]);
+  const resultHtml = renderGame(engine, 'de');
+  assert.match(resultHtml, new RegExp(`${target.name.de} wurde durch ${replacement.name.de} ersetzt\\.`));
+  assert.match(resultHtml, /Zum Gangkorb hinzugefügt/);
+  assert.match(resultHtml, new RegExp(`>${replacement.name.de}<`));
 });
 
 test('ingredient event choices reject a stale or tampered target id without changing the basket', () => {

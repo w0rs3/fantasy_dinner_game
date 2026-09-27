@@ -153,14 +153,15 @@ test('the main-course workflow prepares in parallel and opens one unassigned bak
   const ice = dessert.find((card) => card.title.de === 'Eis aus der Höhle');
   const warmFruit = dessert.find((card) => card.title.de === 'Die warme Fruchtbeute');
   const plans = dessert.find((card) => card.title.de === 'Die zwei Schatzpläne');
-  const spirit = dessert.find((card) => card.title.de === 'Optionale Geisterbeute');
+  const chocolate = dessert.find((card) => card.title.de === 'Schokoladenschatz');
   assert.equal(dessert.some((card) => card.title.de === 'Kühle Wache'), false);
   assert.equal(dessert.some((card) => card.title.de === 'Die erste Lagunenprobe'), false);
   assert.ok(ice.prerequisites.some((entry) => entry.requiredBlueprintIndex === warmFruit.blueprintIndex && entry.state === 'done'));
   assert.ok(ice.prerequisites.some((entry) => entry.requiredBlueprintIndex === plans.blueprintIndex && entry.state === 'done'));
   assert.deepEqual(ice.ingredientRequirement.ids, ['vanilla-ice', 'second-ice']);
-  assert.equal(spirit.playable, true);
-  assert.deepEqual(spirit.ingredientRequirement, { categories: ['alcohol'] });
+  assert.equal(chocolate.playable, true);
+  assert.deepEqual(chocolate.ingredientRequirement, { ids: ['chocolate'] });
+  assert.equal(dessert.some((card) => card.ingredientRequirement?.categories?.includes('alcohol')), false);
 });
 
 test('bacon dates are fried actively in a pan instead of baked in the oven', () => {

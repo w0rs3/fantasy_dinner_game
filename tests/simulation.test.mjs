@@ -40,6 +40,16 @@ test('complete games finish for every supported crew size without pure waiting',
       ).length;
       assert.ok([1, 2, 3].includes(cocktailSpiritTarget));
       assert.equal(cocktailSpiritCount, cocktailSpiritTarget);
+      const cocktailIngredients = result.snapshot.menu[5].ingredientIds
+        .map((ingredientId) => result.snapshot.ingredients.find((ingredient) => ingredient.id === ingredientId));
+      const nonAlcoholCount = (team) => cocktailIngredients.filter((ingredient) =>
+        ingredient.category !== 'alcohol' && [team, 'shared'].includes(ingredient.cocktailUse)
+      ).length;
+      const totalCount = (team) => cocktailIngredients.filter((ingredient) =>
+        [team, 'shared'].includes(ingredient.cocktailUse)
+      ).length;
+      assert.equal(nonAlcoholCount('alcoholic'), nonAlcoholCount('alcohol-free'));
+      assert.equal(totalCount('alcoholic'), totalCount('alcohol-free') + cocktailSpiritTarget);
       assert.ok(result.snapshot.coins <= 500 && result.snapshot.coins >= 0, 'coin score stays within the reward scale');
       assert.equal(result.tasks, result.completedTasks);
       const restored = new GameEngine(result.snapshot);

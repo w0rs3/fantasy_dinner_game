@@ -18,6 +18,7 @@ const MAIN_FUN_CARDS_PER_CHAPTER = 144;
 const DEFAULT_STORY_QUIZZES_PER_CHAPTER = 3;
 const MAIN_STORY_QUIZZES_PER_CHAPTER = 6;
 const MAX_EVENT_CHAIN_DEPTH = 2;
+const COCKTAIL_CHAPTER_INDEX = CHAPTERS.findIndex((chapter) => chapter.id === 'cocktails');
 const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'juices']);
 const CURRENT_INGREDIENTS_BY_ID = new Map(INGREDIENTS.map((ingredient) => [ingredient.id, ingredient]));
 const CURRENT_INGREDIENT_IDS = new Set(CURRENT_INGREDIENTS_BY_ID.keys());
@@ -281,6 +282,7 @@ export class GameEngine {
       staleSoupCucumber.basketCourseIndex = null;
       staleSoupCucumber.basketTaskId = null;
     }
+    const staleNonCocktailAlcoholIds = new Set();
     this.state.ingredients.forEach((ingredient) => {
       const current = CURRENT_INGREDIENTS_BY_ID.get(ingredient.id);
       if (current) {
@@ -292,6 +294,19 @@ export class GameEngine {
         } else {
           delete ingredient.customName;
           ingredient.name = clone(current.name);
+        }
+        if (current.category === 'alcohol' && ingredient.chapterIndex != null &&
+          ingredient.chapterIndex !== COCKTAIL_CHAPTER_INDEX) {
+          staleNonCocktailAlcoholIds.add(ingredient.id);
+          ingredient.status = 'available';
+          ingredient.chapterIndex = null;
+          ingredient.basketCourseIndex = null;
+          ingredient.basketTaskId = null;
+          delete ingredient.cocktailUse;
+        }
+        if (current.category !== 'alcohol' && ingredient.chapterIndex === COCKTAIL_CHAPTER_INDEX &&
+          ['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)) {
+          ingredient.cocktailUse = 'shared';
         }
       }
     });
@@ -322,7 +337,8 @@ export class GameEngine {
     }
     this.state.tasks.forEach((task) => {
       task.basketIngredientIds = (task.basketIngredientIds ?? []).filter((ingredientId) =>
-        !RETIRED_INGREDIENT_IDS.has(ingredientId) && !(staleSoupCucumber && ingredientId === 'cucumber')
+        !RETIRED_INGREDIENT_IDS.has(ingredientId) && !staleNonCocktailAlcoholIds.has(ingredientId) &&
+        !(staleSoupCucumber && ingredientId === 'cucumber')
       );
       const card = taskById(task.taskId);
       if (card && task.status !== 'done') {
@@ -344,7 +360,10 @@ export class GameEngine {
       }
     });
     this.state.menu.forEach((course) => {
-      course.ingredientIds = course.ingredientIds.filter((ingredientId) => !RETIRED_INGREDIENT_IDS.has(ingredientId));
+      course.ingredientIds = course.ingredientIds.filter((ingredientId) =>
+        !RETIRED_INGREDIENT_IDS.has(ingredientId) &&
+        !(course.chapterId !== 'cocktails' && CURRENT_INGREDIENTS_BY_ID.get(ingredientId)?.category === 'alcohol')
+      );
       if (course.chapterId === 'cocktails') course.cocktailTechniques ??= { alcoholic: null, 'alcohol-free': null };
     });
     const currentCourseId = CHAPTERS[this.state.chapterIndex].id;
@@ -354,6 +373,8 @@ export class GameEngine {
     });
     if (RETIRED_INGREDIENT_IDS.has(this.state.lastIngredientId)) this.state.lastIngredientId = null;
     if (RETIRED_INGREDIENT_IDS.has(this.state.previousIngredientId)) this.state.previousIngredientId = null;
+    if (staleNonCocktailAlcoholIds.has(this.state.lastIngredientId)) this.state.lastIngredientId = null;
+    if (staleNonCocktailAlcoholIds.has(this.state.previousIngredientId)) this.state.previousIngredientId = null;
     if (this.state.turn.phase === 'ingredientChoice' && this.state.turn.pendingIngredientIds.length === 0) {
       this.state.turn.phase = 'draw';
       this.state.turn.pendingContext = null;
@@ -927,6 +948,7 @@ export class GameEngine {
 
   ingredientAllowedInCurrentCourse(ingredient) {
     if (!ingredient?.courseTags.includes(this.currentChapter.id)) return false;
+    if (ingredient.category === 'alcohol' && this.currentChapter.id !== 'cocktails') return false;
     const plannedEssential = this.requiredCourseIngredients().filter((entry) =>
       ['discovered', 'locked', 'used'].includes(entry.status)
     ).length;
@@ -966,13 +988,6 @@ export class GameEngine {
     const expiring = this.expiringIngredientCandidates();
     if (!expiring.length) return [];
 
-    const cocktailUseCounts = { alcoholic: 0, 'alcohol-free': 0 };
-    if (this.currentChapter.id === 'cocktails') {
-      this.courseIngredients().forEach((ingredient) => {
-        if (ingredient.cocktailUse === 'alcoholic') cocktailUseCounts.alcoholic += 1;
-        if (ingredient.cocktailUse === 'alcohol-free') cocktailUseCounts['alcohol-free'] += 1;
-      });
-    }
     expiring.forEach((ingredient) => {
       ingredient.status = 'locked';
       ingredient.chapterIndex = this.state.chapterIndex;
@@ -982,10 +997,7 @@ export class GameEngine {
       ingredient.lockedBy = null;
       ingredient.autoLockedChapterIndex = this.state.chapterIndex;
       if (this.currentChapter.id === 'cocktails') {
-        ingredient.cocktailUse = ingredient.category === 'alcohol'
-          ? 'alcoholic'
-          : cocktailUseCounts.alcoholic <= cocktailUseCounts['alcohol-free'] ? 'alcoholic' : 'alcohol-free';
-        cocktailUseCounts[ingredient.cocktailUse] += 1;
+        ingredient.cocktailUse = ingredient.category === 'alcohol' ? 'alcoholic' : 'shared';
       }
     });
     const ingredientIds = expiring.map((ingredient) => ingredient.id);
@@ -1148,11 +1160,23 @@ export class GameEngine {
   defaultCocktailUseForIngredient(ingredient) {
     if (this.currentChapter.id !== 'cocktails') return null;
     if (ingredient.category === 'alcohol') return 'alcoholic';
-    if (['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)) return ingredient.cocktailUse;
-    const discoverer = this.state.players.find((player) => player.id === ingredient.discoveredBy);
-    if (['alcoholic', 'alcohol-free'].includes(discoverer?.cocktailTeam)) return discoverer.cocktailTeam;
-    if (['alcoholic', 'alcohol-free'].includes(this.activePlayer?.cocktailTeam)) return this.activePlayer.cocktailTeam;
     return 'shared';
+  }
+
+  cocktailNonAlcoholIngredientCounts(statuses = ['discovered', 'locked', 'used'], excludingIngredientId = null) {
+    const counts = { alcoholic: 0, 'alcohol-free': 0 };
+    if (this.currentChapter.id !== 'cocktails') return counts;
+    this.courseIngredients().forEach((ingredient) => {
+      if (ingredient.id === excludingIngredientId || ingredient.category === 'alcohol' ||
+        !statuses.includes(ingredient.status)) return;
+      if (ingredient.cocktailUse === 'shared') {
+        counts.alcoholic += 1;
+        counts['alcohol-free'] += 1;
+      } else if (['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)) {
+        counts[ingredient.cocktailUse] += 1;
+      }
+    });
+    return counts;
   }
 
   cocktailCompositionReady() {
@@ -1161,12 +1185,10 @@ export class GameEngine {
     const validUses = new Set(['alcoholic', 'alcohol-free', 'shared']);
     const spiritTarget = this.state.chapter.cocktailSpiritTarget;
     const spiritCount = fixed.filter((ingredient) => ingredient.category === 'alcohol' && ingredient.cocktailUse === 'alcoholic').length;
-    const hasTeamBase = (team) => fixed.some((ingredient) =>
-      [team, 'shared'].includes(ingredient.cocktailUse) && ingredient.category !== 'alcohol'
-    );
+    const nonAlcoholCounts = this.cocktailNonAlcoholIngredientCounts(['locked', 'used']);
     return fixed.length > 0 && fixed.every((ingredient) => validUses.has(ingredient.cocktailUse)) &&
       Number.isInteger(spiritTarget) && spiritTarget >= 1 && spiritTarget <= 3 && spiritCount === spiritTarget &&
-      hasTeamBase('alcoholic') && hasTeamBase('alcohol-free') &&
+      nonAlcoholCounts.alcoholic > 0 && nonAlcoholCounts.alcoholic === nonAlcoholCounts['alcohol-free'] &&
       fixed.some((ingredient) => ['alcohol-free', 'shared'].includes(ingredient.cocktailUse) && !['alcohol', 'drinks'].includes(ingredient.category));
   }
 
@@ -1373,6 +1395,7 @@ export class GameEngine {
       !['alcoholic', 'alcohol-free', 'shared'].includes(use)) return false;
     const ingredient = this.courseIngredients().find((entry) => entry.id === ingredientId && entry.status === 'locked');
     if (!ingredient || (ingredient.category === 'alcohol' && use !== 'alcoholic') ||
+      (ingredient.category !== 'alcohol' && use !== 'shared') ||
       (use !== 'shared' && this.activePlayer.cocktailTeam !== use)) return false;
     ingredient.cocktailUse = use;
     this.log('cocktailIngredientAssigned', { ingredientId, use }, now);
@@ -3013,6 +3036,10 @@ export class GameEngine {
     this.state.lastIngredientId = selected.id;
     this.state.turn.resolvedPreviousIngredientId = previous.id;
     this.state.turn.resolvedIngredientId = selected.id;
+    this.state.turn.resolvedIngredientIds = [
+      ...(this.state.turn.resolvedIngredientIds ?? []),
+      selected.id
+    ];
     this.log('ingredientSwapped', { from: previous.id, to: selected.id }, now);
     return true;
   }
@@ -3033,7 +3060,8 @@ export class GameEngine {
       const use = cocktailUse ?? ingredient.cocktailUse ?? this.defaultCocktailUseForIngredient(ingredient);
       if (!['alcoholic', 'alcohol-free', 'shared'].includes(use) ||
         (ingredient.cocktailUse && cocktailUse && ingredient.cocktailUse !== cocktailUse) ||
-        (ingredient.category === 'alcohol' && use !== 'alcoholic')) return false;
+        (ingredient.category === 'alcohol' && use !== 'alcoholic') ||
+        (ingredient.category !== 'alcohol' && use !== 'shared')) return false;
     }
     return true;
   }
