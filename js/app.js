@@ -585,6 +585,10 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target;
+  if (target.matches('[data-action="change-shopping-player-count"]')) {
+    setupDraft.playerCount = Math.min(10, Math.max(6, Number(target.value) || 6));
+    render();
+  }
   if (target.matches('[data-action="change-player-count"]')) {
     readSetupForm();
     setupDraft.playerCount = Number(target.value);

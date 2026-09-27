@@ -236,7 +236,12 @@ export function renderIngredientGuide(playerCount, language, ingredientNames = {
             : 'Every ingredient remains visible at all times. Quantities are rough suggestions; appetite, pack sizes, and your own recipe decisions take priority.'}</p>
         </div>
         <div class="shopping-guide-actions">
-          ${statusTag(`${crewSize} ${language === 'de' ? 'Personen' : 'players'}`, 'gold')}
+          <label class="shopping-player-count">
+            <span>${language === 'de' ? 'Personen für Liste und PDF' : 'Players for list and PDF'}</span>
+            <select data-action="change-shopping-player-count" aria-label="${language === 'de' ? 'Personenzahl für Einkaufsliste und PDF' : 'Player count for shopping list and PDF'}">
+              ${Array.from({ length: 5 }, (_, index) => index + 6).map((count) => `<option value="${count}" ${count === crewSize ? 'selected' : ''}>${count}</option>`).join('')}
+            </select>
+          </label>
           <button type="button" class="primary-button" data-action="download-shopping-pdf">${language === 'de' ? 'Einkaufsliste als PDF' : 'Download shopping PDF'}</button>
         </div>
       </div>

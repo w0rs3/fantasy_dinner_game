@@ -235,8 +235,8 @@ function assemblePdf(contents) {
     offset += object.length;
   }
   const xrefOffset = offset;
-  const xref = [`xref\n0 ${maxObjectId + 1}\n`, '0000000000 65535 f \n'];
-  for (let id = 1; id <= maxObjectId; id += 1) xref.push(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
+  const xref = [`xref\r\n0 ${maxObjectId + 1}\r\n`, '0000000000 65535 f\r\n'];
+  for (let id = 1; id <= maxObjectId; id += 1) xref.push(`${String(offsets[id]).padStart(10, '0')} 00000 n\r\n`);
   xref.push(`trailer\n<< /Size ${maxObjectId + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
   chunks.push(asciiBytes(xref.join('')));
   return concatenate(chunks);

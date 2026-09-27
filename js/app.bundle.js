@@ -8336,7 +8336,12 @@ function renderIngredientGuide(playerCount, language, ingredientNames = {}, shop
             : 'Every ingredient remains visible at all times. Quantities are rough suggestions; appetite, pack sizes, and your own recipe decisions take priority.'}</p>
         </div>
         <div class="shopping-guide-actions">
-          ${statusTag(`${crewSize} ${language === 'de' ? 'Personen' : 'players'}`, 'gold')}
+          <label class="shopping-player-count">
+            <span>${language === 'de' ? 'Personen für Liste und PDF' : 'Players for list and PDF'}</span>
+            <select data-action="change-shopping-player-count" aria-label="${language === 'de' ? 'Personenzahl für Einkaufsliste und PDF' : 'Player count for shopping list and PDF'}">
+              ${Array.from({ length: 5 }, (_, index) => index + 6).map((count) => `<option value="${count}" ${count === crewSize ? 'selected' : ''}>${count}</option>`).join('')}
+            </select>
+          </label>
           <button type="button" class="primary-button" data-action="download-shopping-pdf">${language === 'de' ? 'Einkaufsliste als PDF' : 'Download shopping PDF'}</button>
         </div>
       </div>
@@ -8714,8 +8719,8 @@ function pageContent(placements, pageNumber, pageCount, playerCount, language) {
     });
     content += drawText(replacement, placement.x + 16, bottom + 7, 7.5, 'F1', 0.38);
     const labelWidth = textWidth(replacement, 7.5) + 5;
-    content += `0.65 G 0.45 w ${(placement.x + 16 + labelWidth).toFixed(2)} ${(bottom + 5.5).toFixed(2)} ${(placement.x + COLUMN_WIDTH - 3).toFixed(2)} ${(bottom + 5.5).toFixed(2)} l S\n`;
-    content += `0.88 G 0.35 w ${placement.x.toFixed(2)} ${bottom.toFixed(2)} ${(placement.x + COLUMN_WIDTH).toFixed(2)} ${bottom.toFixed(2)} l S\n`;
+    content += `0.65 G 0.45 w ${(placement.x + 16 + labelWidth).toFixed(2)} ${(bottom + 5.5).toFixed(2)} m ${(placement.x + COLUMN_WIDTH - 3).toFixed(2)} ${(bottom + 5.5).toFixed(2)} l S\n`;
+    content += `0.88 G 0.35 w ${placement.x.toFixed(2)} ${bottom.toFixed(2)} m ${(placement.x + COLUMN_WIDTH).toFixed(2)} ${bottom.toFixed(2)} l S\n`;
   });
   content += drawText('Adventure Dinner', MARGIN, 24, 7.5, 'F2', 0.42);
   content += drawText(pageLabel, A4.width - MARGIN - textWidth(pageLabel, 7.5, false), 24, 7.5, 'F1', 0.42);
@@ -8766,8 +8771,8 @@ function assemblePdf(contents) {
     offset += object.length;
   }
   const xrefOffset = offset;
-  const xref = [`xref\n0 ${maxObjectId + 1}\n`, '0000000000 65535 f \n'];
-  for (let id = 1; id <= maxObjectId; id += 1) xref.push(`${String(offsets[id]).padStart(10, '0')} 00000 n \n`);
+  const xref = [`xref\r\n0 ${maxObjectId + 1}\r\n`, '0000000000 65535 f\r\n'];
+  for (let id = 1; id <= maxObjectId; id += 1) xref.push(`${String(offsets[id]).padStart(10, '0')} 00000 n\r\n`);
   xref.push(`trailer\n<< /Size ${maxObjectId + 1} /Root 1 0 R >>\nstartxref\n${xrefOffset}\n%%EOF\n`);
   chunks.push(asciiBytes(xref.join('')));
   return concatenate(chunks);
@@ -9923,6 +9928,10 @@ document.addEventListener('click', async (event) => {
 
 document.addEventListener('change', (event) => {
   const target = event.target;
+  if (target.matches('[data-action="change-shopping-player-count"]')) {
+    setupDraft.playerCount = Math.min(10, Math.max(6, Number(target.value) || 6));
+    render();
+  }
   if (target.matches('[data-action="change-player-count"]')) {
     readSetupForm();
     setupDraft.playerCount = Number(target.value);
