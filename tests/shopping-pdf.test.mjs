@@ -2,7 +2,8 @@ import test from 'node:test';
 import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import { INGREDIENTS, SHOPPING_STAPLES } from '../js/data/ingredients.js';
-import { renderIngredientGuide } from '../js/ui/overlays.js';
+import { GameEngine } from '../js/core/game-engine.js';
+import { renderIngredientGuide, renderPantry } from '../js/ui/overlays.js';
 import { buildShoppingListSections, createShoppingListPdf } from '../js/ui/shopping-pdf.js';
 
 test('the pre-game ingredient list offers a shopping PDF download', async () => {
@@ -25,6 +26,28 @@ test('the pre-game ingredient list offers a shopping PDF download', async () => 
   assert.match(componentStyles, /calc\(100% - 0\.95rem\)/);
   assert.doesNotMatch(componentStyles, /https?:\/\//i);
   assert.match(componentStyles, /\.shopping-player-count select option \{[\s\S]*color: var\(--parchment-ink\);[\s\S]*background: #fff8e7/);
+});
+
+test('active and finished voyages always keep the shopping PDF controls available', async () => {
+  const engine = GameEngine.create({
+    names: ['Ada', 'Ben', 'Cleo', 'Dario', 'Ella', 'Finn'],
+    title: 'Finished shopping list',
+    defaultLanguage: 'de',
+    seed: 9_801
+  }, 1_804_000_000_000);
+  engine.state.status = 'complete';
+  engine.renameIngredient('pumpkin', { de: 'Hokkaido', en: 'Hokkaido squash' });
+  engine.renameShoppingStaple('dry-wine', { de: 'Riesling trocken', en: 'Dry Riesling' });
+  const html = renderPantry(engine, 'de', 9);
+  const appSource = await readFile(new URL('../js/app.js', import.meta.url), 'utf8');
+
+  assert.match(html, /data-action="download-shopping-pdf"/);
+  assert.match(html, /data-action="change-shopping-player-count"/);
+  assert.match(html, /<option value="9" selected>/);
+  assert.match(html, /Datteln für Speckmantel[\s\S]*Mengenvorschlag: 25 Stück/);
+  assert.match(appSource, /renderPantry\(engine, currentLanguage, shoppingPlayerCount\)/);
+  assert.match(appSource, /engine\.state\.ingredients\.filter\(\(ingredient\) => ingredient\.customName\)/);
+  assert.match(appSource, /engine\?\.state\.shoppingStapleNames \?\? preferences\.shoppingStapleNames/);
 });
 
 test('the selected crew size changes the shopping quantities used by the PDF', () => {

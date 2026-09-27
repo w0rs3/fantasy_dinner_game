@@ -39,10 +39,12 @@ let setupDraft = {
   defaultLanguage: preferences.language,
   names: Array(10).fill('')
 };
+let shoppingPlayerCount = setupDraft.playerCount;
 
 const currentSnapshot = repository.getCurrentSession();
 if (currentSnapshot && validateSessionState(currentSnapshot).valid) {
   engine = new GameEngine(currentSnapshot);
+  shoppingPlayerCount = engine.state.players.length;
 }
 
 const audio = new GameAudio(engine?.state.settings.audio ?? preferences.audio);
@@ -83,8 +85,8 @@ function render() {
   if (view === 'welcome') root.innerHTML = renderWelcome(currentLanguage, engine?.snapshot() ?? null);
   else if (view === 'setup') root.innerHTML = renderSetup(currentLanguage, setupDraft);
   else if (view === 'pantry') root.innerHTML = engine
-    ? renderPantry(engine, currentLanguage)
-    : renderIngredientGuide(setupDraft.playerCount, currentLanguage, preferences.ingredientNames, preferences.shoppingStapleNames);
+    ? renderPantry(engine, currentLanguage, shoppingPlayerCount)
+    : renderIngredientGuide(shoppingPlayerCount, currentLanguage, preferences.ingredientNames, preferences.shoppingStapleNames);
   else if (view === 'cards') root.innerHTML = renderCardCatalog(engine, currentLanguage);
   else if (view === 'sessions') root.innerHTML = renderSessions(repository.listSessions(), engine?.state.id, currentLanguage);
   else if (view === 'rules') root.innerHTML = renderRules(currentLanguage);
@@ -271,6 +273,7 @@ function resumeSession(sessionId) {
     return;
   }
   engine = new GameEngine(snapshot);
+  shoppingPlayerCount = engine.state.players.length;
   repository.setCurrent(sessionId);
   audio.setEnabled(engine.state.settings.audio);
   updateTaskTimers(engine.state);
@@ -354,6 +357,7 @@ async function handleAction(target) {
   switch (action) {
     case 'open-setup':
       setupDraft = { title: '', playerCount: 6, defaultLanguage: preferences.language, names: Array(10).fill('') };
+      shoppingPlayerCount = setupDraft.playerCount;
       publicHomeView = 'setup';
       navigate('setup');
       break;
@@ -366,11 +370,14 @@ async function handleAction(target) {
     case 'reset-ingredient-name': saveIngredientName(true); break;
     case 'download-shopping-pdf': {
       const currentLanguage = language();
+      const ingredientNames = engine
+        ? Object.fromEntries(engine.state.ingredients.filter((ingredient) => ingredient.customName).map((ingredient) => [ingredient.id, ingredient.customName]))
+        : preferences.ingredientNames;
       downloadShoppingListPdf({
-        playerCount: setupDraft.playerCount,
+        playerCount: shoppingPlayerCount,
         language: currentLanguage,
-        ingredientNames: preferences.ingredientNames,
-        shoppingStapleNames: preferences.shoppingStapleNames
+        ingredientNames,
+        shoppingStapleNames: engine?.state.shoppingStapleNames ?? preferences.shoppingStapleNames
       });
       showToast(currentLanguage === 'de' ? 'Die Einkaufsliste wurde als PDF heruntergeladen.' : 'The shopping list PDF has been downloaded.');
       break;
@@ -586,12 +593,14 @@ document.addEventListener('click', async (event) => {
 document.addEventListener('change', (event) => {
   const target = event.target;
   if (target.matches('[data-action="change-shopping-player-count"]')) {
-    setupDraft.playerCount = Math.min(10, Math.max(6, Number(target.value) || 6));
+    shoppingPlayerCount = Math.min(10, Math.max(6, Number(target.value) || 6));
+    if (!engine) setupDraft.playerCount = shoppingPlayerCount;
     render();
   }
   if (target.matches('[data-action="change-player-count"]')) {
     readSetupForm();
     setupDraft.playerCount = Number(target.value);
+    shoppingPlayerCount = setupDraft.playerCount;
     render();
   }
   if (target.matches('[data-action="player-language"]') && engine) {
@@ -622,6 +631,7 @@ document.addEventListener('submit', (event) => {
     ingredientNames: preferences.ingredientNames,
     shoppingStapleNames: preferences.shoppingStapleNames
   });
+  shoppingPlayerCount = engine.state.players.length;
   preferences = repository.savePreferences({ language: draft.defaultLanguage });
   audio.setEnabled(preferences.audio);
   view = 'game';

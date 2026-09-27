@@ -120,7 +120,21 @@ export function renderTasks(engine, language) {
     </section>`;
 }
 
-export function renderPantry(engine, language) {
+function renderShoppingPdfActions(playerCount, language) {
+  const crewSize = Math.min(10, Math.max(6, Number(playerCount) || 6));
+  return `<div class="shopping-guide-actions">
+    <label class="shopping-player-count">
+      <span>${language === 'de' ? 'Personen für Liste und PDF' : 'Players for list and PDF'}</span>
+      <select data-action="change-shopping-player-count" aria-label="${language === 'de' ? 'Personenzahl für Einkaufsliste und PDF' : 'Player count for shopping list and PDF'}">
+        ${Array.from({ length: 5 }, (_, index) => index + 6).map((count) => `<option value="${count}" ${count === crewSize ? 'selected' : ''}>${count}</option>`).join('')}
+      </select>
+    </label>
+    <button type="button" class="primary-button" data-action="download-shopping-pdf">${language === 'de' ? 'Einkaufsliste als PDF' : 'Download shopping PDF'}</button>
+  </div>`;
+}
+
+export function renderPantry(engine, language, shoppingPlayerCount = engine.state.players.length) {
+  const crewSize = Math.min(10, Math.max(6, Number(shoppingPlayerCount) || engine.state.players.length));
   const used = engine.state.ingredients.filter((ingredient) => ingredient.essential && ingredient.status === 'used').length;
   const inBaskets = engine.state.ingredients.filter((ingredient) => ingredient.status === 'discovered').length;
   const essential = engine.state.ingredients.filter((ingredient) => ingredient.essential);
@@ -137,6 +151,7 @@ export function renderPantry(engine, language) {
     customized: Boolean(ingredient.customName)
   }, language);
   const ingredientRow = (ingredient) => {
+    const catalogIngredient = INGREDIENTS.find((entry) => entry.id === ingredient.id) ?? ingredient;
     const isBasket = ingredient.status === 'discovered';
     const tone = ingredient.status === 'used' ? 'green' : isBasket ? 'gold' : ingredient.status === 'locked' ? 'blue' : '';
     const label = isBasket
@@ -148,7 +163,7 @@ export function renderPantry(engine, language) {
           : tx(ingredient.status, language);
     return `<li class="ingredient-item">
       <div class="ingredient-name-line"><strong>${t(ingredient.name, language)}</strong>${renameControl(ingredient)}</div>${statusTag(label, tone)}
-      <small>${tx('quantitySuggestion', language)}: ${t(ingredient.suggestedQuantity, language)} · ${ingredient.essential ? tx('required', language) : tx('optional', language)}</small>
+      <small>${tx('quantitySuggestion', language)}: ${escapeHtml(suggestQuantity(catalogIngredient, crewSize, language))} · ${ingredient.essential ? tx('required', language) : tx('optional', language)}</small>
       <small>${language === 'de' ? 'Mögliche Gänge' : 'Possible courses'}: ${escapeHtml(courseTagNames(ingredient))}</small>
       ${ingredient.effect ? `<small class="ingredient-effect">${t(INGREDIENT_EFFECT_TEXT[ingredient.effect], language)}</small>` : ''}
     </li>`;
@@ -157,10 +172,13 @@ export function renderPantry(engine, language) {
     <section class="screen-padding">
       <div class="section-header">
         <div><p class="eyebrow">Adventure Dinner</p><h1>${tx('pantryTitle', language)}</h1><p class="muted">${tx('pantryLead', language)}</p></div>
-        <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
+        <div class="pantry-header-actions">
+          <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
+          ${renderShoppingPdfActions(crewSize, language)}
+        </div>
       </div>
       <div class="content-grid">
-        ${renderShoppingStaples(engine.state.players.length, language, engine.state.shoppingStapleNames, true)}
+        ${renderShoppingStaples(crewSize, language, engine.state.shoppingStapleNames, true)}
         ${CHAPTERS.map((chapter, chapterIndex) => {
           const ingredients = engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === chapterIndex);
           return `<section class="panel">
@@ -235,15 +253,7 @@ export function renderIngredientGuide(playerCount, language, ingredientNames = {
             ? 'Alle Zutaten sind jederzeit sichtbar. Die Mengen sind grobe Vorschläge; Appetit, Packungsgrößen und eure eigene Rezeptentscheidung haben Vorrang.'
             : 'Every ingredient remains visible at all times. Quantities are rough suggestions; appetite, pack sizes, and your own recipe decisions take priority.'}</p>
         </div>
-        <div class="shopping-guide-actions">
-          <label class="shopping-player-count">
-            <span>${language === 'de' ? 'Personen für Liste und PDF' : 'Players for list and PDF'}</span>
-            <select data-action="change-shopping-player-count" aria-label="${language === 'de' ? 'Personenzahl für Einkaufsliste und PDF' : 'Player count for shopping list and PDF'}">
-              ${Array.from({ length: 5 }, (_, index) => index + 6).map((count) => `<option value="${count}" ${count === crewSize ? 'selected' : ''}>${count}</option>`).join('')}
-            </select>
-          </label>
-          <button type="button" class="primary-button" data-action="download-shopping-pdf">${language === 'de' ? 'Einkaufsliste als PDF' : 'Download shopping PDF'}</button>
-        </div>
+        ${renderShoppingPdfActions(crewSize, language)}
       </div>
       <div class="content-grid">
         ${renderShoppingStaples(crewSize, language, shoppingStapleNames, true)}
