@@ -136,6 +136,7 @@ function freshTurn() {
     assignedTaskId: null,
     resolvedTaskId: null,
     resolvedIngredientId: null,
+    resolvedIngredientIds: [],
     ingredientActionTargetId: null,
     resolvedIngredientEffect: null,
     resolvedIngredientEffectMode: null,
@@ -2791,6 +2792,10 @@ export class GameEngine {
     this.state.turn.ingredientsAddedThisTurn = (this.state.turn.ingredientsAddedThisTurn ?? 0) + 1;
     this.state.turn.pendingIngredientIds = [];
     this.state.turn.resolvedIngredientId = ingredient.id;
+    this.state.turn.resolvedIngredientIds = [
+      ...(this.state.turn.resolvedIngredientIds ?? []),
+      ingredient.id
+    ];
     this.state.turn.resolvedIngredientEffect = ingredient.effect;
     this.log('ingredientDiscovered', {
       ingredientId,

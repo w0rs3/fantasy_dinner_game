@@ -4,6 +4,7 @@ import { GameEngine } from '../js/core/game-engine.js';
 import { EVENT_DECKS } from '../js/data/events.js';
 import { INGREDIENTS, INGREDIENT_EFFECT_TEXT } from '../js/data/ingredients.js';
 import { TASK_DECKS } from '../js/data/tasks.js';
+import { renderGame } from '../js/ui/game.js';
 import { addOpeningTask, resolvePendingLocationStories } from './test-helpers.mjs';
 
 const names = ['Ada', 'Ben', 'Cleo', 'Dario', 'Eva', 'Finn'];
@@ -541,8 +542,14 @@ test('ingredient bonus effects can add at most one extra ingredient before hando
   assert.equal(engine.state.turn.phase, 'ingredientChoice');
   assert.equal(engine.chooseIngredient(engine.state.turn.pendingIngredientIds[0]), true);
   assert.equal(engine.state.turn.ingredientsAddedThisTurn, 2);
+  const addedIngredientIds = [...engine.state.turn.resolvedIngredientIds];
+  assert.equal(addedIngredientIds.length, 2);
   assert.equal(engine.prepareIngredientChoice(), false);
   assert.equal(engine.state.history.filter((entry) => entry.type === 'ingredientDiscovered').length, 2);
+  const html = renderGame(engine, 'de');
+  addedIngredientIds.forEach((ingredientId) => {
+    assert.match(html, new RegExp(engine.getIngredient(ingredientId).name.de));
+  });
   engine.state.turn.phase = 'resolved';
   engine.state.turn.chainPending = true;
   assert.equal(engine.endTurn(), 'chain');

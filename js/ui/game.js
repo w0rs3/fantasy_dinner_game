@@ -128,6 +128,27 @@ function renderIngredientBasket(engine, instance, language) {
   </div>`;
 }
 
+function resolvedIngredients(engine) {
+  const ids = engine.state.turn.resolvedIngredientIds?.length
+    ? engine.state.turn.resolvedIngredientIds
+    : (engine.state.turn.ingredientsAddedThisTurn ?? 0) > 0
+      ? [engine.state.turn.resolvedIngredientId].filter(Boolean)
+      : [];
+  return [...new Set(ids)].map((id) => engine.getIngredient(id)).filter(Boolean);
+}
+
+function renderResolvedIngredients(engine, language, context = 'result') {
+  const ingredients = resolvedIngredients(engine);
+  if (!ingredients.length) return '';
+  const heading = context === 'progress'
+    ? (language === 'de' ? 'Bei dieser Aktion bereits hinzugefügt' : 'Already added by this action')
+    : context === 'ability'
+      ? (language === 'de' ? 'Durch die Fähigkeit hinzugefügt' : 'Added by the ability')
+      : (language === 'de' ? 'Zum Gangkorb hinzugefügt' : 'Added to the course basket');
+  return `<div class="card-effect ingredient-result-list"><strong>${heading}</strong><div class="stat-strip">${ingredients
+    .map((ingredient) => statusTag(t(ingredient.name, language), 'green')).join('')}</div></div>`;
+}
+
 function eventActionText(engine, actionCode, language) {
   if (['watchSuccess', 'watchFailure'].includes(actionCode)) {
     const coins = Number(engine.state.turn.watchCoinDelta) || 0;
@@ -499,6 +520,7 @@ function renderDrawCard(engine, language) {
       <p class="eyebrow">${copy.label} · ${t(engine.currentChapter.locations[group.locationIndex], language)}</p>
       <h2>${copy.title}</h2>
       <p class="card-story">${copy.lead}</p>
+      ${engine.state.turn.activeAbilityUsed ? renderResolvedIngredients(engine, language, 'ability') : ''}
       ${preview ? `<div class="card-effect"><strong>${scoutPreview ? (language === 'de' ? 'Kundschafter-Vorschau' : 'Scout preview') : (language === 'de' ? 'Apfel-Vorschau' : 'Apple preview')}:</strong><br>${t(preview.title, language)}</div>` : ''}
       <div class="next-action"><strong>${language === 'de' ? `${engine.activePlayer.name}, du bist dran.` : `${engine.activePlayer.name}, it is your turn.`}</strong><span>${language === 'de' ? 'Ziehe genau eine Karte aus dem jetzt passenden Deck.' : 'Draw exactly one card from the deck that matches the current state.'}</span></div>
       <button class="primary-button" type="button" data-action="draw-event">${copy.button}</button>
@@ -646,6 +668,7 @@ function renderIngredientChoice(engine, language) {
       <p class="eyebrow">${language === 'de' ? 'Vorratsereignis · aktive Entscheidung' : 'Provision event · active decision'}</p>
       <h2>${event ? t(event.title, language) : (language === 'de' ? 'Welchen Proviant nehmt ihr mit?' : 'Which provision do you take?')}</h2>
       <p class="card-story">${language === 'de' ? 'Besprecht die angebotenen Zutaten. Die aktive Person wählt eine Karte; sie bleibt veränderbar, bis ein späteres Ereignis sie festlegt.' : 'Discuss the offered ingredients. The active player chooses one card; it remains changeable until a later event locks it.'}${cocktailChoiceNote ? ` ${cocktailChoiceNote}` : ''}</p>
+      ${renderResolvedIngredients(engine, language, 'progress')}
       <div class="choice-list">${choices}</div>
     </article>`;
 }
@@ -910,6 +933,7 @@ function renderResolvedCard(engine, language) {
       <div class="card-effect"><strong>${code === 'ignored'
         ? (language === 'de' ? 'Der Effekt wurde ignoriert.' : 'The effect was ignored.')
         : eventActionText(engine, code, language)}</strong></div>
+      ${renderResolvedIngredients(engine, language)}
       ${gamblerLossResult}
       ${resolvedIngredient ? `<div class="card-effect ingredient-result-effect"><strong>${language === 'de' ? `Zutateneffekt · ${t(resolvedIngredient.name, language)}` : `Ingredient effect · ${t(resolvedIngredient.name, language)}`}</strong><p>${effectMode === 'ignored'
         ? (language === 'de' ? 'Der Karteneffekt wurde ignoriert und nicht auf den Stapel gelegt.' : 'The card effect was ignored and was not added to the stack.')
