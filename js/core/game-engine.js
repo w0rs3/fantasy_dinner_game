@@ -1,7 +1,7 @@
 import { APP_VERSION, COIN_GOAL, COIN_VALUES, MAX_HISTORY_ITEMS, PLAYER_LIMITS, STATE_VERSION } from '../config.js';
 import { createId, randomInt, shuffle } from './random.js';
 import { CHAPTERS, EXPECTED_SESSION_MINUTES } from '../data/chapters.js';
-import { EVENT_DECKS, EVENT_STAGES, WATCH_CHALLENGES } from '../data/events.js';
+import { EVENT_DECKS, EVENT_STAGES, WATCH_CHALLENGES, contextualizeEventLocation } from '../data/events.js';
 import { COURSE_INGREDIENT_RULES, INGREDIENTS, SHOPPING_STAPLES, buildIngredientPlan } from '../data/ingredients.js';
 import { ROLES, getRole } from '../data/roles.js';
 import { MANDATORY_STORY_CARDS, STORY_QUIZ_CARDS, islandStoryCard, locationStoryCard, storyCardById, storyLocationKey } from '../data/story-events.js';
@@ -1848,6 +1848,7 @@ export class GameEngine {
   }
 
   contextualizeEvent(event) {
+    event = contextualizeEventLocation(event, this.activeGroup.locationIndex);
     const fallbacks = this.fallbackActions(event.stage);
     if (event.type === 'choice') {
       const options = [...new Set((event.options ?? []).filter((action) => this.actionAvailable(action)))];

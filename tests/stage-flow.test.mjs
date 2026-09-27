@@ -207,6 +207,34 @@ test('separate state decks never expose an impossible ingredient or task action'
   assert.ok(!actions.includes('lockIngredient'), 'lock is hidden before any unlocked ingredient exists');
 });
 
+test('ordinary and fun events borrowed from another queue use the currently active location in their text', () => {
+  for (const archetype of ['orders', 'work-mischief']) {
+    const engine = create(archetype === 'orders' ? 7201 : 7202);
+    engine.state.pendingLocationStoryIds = [];
+    const activeLocationIndex = engine.activeGroup.locationIndex;
+    const sourceLocationIndex = activeLocationIndex + 1;
+    const activeLocation = engine.currentChapter.locations[activeLocationIndex];
+    const sourceLocation = engine.currentChapter.locations[sourceLocationIndex];
+    const card = EVENT_DECKS[engine.state.chapterIndex].find((event) =>
+      event.stage === 'tasks' && event.locationIndex === sourceLocationIndex && event.archetype === archetype
+    );
+    assert.ok(card);
+    const stageQueues = engine.state.eventQueues[engine.state.chapterIndex].tasks;
+    stageQueues.forEach((queue) => queue.splice(0, queue.length));
+    stageQueues[sourceLocationIndex].push(card.id);
+
+    const drawn = engine.beginEvent(now + 2_500);
+    assert.equal(drawn.id, card.id);
+    assert.equal(drawn.locationIndex, sourceLocationIndex, 'the physical source queue remains available for correct requeueing');
+    assert.match(drawn.title.de, new RegExp(activeLocation.de));
+    assert.match(drawn.title.en, new RegExp(activeLocation.en));
+    assert.match(drawn.story.de, new RegExp(activeLocation.de));
+    assert.match(drawn.story.en, new RegExp(activeLocation.en));
+    assert.doesNotMatch(drawn.title.de, new RegExp(sourceLocation.de));
+    assert.doesNotMatch(drawn.title.en, new RegExp(sourceLocation.en));
+  }
+});
+
 test('fun events can be drawn and resolved during ingredient rounds without changing the basket', () => {
   const engine = create(721);
   beginSecondCourse(engine);

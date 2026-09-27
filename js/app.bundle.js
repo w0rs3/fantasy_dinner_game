@@ -1410,6 +1410,34 @@ function interpolate(value, location) {
   };
 }
 
+function eventLocationCopy(event) {
+  if (event?.archetype === INGREDIENT_FUN_ARCHETYPE.id) return INGREDIENT_FUN_ARCHETYPE;
+  if (event?.archetype === 'work-mischief') {
+    return TASK_FUN_VARIANTS.find((variant) => variant.id === event.funVariant) ?? null;
+  }
+  return ARCHETYPES.find((archetype) => archetype.id === event?.archetype) ?? null;
+}
+
+function contextualizeEventLocation(event, locationIndex) {
+  if (!event || event.storyKind) return event;
+  const chapter = CHAPTERS.find((entry) => entry.id === event.chapterId);
+  const location = chapter?.locations?.[locationIndex];
+  const copy = eventLocationCopy(event);
+  if (!chapter || !location || !copy) return event;
+  const title = interpolate(copy.title, location);
+  return {
+    ...event,
+    title: {
+      de: `${title.de} · ${chapter.name.de}`,
+      en: `${title.en} · ${chapter.name.en}`
+    },
+    story: {
+      de: `In ${location.de} beginnt die Szene: ${copy.scene.de} ${chapter.atmosphere.de}`,
+      en: `The scene begins at ${location.en}: ${copy.scene.en} ${chapter.atmosphere.en}`
+    }
+  };
+}
+
 function buildEventDeck(chapterIndex) {
   const chapter = CHAPTERS[chapterIndex];
   const regularEvents = chapter.locations.flatMap((location, locationIndex) =>
@@ -4222,6 +4250,7 @@ class GameEngine {
   }
 
   contextualizeEvent(event) {
+    event = contextualizeEventLocation(event, this.activeGroup.locationIndex);
     const fallbacks = this.fallbackActions(event.stage);
     if (event.type === 'choice') {
       const options = [...new Set((event.options ?? []).filter((action) => this.actionAvailable(action)))];
