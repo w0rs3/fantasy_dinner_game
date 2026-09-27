@@ -22,7 +22,8 @@ test('the pre-game ingredient list offers a shopping PDF download', async () => 
   assert.match(appSource, /ingredientNames: preferences\.ingredientNames/);
   assert.match(appSource, /shoppingStapleNames: preferences\.shoppingStapleNames/);
   assert.match(componentStyles, /\.shopping-player-count select \{[\s\S]*appearance: none/);
-  assert.match(componentStyles, /background-position: right 0\.8rem center/);
+  assert.match(componentStyles, /calc\(100% - 0\.95rem\)/);
+  assert.doesNotMatch(componentStyles, /https?:\/\//i);
   assert.match(componentStyles, /\.shopping-player-count select option \{[\s\S]*color: var\(--parchment-ink\);[\s\S]*background: #fff8e7/);
 });
 
