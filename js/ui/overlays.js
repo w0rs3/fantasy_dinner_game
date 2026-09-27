@@ -235,7 +235,10 @@ export function renderIngredientGuide(playerCount, language, ingredientNames = {
             ? 'Alle Zutaten sind jederzeit sichtbar. Die Mengen sind grobe Vorschläge; Appetit, Packungsgrößen und eure eigene Rezeptentscheidung haben Vorrang.'
             : 'Every ingredient remains visible at all times. Quantities are rough suggestions; appetite, pack sizes, and your own recipe decisions take priority.'}</p>
         </div>
-        ${statusTag(`${crewSize} ${language === 'de' ? 'Personen' : 'players'}`, 'gold')}
+        <div class="shopping-guide-actions">
+          ${statusTag(`${crewSize} ${language === 'de' ? 'Personen' : 'players'}`, 'gold')}
+          <button type="button" class="primary-button" data-action="download-shopping-pdf">${language === 'de' ? 'Einkaufsliste als PDF' : 'Download shopping PDF'}</button>
+        </div>
       </div>
       <div class="content-grid">
         ${renderShoppingStaples(crewSize, language, shoppingStapleNames, true)}

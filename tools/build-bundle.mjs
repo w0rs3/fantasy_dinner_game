@@ -27,6 +27,7 @@ const modules = [
   'js/ui/welcome.js',
   'js/ui/game.js',
   'js/ui/overlays.js',
+  'js/ui/shopping-pdf.js',
   'js/ui/card-catalog.js',
   'js/app.js'
 ];

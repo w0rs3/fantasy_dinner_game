@@ -33,6 +33,7 @@ const APP_SHELL = [
   './js/ui/game.js',
   './js/ui/helpers.js',
   './js/ui/overlays.js',
+  './js/ui/shopping-pdf.js',
   './js/ui/welcome.js'
 ];
 

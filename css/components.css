@@ -70,6 +70,14 @@
   margin-bottom: 0;
 }
 
+.shopping-guide-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.65rem;
+  align-items: center;
+  justify-content: flex-end;
+}
+
 .hero-screen {
   position: relative;
   display: grid;

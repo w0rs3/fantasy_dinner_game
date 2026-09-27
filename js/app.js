@@ -11,6 +11,7 @@ import { renderCardCatalog } from './ui/card-catalog.js';
 import { renderGame } from './ui/game.js';
 import { escapeHtml, playerInitials } from './ui/helpers.js';
 import { renderCrew, renderFaq, renderIngredientGuide, renderPantry, renderRules, renderSessions, renderTasks } from './ui/overlays.js';
+import { downloadShoppingListPdf } from './ui/shopping-pdf.js';
 import { renderSetup, renderWelcome } from './ui/welcome.js';
 
 const root = document.querySelector('#screen-root');
@@ -363,6 +364,17 @@ async function handleAction(target) {
     case 'edit-ingredient-name': showIngredientNameEditor(target); break;
     case 'save-ingredient-name': saveIngredientName(false); break;
     case 'reset-ingredient-name': saveIngredientName(true); break;
+    case 'download-shopping-pdf': {
+      const currentLanguage = language();
+      downloadShoppingListPdf({
+        playerCount: setupDraft.playerCount,
+        language: currentLanguage,
+        ingredientNames: preferences.ingredientNames,
+        shoppingStapleNames: preferences.shoppingStapleNames
+      });
+      showToast(currentLanguage === 'de' ? 'Die Einkaufsliste wurde als PDF heruntergeladen.' : 'The shopping list PDF has been downloaded.');
+      break;
+    }
     case 'draw-event': engine.beginEvent(); audio.play('card'); persist(); render(); break;
     case 'complete-story-card':
       if (engine.completeStoryCard()) { audio.play('complete'); persist(); render(); }
