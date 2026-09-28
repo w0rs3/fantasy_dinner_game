@@ -5,22 +5,26 @@ import { COURSE_INGREDIENT_RULES, INGREDIENTS, buildIngredientPlan, validateIngr
 import { TASK_DECKS, getPlayableQuestLines, validateTaskCatalog } from '../js/data/tasks.js';
 import { ROLES, getRole } from '../js/data/roles.js';
 
-test('catalog contains 580 uniquely named event cards including an expanded main-course fun deck', () => {
+test('catalog contains 688 uniquely named event cards including active deck-choice events', () => {
   const result = validateEventCatalog();
-  assert.equal(result.total, 580);
-  assert.equal(result.uniqueIds, 580);
-  assert.equal(result.uniqueGermanTitles, 580);
-  assert.equal(result.uniqueEnglishTitles, 580);
-  assert.equal(result.uniqueGermanStories, 580);
-  assert.equal(result.uniqueEnglishStories, 580);
+  assert.equal(result.total, 688);
+  assert.equal(result.uniqueIds, 688);
+  assert.equal(result.uniqueGermanTitles, 688);
+  assert.equal(result.uniqueEnglishTitles, 688);
+  assert.equal(result.uniqueGermanStories, 688);
+  assert.equal(result.uniqueEnglishStories, 688);
   assert.equal(result.valid, true);
-  assert.deepEqual(EVENT_DECKS.map((deck) => deck.length), [95, 95, 95, 105, 95, 95]);
+  assert.deepEqual(EVENT_DECKS.map((deck) => deck.length), [113, 113, 113, 123, 113, 113]);
   EVENT_DECKS.forEach((deck, chapterIndex) => {
-    const expectedCounts = chapterIndex === 3 ? [18, 17, 18, 17, 18, 17] : [18, 15, 16, 15, 16, 15];
+    const expectedCounts = chapterIndex === 3 ? [21, 20, 21, 20, 21, 20] : [21, 18, 19, 18, 19, 18];
     assert.ok(expectedCounts.every((expected, locationIndex) => deck.filter((event) => event.locationIndex === locationIndex).length === expected));
   });
   assert.equal(EVENT_DECKS[3].filter((event) => event.archetype === 'work-mischief').length, 18);
-  assert.deepEqual(result.stageCounts, { ingredients: 198, tasks: 166, cooking: 216 });
+  assert.deepEqual(result.stageCounts, { ingredients: 198, tasks: 166, cooking: 324 });
+  assert.ok(['card-fate', 'deck-crossroads', 'quiz-compass', 'named-card-gallery']
+    .every((archetype) => EVENT_DECKS.flat().filter((event) => event.archetype === archetype).length === 36));
+  assert.equal(EVENT_DECKS.flat().some((event) => event.archetype === 'respite'), false);
+  assert.equal(EVENT_DECKS.flat().some((event) => (event.options ?? event.outcomes).includes('fiveMinuteBreak')), false);
   assert.ok(EVENT_DECKS.every((deck) => EVENT_STAGES.every((stage) => deck.some((event) => event.stage === stage))));
   assert.ok(EVENT_DECKS.flat().every((event) => (event.options ?? event.outcomes).length >= 2));
   assert.ok(EVENT_DECKS.flat().every((event) => !(event.options ?? event.outcomes).includes('storyMoment')));
@@ -28,27 +32,27 @@ test('catalog contains 580 uniquely named event cards including an expanded main
   assert.deepEqual(EVENT_DECKS.map((deck) => deck.filter((event) => event.archetype === 'work-mischief' && event.stage === 'tasks').length), [8, 8, 8, 18, 8, 8]);
 });
 
-test('interludes reserve privacy for linked surprises, alongside drinks, co-op cards, and a real break', () => {
-  assert.equal(WATCH_CHALLENGES.length, 227);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.id)).size, 227);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.de)).size, 227);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.en)).size, 227);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.de)).size, 227);
-  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.en)).size, 227);
+test('interludes reserve privacy for linked surprises alongside drinks and co-op cards', () => {
+  assert.equal(WATCH_CHALLENGES.length, 237);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.id)).size, 237);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.de)).size, 237);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.title.en)).size, 237);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.de)).size, 237);
+  assert.equal(new Set(WATCH_CHALLENGES.map((challenge) => challenge.en)).size, 237);
   const cooperative = WATCH_CHALLENGES.filter((challenge) => challenge.cooperative);
   assert.equal(cooperative.length, 70);
   assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 1).length, 44);
   assert.equal(cooperative.filter((challenge) => challenge.partnerCount === 2).length, 26);
   assert.deepEqual(
     WATCH_CHALLENGES.filter((challenge) => challenge.secret).map((challenge) => challenge.id),
-    ['chicken', 'stop-chicken', 'nose-voice', 'stop-nose', 'folded-note',
+    ['pirate-word-curse', 'ship-word-curse', 'treasure-word-curse', 'standing-fun-curse', 'correct-quiz-curse',
       'charade-anchor', 'charade-parrot', 'charade-treasure-chest', 'charade-storm-ship',
       'charade-lighthouse', 'charade-cannon', 'charade-seasick-pirate', 'charade-buried-treasure']
   );
-  assert.ok(WATCH_CHALLENGES.some((challenge) => challenge.minutes === 5 && challenge.coins === 0));
+  assert.equal(WATCH_CHALLENGES.some((challenge) => challenge.id === 'five-minute-break'), false);
   const chicken = WATCH_CHALLENGES.find((challenge) => challenge.id === 'chicken');
   assert.equal(chicken.followUpId, 'stop-chicken');
-  assert.ok(WATCH_CHALLENGES.some((challenge) => challenge.id === chicken.followUpId && challenge.secret));
+  assert.ok(WATCH_CHALLENGES.some((challenge) => challenge.id === chicken.followUpId && challenge.cardKind === 'blessing' && !challenge.secret));
   assert.ok(['compliments', 'love-decisions', 'laugh-turn', 'chicken'].every((id) =>
     WATCH_CHALLENGES.find((challenge) => challenge.id === id)?.flow === 'ongoing'
   ));
@@ -60,7 +64,11 @@ test('interludes reserve privacy for linked surprises, alongside drinks, co-op c
     'three-hops', 'under-table-search', 'accent-shift', 'self-compliments', 'aye-aye-sentences', 'arr-sentences',
     'captain-permission', 'self-talk', 'bad-joke', 'hiccups', 'mime-self-slap', 'hand-trumpet', 'chair-circle',
     'ceremonial-greeting'].every((id) => WATCH_CHALLENGES.some((challenge) => challenge.id === id && !challenge.secret)));
-  assert.ok(WATCH_CHALLENGES.filter((challenge) => challenge.followUpOnly).every((challenge) => challenge.mandatory && challenge.secret));
+  assert.equal(WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'curse').length, 24);
+  assert.equal(WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'blessing').length, 5);
+  assert.equal(WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'charade').length, 8);
+  assert.ok(WATCH_CHALLENGES.filter((challenge) => challenge.followUpOnly).every((challenge) => challenge.mandatory && challenge.cardKind === 'blessing' && !challenge.secret));
+  assert.equal(WATCH_CHALLENGES.find((challenge) => challenge.id === 'folded-note')?.secret, false);
   const pirateVerse = WATCH_CHALLENGES.find((challenge) => challenge.id === 'pirate-verse');
   assert.equal(pirateVerse?.secret, false);
   assert.match(pirateVerse?.de ?? '', /Piratenlied|Piratengedicht/);

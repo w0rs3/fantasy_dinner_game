@@ -10,7 +10,9 @@ export const PLAYER_LIMITS = Object.freeze({ min: 6, max: 10 });
 export const COIN_GOAL = 500;
 export const COIN_VALUES = Object.freeze({
   event: 2,
+  smallEvent: 1,
   coinLoss: -5,
+  smallCoinLoss: -3,
   challenge: 2,
   veryFastTask: 2,
   onTimeTask: 1,

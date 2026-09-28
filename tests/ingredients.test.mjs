@@ -277,6 +277,7 @@ test('draw, character-choice, deck-swap, repeat, and event-replacement effects c
   assert.equal(repeatEngine.activeBonuses.doubleNextDie, 1);
 
   const replaceEngine = createEngine(884);
+  replaceEngine.state.turn.forcedEventDeckKind = 'fundamental';
   replaceEngine.beginEvent();
   const replacedId = replaceEngine.currentEvent.id;
   replaceEngine.state.turn.ingredientFlow = {
@@ -424,6 +425,7 @@ test('a stored event replacement waits instead of redrawing the only remaining e
   assert.ok(onlyEventId);
   stageQueues.forEach((queue) => queue.splice(0, queue.length));
   engine.eventQueue(stage).push(onlyEventId);
+  engine.state.turn.forcedEventDeckKind = 'fundamental';
 
   assert.equal(engine.beginEvent()?.id, onlyEventId);
   assert.equal(engine.state.turn.phase, 'event');

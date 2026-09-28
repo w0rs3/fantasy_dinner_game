@@ -15,7 +15,9 @@ const PLAYER_LIMITS = Object.freeze({ min: 6, max: 10 });
 const COIN_GOAL = 500;
 const COIN_VALUES = Object.freeze({
   event: 2,
+  smallEvent: 1,
   coinLoss: -5,
+  smallCoinLoss: -3,
   challenge: 2,
   veryFastTask: 2,
   onTimeTask: 1,
@@ -542,6 +544,34 @@ const DETAIL_QUESTIONS = Object.freeze([
   ]
 ]);
 
+// Each location has two hand-written recall questions above. Add two more
+// recognition cards from the same lore, using details from neighbouring
+// locations on that island as plausible alternatives. Keeping these derived
+// from the story text means every location reliably owns four bilingual quiz
+// cards without letting the questions drift away from the lore they test.
+function additionalLocationQuestions(chapterIndex, locationIndex) {
+  const stories = LOCATION_STORIES[chapterIndex];
+  const source = stories[locationIndex];
+  const alternatives = [1, 2].map((offset) => stories[(locationIndex + offset) % stories.length]);
+  const location = CHAPTERS[chapterIndex].locations[locationIndex];
+  return [
+    question(
+      `Welches Detail gehört zur Chronik von ${location.de}?`,
+      `Which detail belongs to the chronicle of ${location.en}?`,
+      source.de[1], source.en[1],
+      alternatives[0].de[1], alternatives[0].en[1],
+      alternatives[1].de[1], alternatives[1].en[1]
+    ),
+    question(
+      `Welche Erinnerung an ${location.de} ist richtig?`,
+      `Which memory of ${location.en} is correct?`,
+      source.de[2], source.en[2],
+      alternatives[0].de[2], alternatives[0].en[2],
+      alternatives[1].de[2], alternatives[1].en[2]
+    )
+  ];
+}
+
 const ISLAND_STORY_CARDS = Object.freeze(ISLAND_STORIES.map((island, chapterIndex) => ({
   id: `SI${chapterIndex + 1}`,
   storyKind: 'island',
@@ -595,7 +625,10 @@ const islandDetailQuizzes = ISLAND_STORIES.flatMap((island, chapterIndex) => isl
   };
 }));
 
-const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => DETAIL_QUESTIONS[chapterIndex][locationIndex].map((quiz, quizIndex) => {
+const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => [
+  ...DETAIL_QUESTIONS[chapterIndex][locationIndex],
+  ...additionalLocationQuestions(chapterIndex, locationIndex)
+].map((quiz, quizIndex) => {
   const sourceCard = LOCATION_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex && card.locationIndex === locationIndex);
   const rawAnswers = [
     { id: 'correct', label: quiz.correct },
@@ -620,21 +653,20 @@ const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) =
 })));
 
 const routeQuestionTemplates = [
-  { de: 'Welchen dieser Orte hat die Crew auf der {island} bereits besucht?', en: 'Which of these places has the crew already visited on {island}?' },
-  { de: 'Welcher Ort liegt auf dieser Insel bereits hinter der Crew?', en: 'Which location on this island is already behind the crew?' },
-  { de: 'Welcher Name gehört schon in das Logbuch dieser Insel?', en: 'Which name already belongs in this island’s logbook?' },
-  { de: 'An welchem dieser Orte war die Crew auf dieser Insel bereits?', en: 'Which of these locations has the crew already reached on this island?' }
+  { de: 'Welcher dieser Orte gehört zur {island}?', en: 'Which of these locations belongs to {island}?' },
+  { de: 'Welchen Ort findet man auf der {island}?', en: 'Which location can be found on {island}?' },
+  { de: 'Welcher Name gehört in das Logbuch der {island}?', en: 'Which name belongs in the logbook of {island}?' },
+  { de: 'Welches Ziel liegt auf der {island}?', en: 'Which destination lies on {island}?' }
 ];
 
 const routeQuizzes = CHAPTERS.flatMap((chapter, chapterIndex) => routeQuestionTemplates.map((template, routeIndex) => {
   const visited = chapter.locations[routeIndex];
-  const futureIndices = [4, 5];
-  const futureA = chapter.locations[futureIndices[0]];
-  const futureB = chapter.locations[futureIndices[1]];
+  const alternativeA = CHAPTERS[(chapterIndex + 1) % CHAPTERS.length].locations[routeIndex];
+  const alternativeB = CHAPTERS[(chapterIndex + 2) % CHAPTERS.length].locations[routeIndex];
   const rawAnswers = [
     { id: 'correct', label: visited },
-    { id: 'wrong-1', label: futureA },
-    { id: 'wrong-2', label: futureB }
+    { id: 'wrong-1', label: alternativeA },
+    { id: 'wrong-2', label: alternativeB }
   ];
   return {
     id: `SQ${chapterIndex + 1}-R${routeIndex + 1}`,
@@ -649,8 +681,7 @@ const routeQuizzes = CHAPTERS.flatMap((chapter, chapterIndex) => routeQuestionTe
     answers: rotateAnswers(rawAnswers, (chapterIndex + routeIndex) % rawAnswers.length),
     correctAnswerId: 'correct',
     requirements: {
-      visitedLocationIds: [locationKey(chapterIndex, routeIndex)],
-      unvisitedLocationIds: futureIndices.map((locationIndex) => locationKey(chapterIndex, locationIndex))
+      visitedLocationIds: [locationKey(chapterIndex, routeIndex)]
     }
   };
 }));
@@ -687,8 +718,8 @@ function validateStoryCatalog() {
     islandDetailQuizzes: islandDetailQuizzes.length,
     locationDetailQuizzes: locationDetailQuizzes.length,
     routeQuizzes: routeQuizzes.length,
-    valid: STORY_CARDS.length === 150 && ISLAND_STORY_CARDS.length === 6 && LOCATION_STORY_CARDS.length === 36 &&
-      islandDetailQuizzes.length === 12 && locationDetailQuizzes.length === 72 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 108 &&
+    valid: STORY_CARDS.length === 222 && ISLAND_STORY_CARDS.length === 6 && LOCATION_STORY_CARDS.length === 36 &&
+      islandDetailQuizzes.length === 12 && locationDetailQuizzes.length === 144 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 180 &&
       ids.size === STORY_CARDS.length && titlesDe.size === STORY_CARDS.length && titlesEn.size === STORY_CARDS.length
   };
 }
@@ -1323,7 +1354,8 @@ const ARCHETYPES = Object.freeze([
       de: 'Zwischen zwei Arbeitsschritten entdeckt die Crew ein Zeichen. Der Würfel entscheidet über Verlust, Beute oder eine weitere Ereigniskarte.',
       en: 'Between two kitchen steps the crew spots a sign. The die decides between a loss, loot, or another event card.'
     },
-    mechanics: ['coinLoss', 'treasure', 'treasureAndChain']
+    mechanics: ['coinLoss', 'coinLossSmall', 'treasureSmall', 'treasure', 'chain', 'treasureAndChain'],
+    orderedCoinRoll: true
   },
   {
     id: 'interlude', stage: 'cooking', type: 'choice',
@@ -1341,25 +1373,56 @@ const ARCHETYPES = Object.freeze([
       de: 'Eine alte Münze springt über den Tisch. Manchmal bringt sie Beute, manchmal fordert die See ihren Anteil – und manchmal nur eine alberne Prüfung.',
       en: 'An old coin skips across the table. Sometimes it brings loot, sometimes the sea takes its share, and sometimes it merely demands a silly test.'
     },
-    mechanics: ['coinLoss', 'treasureAndChain', 'treasure']
+    mechanics: ['coinLoss', 'coinLossSmall', 'treasureSmall', 'treasure', 'chain', 'treasureAndChain'],
+    orderedCoinRoll: true
   },
   {
-    id: 'respite', stage: 'cooking', type: 'choice',
-    title: { de: 'Ruhiges Fahrwasser bei {location}', en: 'Calm Waters near {location}' },
-    scene: {
-      de: 'Die See wird still. Wenn keine Küchenaufgabe mehr offen ist, darf die Crew fünf Minuten durchatmen; andernfalls findet sie eine kleine Münzbeute.',
-      en: 'The sea turns calm. If no kitchen task remains open, the crew may take a five-minute breather; otherwise it finds a small coin reward.'
-    },
-    mechanics: ['fiveMinuteBreak', 'treasure']
-  },
-  {
-    id: 'mischief', stage: 'cooking', type: 'dice',
+    id: 'mischief', slot: 13, stage: 'cooking', type: 'dice',
     title: { de: 'Schabernack in {location}', en: 'Mischief at {location}' },
     scene: {
       de: 'Irgendjemand an Bord grinst verdächtig. Der Würfel entscheidet, ob daraus eine geheime Rolle, eine schnelle Aktion oder ein kleiner Münzfund wird.',
       en: 'Someone aboard is grinning suspiciously. The die decides whether it becomes a secret role, a quick action, or a small coin find.'
     },
     mechanics: ['watchChallenge', 'watchChallengeAlt', 'treasureAndWatch']
+  }
+]);
+
+const CARD_DRAW_ARCHETYPES = Object.freeze([
+  {
+    id: 'card-fate', stage: 'cooking', type: 'dice',
+    title: { de: 'Das Kartenschicksal von {location}', en: 'Card Fate at {location}' },
+    scene: {
+      de: 'Drei unterschiedlich verzierte Kartenstapel liegen bereit. Der Würfel entscheidet, ob die Crew ihr Gedächtnis, eine einzelne Person oder das Team herausfordert.',
+      en: 'Three differently decorated card decks are waiting. The die decides whether the crew tests its memory, one person, or the team.'
+    },
+    mechanics: ['drawAnyQuiz', 'drawSoloFun', 'drawCoopFun']
+  },
+  {
+    id: 'deck-crossroads', stage: 'cooking', type: 'choice',
+    title: { de: 'Die Kartenkreuzung von {location}', en: 'The Card Crossroads at {location}' },
+    scene: {
+      de: 'Drei offene Wege führen zu verschiedenen Kartendecks. Die Crew darf beraten, doch die aktive Person bestimmt, welche Art von Karte als Nächstes gezogen wird.',
+      en: 'Three open paths lead to different card decks. The crew may discuss them, but the active player decides which kind of card is drawn next.'
+    },
+    mechanics: ['drawAnyQuiz', 'drawSoloFun', 'drawCoopFun']
+  },
+  {
+    id: 'quiz-compass', stage: 'cooking', type: 'choice',
+    title: { de: 'Der Erinnerungskompass von {location}', en: 'The Memory Compass at {location}' },
+    scene: {
+      de: 'Die Kompassnadel zeigt gleichzeitig auf Inselchronik, Ortsdetails und Reiseroute. Die aktive Person wählt, aus welchem bekannten Teil der Reise die Frage stammen soll.',
+      en: 'The compass needle points toward island lore, location details, and the voyage route at once. The active player chooses which known part of the journey supplies the question.'
+    },
+    mechanics: ['drawIslandQuiz', 'drawLocationQuiz', 'drawRouteQuiz']
+  },
+  {
+    id: 'named-card-gallery', stage: 'cooking', type: 'choice',
+    title: { de: 'Die Kartengalerie von {location}', en: 'The Card Gallery at {location}' },
+    scene: {
+      de: 'Mehrere Karten hängen mit sichtbaren Titeln an goldenen Klammern. Zuerst wählt die aktive Person zwischen Quiz und Spaß; danach darf sie eine von zwei oder drei konkret angebotenen Karten nehmen.',
+      en: 'Several cards hang from golden clips with their titles visible. The active player first chooses quiz or fun, then takes one of two or three specifically offered cards.'
+    },
+    mechanics: ['chooseNamedQuiz', 'chooseNamedFun']
   }
 ]);
 
@@ -1415,12 +1478,14 @@ function eventLocationCopy(event) {
   if (event?.archetype === 'work-mischief') {
     return TASK_FUN_VARIANTS.find((variant) => variant.id === event.funVariant) ?? null;
   }
-  return ARCHETYPES.find((archetype) => archetype.id === event?.archetype) ?? null;
+  return [...ARCHETYPES, ...CARD_DRAW_ARCHETYPES].find((archetype) => archetype.id === event?.archetype) ?? null;
 }
 
-function contextualizeEventLocation(event, locationIndex) {
+function contextualizeEventLocation(event, locationIndex, chapterIndex = null) {
   if (!event || event.storyKind) return event;
-  const chapter = CHAPTERS.find((entry) => entry.id === event.chapterId);
+  const chapter = Number.isInteger(chapterIndex)
+    ? CHAPTERS[chapterIndex]
+    : CHAPTERS.find((entry) => entry.id === event.chapterId);
   const location = chapter?.locations?.[locationIndex];
   const copy = eventLocationCopy(event);
   if (!chapter || !location || !copy) return event;
@@ -1440,9 +1505,12 @@ function contextualizeEventLocation(event, locationIndex) {
 
 function buildEventDeck(chapterIndex) {
   const chapter = CHAPTERS[chapterIndex];
+  const regularEventSlotCount = 14;
   const regularEvents = chapter.locations.flatMap((location, locationIndex) =>
     ARCHETYPES.map((archetype, archetypeIndex) => {
-      const number = locationIndex * ARCHETYPES.length + archetypeIndex + 1;
+      // Slot 13 used to contain the removed break card. Keep the original ID
+      // spacing so existing saves do not reinterpret later event IDs.
+      const number = locationIndex * regularEventSlotCount + (archetype.slot ?? archetypeIndex) + 1;
       const baseTitle = interpolate(archetype.title, location);
       return {
         id: `E${chapterIndex + 1}-${String(number).padStart(2, '0')}`,
@@ -1461,6 +1529,7 @@ function buildEventDeck(chapterIndex) {
         },
         options: archetype.type === 'choice' ? archetype.mechanics : undefined,
         outcomes: archetype.type === 'dice' ? archetype.mechanics : undefined,
+        orderedCoinRoll: archetype.orderedCoinRoll ?? false,
         variant: locationIndex
       };
     })
@@ -1487,6 +1556,27 @@ function buildEventDeck(chapterIndex) {
       variant: locationIndex
     }];
   });
+  const cardDrawEvents = chapter.locations.flatMap((location, locationIndex) =>
+    CARD_DRAW_ARCHETYPES.map((archetype) => {
+      const title = interpolate(archetype.title, location);
+      return {
+        id: `D${chapterIndex + 1}-${String(locationIndex + 1).padStart(2, '0')}-${archetype.id}`,
+        chapterId: chapter.id,
+        locationIndex,
+        archetype: archetype.id,
+        stage: archetype.stage,
+        type: archetype.type,
+        title: { de: `${title.de} · ${chapter.name.de}`, en: `${title.en} · ${chapter.name.en}` },
+        story: {
+          de: `In ${location.de} beginnt die Szene: ${archetype.scene.de} ${chapter.atmosphere.de}`,
+          en: `The scene begins at ${location.en}: ${archetype.scene.en} ${chapter.atmosphere.en}`
+        },
+        options: archetype.type === 'choice' ? [...archetype.mechanics] : undefined,
+        outcomes: archetype.type === 'dice' ? [...archetype.mechanics] : undefined,
+        variant: locationIndex
+      };
+    })
+  );
   const taskFunEvents = chapter.locations.flatMap((location, locationIndex) => {
     const variants = chapter.id === 'main' || locationIndex === 0
       ? TASK_FUN_VARIANTS
@@ -1512,10 +1602,18 @@ function buildEventDeck(chapterIndex) {
       };
     });
   });
-  return [...regularEvents, ...ingredientFunEvents, ...taskFunEvents];
+  return [...regularEvents, ...cardDrawEvents, ...ingredientFunEvents, ...taskFunEvents];
 }
 
 const EVENT_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildEventDeck(index)));
+
+function isNonFundamentalEvent(event) {
+  return Boolean(event) && (
+    event.stage === 'cooking' ||
+    event.archetype === 'work-mischief' ||
+    event.archetype === 'pantry-mischief'
+  );
+}
 
 const EFFECT_TEXT = Object.freeze({
   drawTask: { de: 'Übernehmt den nächsten sinnvollen Küchenauftrag mit der vorgesehenen Mindestbesetzung.', en: 'Take the next feasible kitchen job with its planned minimum crew.' },
@@ -1529,12 +1627,21 @@ const EFFECT_TEXT = Object.freeze({
   watchChallenge: { de: 'Wählt die erste kurze Bordaufgabe und führt sie sofort aus.', en: 'Choose the first short deck duty and do it now.' },
   watchChallengeAlt: { de: 'Wählt die zweite kurze Bordaufgabe und führt sie sofort aus.', en: 'Choose the second short deck duty and do it now.' },
   treasureAndWatch: { de: 'Gewinnt Münzen und erledigt danach eine kurze Challenge.', en: 'Gain coins, then complete a short challenge.' },
-  treasureAndChain: { de: 'Gewinnt Münzen und deckt sofort eine weitere Ereigniskarte auf.', en: 'Gain coins and immediately reveal another event.' },
-  chain: { de: 'Deckt sofort eine weitere Ereigniskarte auf.', en: 'Immediately reveal another event card.' },
+  drawAnyQuiz: { de: 'Zieht ein beliebiges freigeschaltetes Quiz.', en: 'Draw any unlocked quiz.' },
+  drawIslandQuiz: { de: 'Zieht ein Quiz zur Inselchronik.', en: 'Draw an island-lore quiz.' },
+  drawLocationQuiz: { de: 'Zieht ein Quiz zu einem bekannten Ort.', en: 'Draw a quiz about a known location.' },
+  drawRouteQuiz: { de: 'Zieht ein Quiz zur bisherigen Reiseroute.', en: 'Draw a quiz about the voyage route so far.' },
+  drawSoloFun: { de: 'Zieht eine Spaßkarte für eine einzelne Person.', en: 'Draw a fun card for one person.' },
+  drawCoopFun: { de: 'Zieht eine gemeinsame Koop-Spaßkarte.', en: 'Draw a cooperative fun card.' },
+  chooseNamedQuiz: { de: 'Lasst euch zwei oder drei Quizkarten mit Namen zeigen und wählt eine davon.', en: 'Reveal two or three named quiz cards and choose one.' },
+  chooseNamedFun: { de: 'Lasst euch zwei oder drei Spaßkarten mit Namen zeigen und wählt eine davon.', en: 'Reveal two or three named fun cards and choose one.' },
+  treasureAndChain: { de: 'Gewinnt 2 Münzen und zieht sofort eine weitere Karte vom globalen Stapel.', en: 'Gain 2 coins and immediately draw another card from the global deck.' },
+  chain: { de: 'Zieht sofort eine weitere Karte vom globalen Stapel.', en: 'Immediately draw another card from the global deck.' },
   chainComplete: { de: 'Die Ereigniskette endet, bevor sich eine Karte oder Auswahl wiederholt.', en: 'The event chain ends before a card or choice can repeat.' },
   treasure: { de: 'Gewinnt zwei Münzen.', en: 'Gain two coins.' },
+  treasureSmall: { de: 'Gewinnt eine Münze.', en: 'Gain one coin.' },
   coinLoss: { de: 'Die Bordkasse verliert fünf Münzen.', en: 'The ship’s purse loses five coins.' },
-  fiveMinuteBreak: { de: 'Startet eine echte fünfminütige Pause für die ganze Crew.', en: 'Start a real five-minute break for the whole crew.' },
+  coinLossSmall: { de: 'Die Bordkasse verliert drei Münzen.', en: 'The ship’s purse loses three coins.' },
   singleTask: { de: 'Übernehmt den nächsten geeigneten Auftrag mit möglichst kleiner Besetzung.', en: 'Take the next suitable job with the smallest practical crew.' },
   watchComplete: { de: 'Die Bordaufgabe ist erledigt; die laufende Küchenzeit wurde sinnvoll genutzt.', en: 'The deck duty is complete; the running kitchen time was used productively.' },
   watchSuccess: { de: 'Die Geschicklichkeits-Challenge wurde geschafft.', en: 'The dexterity challenge succeeded.' },
@@ -1550,11 +1657,11 @@ const SECRET_CHARADE_IDS = new Set([
   'charade-anchor', 'charade-parrot', 'charade-treasure-chest', 'charade-storm-ship',
   'charade-lighthouse', 'charade-cannon', 'charade-seasick-pirate', 'charade-buried-treasure'
 ]);
-const PRIVATE_CHALLENGE_IDS = new Set([
-  'chicken', 'stop-chicken', 'nose-voice', 'stop-nose', 'folded-note', ...SECRET_CHARADE_IDS
-]);
-
-const challenge = (id, de, en, options = {}) => ({
+const challenge = (id, de, en, options = {}) => {
+  const cardKind = options.cardKind ?? (SECRET_CHARADE_IDS.has(id)
+    ? 'charade'
+    : options.followUpOnly ? 'blessing' : options.flow === 'ongoing' ? 'curse' : 'fun');
+  return ({
   id, de, en, title: options.title ?? { de: 'Kurze Challenge', en: 'Quick challenge' },
   minutes: options.minutes ?? 1,
   coins: options.skillCheck
@@ -1566,15 +1673,19 @@ const challenge = (id, de, en, options = {}) => ({
   successCoins: options.skillCheck ? Math.max(1, Number(options.successCoins) || 3) : null,
   failureCoins: options.skillCheck ? -Math.max(1, Math.abs(Number(options.failureCoins) || 2)) : null,
   durationSeconds: Math.max(1, Number(options.durationSeconds) || (options.minutes ?? 1) * 60),
-  secret: PRIVATE_CHALLENGE_IDS.has(id),
+  cardKind,
+  secret: cardKind === 'charade' || (cardKind === 'curse' && options.endTrigger === 'secretTrigger'),
   followUpId: options.followUpId ?? null, flow: options.flow ?? 'immediate',
   endTrigger: options.endTrigger ?? null, mandatory: options.mandatory ?? false,
+  triggerKind: options.triggerKind ?? null,
+  standing: options.standing ?? false,
   playerSelection: options.playerSelection ?? false,
   cooperative: options.cooperative ?? false,
   partnerCount: options.partnerCount ?? 0,
   followUpOnly: options.followUpOnly ?? false,
   requirements: options.requirements ?? (SECRET_CHARADE_IDS.has(id) ? ['twoFreeGuessers'] : [])
-});
+  });
+};
 
 const LONG_COURSE_SOLO_THEMES = Object.freeze([
   ['captains-shadow', 'Der Schatten des Kapitäns', 'The Captain’s Shadow'],
@@ -1674,7 +1785,8 @@ const LONG_COURSE_CHALLENGES = Object.freeze([
       [`Gib „${deTitle}“ eine unverwechselbare Stimme und sage damit einen kurzen, freundlichen Satz zur Crew.`, `Give “${enTitle}” a distinctive voice and use it to say one short, friendly sentence to the crew.`]
     ];
     const [de, en] = prompts[index % prompts.length];
-    return challenge(`long-solo-${id}`, de, en, { durationSeconds: 30, title: { de: deTitle, en: enTitle } });
+    const durationSeconds = [30, 10, 30, 30][index % prompts.length];
+    return challenge(`long-solo-${id}`, de, en, { durationSeconds, title: { de: deTitle, en: enTitle } });
   }),
   ...LONG_COURSE_PAIR_THEMES.map(([id, deTitle, enTitle], index) => {
     const prompts = [
@@ -1684,7 +1796,8 @@ const LONG_COURSE_CHALLENGES = Object.freeze([
       [`{activePlayer} und {partner}: Führt einen kurzen Dialog zwischen zwei Figuren aus „${deTitle}“. Jede Person spricht genau zweimal.`, `{activePlayer} and {partner}: Perform a short dialogue between two characters from “${enTitle}.” Each person speaks exactly twice.`]
     ];
     const [de, en] = prompts[index % prompts.length];
-    return challenge(`long-pair-${id}`, de, en, { cooperative: true, partnerCount: 1, durationSeconds: 45, title: { de: deTitle, en: enTitle } });
+    const durationSeconds = [45, 10, 30, 45][index % prompts.length];
+    return challenge(`long-pair-${id}`, de, en, { cooperative: true, partnerCount: 1, durationSeconds, title: { de: deTitle, en: enTitle } });
   }),
   ...LONG_COURSE_TRIO_THEMES.map(([id, deTitle, enTitle], index) => {
     const prompts = [
@@ -1694,7 +1807,8 @@ const LONG_COURSE_CHALLENGES = Object.freeze([
       [`{activePlayer}, {partner} und {partner2}: Erzeugt gemeinsam zehn Sekunden die Geräuschkulisse von „${deTitle}“. Jede Person verwendet ein anderes leises Geräusch.`, `{activePlayer}, {partner}, and {partner2}: Create a ten-second soundscape for “${enTitle}.” Each person uses a different quiet sound.`]
     ];
     const [de, en] = prompts[index % prompts.length];
-    return challenge(`long-trio-${id}`, de, en, { cooperative: true, partnerCount: 2, durationSeconds: 45, title: { de: deTitle, en: enTitle } });
+    const durationSeconds = [45, 45, 30, 10][index % prompts.length];
+    return challenge(`long-trio-${id}`, de, en, { cooperative: true, partnerCount: 2, durationSeconds, title: { de: deTitle, en: enTitle } });
   })
 ]);
 
@@ -1713,32 +1827,43 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('portion-captain', 'Bestimmt eine Person, die beim nächsten Servieren Portionsgrößen kontrolliert.', 'Choose one person to check portion sizes at the next serving.', { requirements: ['courseWorkStarted'], playerSelection: true, title: { de: 'Die Portionswache', en: 'The Portion Lookout' } }),
   challenge('timer-check', 'Schaut auf alle laufenden Aufgaben-Timer. Nennt gemeinsam, welche Aufgabe als Nächstes endet oder bereits in der Überlänge ist.', 'Check every running task timer. Together, identify which task finishes next or is already in overtime.', { requirements: ['taskTimerRunning'], title: { de: 'Sanduhren im Blick', en: 'Eyes on the Hourglasses' } }),
   challenge('sea-story', 'Gebt {activePlayer} 60 Sekunden für eine kurze Seefahrergeschichte.', 'Give {activePlayer} 60 seconds for a short seafaring story.', { title: { de: 'Eine Runde Seemannsgarn', en: 'A Tale from the Sea' } }),
-  challenge('pirate-verse', 'Erfindet in höchstens 90 Sekunden ein kurzes Piratenlied oder Piratengedicht mit mindestens zwei Zeilen. Singt es gemeinsam oder tragt es dramatisch vor – beides zählt vollständig.', 'In no more than 90 seconds, invent a short pirate song or pirate poem of at least two lines. Sing it together or perform it dramatically — either counts in full.', { minutes: 2, coins: 3, title: { de: 'Die Ballade der wilden Kombüse', en: 'Ballad of the Wild Galley' } }),
+  challenge('pirate-verse', 'Erfindet in höchstens 90 Sekunden ein kurzes Piratenlied oder Piratengedicht mit mindestens zwei Zeilen. Singt es gemeinsam oder tragt es dramatisch vor – beides zählt vollständig.', 'In no more than 90 seconds, invent a short pirate song or pirate poem of at least two lines. Sing it together or perform it dramatically — either counts in full.', { minutes: 2, durationSeconds: 90, coins: 3, title: { de: 'Die Ballade der wilden Kombüse', en: 'Ballad of the Wild Galley' } }),
   challenge('safety-check', 'Kontrolliert, dass heiße, scharfe und rohe Arbeitsbereiche klar getrennt sind.', 'Confirm that hot, sharp, and raw-food work areas are clearly separated.', { requirements: ['hazardousTaskOpen'], title: { de: 'Die sichere Kombüse', en: 'The Safe Galley' } }),
-  challenge('odd-dance', 'Steh auf und tanze 20 Sekunden so merkwürdig wie möglich. Danach geht das Spiel normal weiter.', 'Stand up and dance as strangely as possible for 20 seconds. Then continue normally.', { coins: 3, title: { de: 'Tanz auf Deck', en: 'Deck Dance' } }),
-  challenge('table-lap', 'Steh auf, geh einmal um den Tisch und setz dich wieder hin.', 'Stand up, walk once around the table, and sit down again.', { title: { de: 'Rundgang an Deck', en: 'Circuit around the Deck' } }),
+  challenge('odd-dance', 'Steh auf und tanze 20 Sekunden so merkwürdig wie möglich. Danach geht das Spiel normal weiter.', 'Stand up and dance as strangely as possible for 20 seconds. Then continue normally.', { durationSeconds: 20, coins: 3, standing: true, title: { de: 'Tanz auf Deck', en: 'Deck Dance' } }),
+  challenge('table-lap', 'Steh auf, geh einmal um den Tisch und setz dich wieder hin.', 'Stand up, walk once around the table, and sit down again.', { standing: true, title: { de: 'Rundgang an Deck', en: 'Circuit around the Deck' } }),
   challenge('compliments', 'Bis zu deinem nächsten Zug machst du der jeweils aktiven Person ein ehrliches, kurzes Kompliment.', 'Until your next turn, give the active player one brief, genuine compliment.', { coins: 3, title: { de: 'Rückenwind für die Crew', en: 'A Tailwind for the Crew' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('love-decisions', 'Bis zu deinem nächsten Zug findest du jede Entscheidung deiner Crew großartig. Übertreib dabei freundlich.', 'Until your next turn, you think every crew decision is wonderful. Exaggerate kindly.', { coins: 3, title: { de: 'Begeisterung an Bord', en: 'Delight Aboard' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('laugh-turn', 'In {targetPlayer}s nächstem Zug findest du alles erstaunlich lustig. Bleib freundlich und löse die Karte danach auf.', 'During {targetPlayer}’s next turn, find everything remarkably funny. Stay kind and end the bit afterwards.', { coins: 3, title: { de: 'Lachen an Deck', en: 'Laughter Aboard' }, flow: 'ongoing', endTrigger: 'targetTurnEnd' }),
   challenge('chicken', 'Gackere einmal pro Minute leise wie ein Huhn. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Cluck quietly like a chicken once per minute. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Der Hühnerfluch', en: 'The Chicken Curse' }, followUpId: 'stop-chicken', flow: 'ongoing', endTrigger: 'followUp' }),
-  challenge('stop-chicken', 'Verbindliche Anweisung: Sage jetzt zu {targetPlayer}: „Der Hühnerfluch ist gebrochen.“ Erklärt euch erst danach gegenseitig die Karten.', 'Mandatory instruction: Tell {targetPlayer} now: “The chicken curse is broken.” Only then explain the cards to each other.', { coins: 2, title: { de: 'Das Gegenmittel', en: 'The Antidote' }, mandatory: true, followUpOnly: true }),
+  challenge('stop-chicken', 'Segen: Sage jetzt zu {targetPlayer}: „Der Hühnerfluch ist gebrochen.“ Danach endet der Fluch sofort.', 'Blessing: Tell {targetPlayer} now: “The chicken curse is broken.” The curse ends immediately afterwards.', { coins: 2, title: { de: 'Segen: Ruhe im Hühnerstall', en: 'Blessing: Peace in the Henhouse' }, mandatory: true, followUpOnly: true }),
   challenge('nose-voice', 'Halte dir beim Reden sanft die Nase zu. Verrate nicht warum und mache weiter, bis eine andere Person dich ausdrücklich erlöst.', 'Gently hold your nose while speaking. Do not say why and continue until another person explicitly releases you.', { coins: 3, title: { de: 'Die verschnupfte Freibeuterin', en: 'The Snuffly Buccaneer' }, followUpId: 'stop-nose', flow: 'ongoing', endTrigger: 'followUp' }),
-  challenge('stop-nose', 'Verbindliche Anweisung: Sage jetzt zu {targetPlayer}: „Du kannst wieder frei sprechen.“ Verratet erst danach, was auf euren Karten stand.', 'Mandatory instruction: Tell {targetPlayer} now: “You may speak freely again.” Only then reveal what your cards said.', { coins: 2, title: { de: 'Freie Nase voraus', en: 'Clear Air Ahead' }, mandatory: true, followUpOnly: true }),
+  challenge('stop-nose', 'Segen: Sage jetzt zu {targetPlayer}: „Du kannst wieder frei sprechen.“ Danach endet der Fluch sofort.', 'Blessing: Tell {targetPlayer} now: “You may speak freely again.” The curse ends immediately afterwards.', { coins: 2, title: { de: 'Segen: Freie Nase voraus', en: 'Blessing: Clear Air Ahead' }, mandatory: true, followUpOnly: true }),
+  challenge('echo-curse', 'Fluch: Wiederhole nach jedem eigenen Satz leise dein letztes Wort, bis der passende Segen gezogen wird.', 'Curse: Quietly repeat the final word of each sentence you speak until the matching blessing is drawn.', { coins: 3, title: { de: 'Fluch des letzten Wortes', en: 'Curse of the Last Word' }, followUpId: 'echo-blessing', flow: 'ongoing', endTrigger: 'followUp' }),
+  challenge('echo-blessing', 'Segen: Sage zu {targetPlayer}: „Dein Echo darf verstummen.“ Danach endet der Fluch des letzten Wortes.', 'Blessing: Tell {targetPlayer}: “Your echo may fall silent.” The Curse of the Last Word then ends.', { coins: 2, title: { de: 'Segen der stillen Bucht', en: 'Blessing of the Quiet Bay' }, mandatory: true, followUpOnly: true }),
+  challenge('salute-curse', 'Fluch: Grüße bei jeder neu aufgedeckten Karte einmal feierlich, bis der passende Segen gezogen wird.', 'Curse: Give one ceremonial salute whenever a new card is revealed until the matching blessing is drawn.', { coins: 3, title: { de: 'Fluch des ewigen Grußes', en: 'Curse of the Endless Salute' }, followUpId: 'salute-blessing', flow: 'ongoing', endTrigger: 'followUp' }),
+  challenge('salute-blessing', 'Segen: Verbeuge dich kurz vor {targetPlayer} und erkläre die endlose Grußpflicht für beendet.', 'Blessing: Give {targetPlayer} a short bow and declare the endless saluting duty over.', { coins: 2, title: { de: 'Segen der entspannten Wache', en: 'Blessing of the Relaxed Watch' }, mandatory: true, followUpOnly: true }),
+  challenge('whisper-curse', 'Fluch: Sprich nur noch mit leiser Stimme, bis der passende Segen gezogen wird. Küchenwarnungen und Sicherheitshinweise sagst du weiterhin klar und laut.', 'Curse: Speak only softly until the matching blessing is drawn. Continue to give kitchen warnings and safety instructions clearly and loudly.', { coins: 3, title: { de: 'Fluch der flüsternden See', en: 'Curse of the Whispering Sea' }, followUpId: 'whisper-blessing', flow: 'ongoing', endTrigger: 'followUp' }),
+  challenge('whisper-blessing', 'Segen: Sage zu {targetPlayer}: „Die See hört deine Stimme wieder.“ Danach endet der Flüsterfluch.', 'Blessing: Tell {targetPlayer}: “The sea can hear your voice again.” The whispering curse then ends.', { coins: 2, title: { de: 'Segen der klaren Stimme', en: 'Blessing of the Clear Voice' }, mandatory: true, followUpOnly: true }),
+  challenge('pirate-word-curse', 'Fluch: Sprich bei jeder eigenen Antwort besonders vornehm. Der Fluch endet heimlich, sobald eine andere Person das Wort „Pirat“ oder „pirate“ sagt.', 'Curse: Speak with exaggerated refinement whenever you answer. The curse secretly ends when another player says “Pirat” or “pirate.”', { coins: 3, title: { de: 'Fluch der vornehmen Piratin', en: 'Curse of the Refined Pirate' }, flow: 'ongoing', endTrigger: 'secretTrigger', triggerKind: 'pirateWord' }),
+  challenge('ship-word-curse', 'Fluch: Halte bei jeder Erwähnung einer Richtung kurz Ausschau. Der Fluch endet heimlich, sobald eine andere Person „Schiff“ oder „ship“ sagt.', 'Curse: Briefly scan the horizon whenever a direction is mentioned. The curse secretly ends when another player says “Schiff” or “ship.”', { coins: 3, title: { de: 'Fluch der rastlosen Wache', en: 'Curse of the Restless Lookout' }, flow: 'ongoing', endTrigger: 'secretTrigger', triggerKind: 'shipWord' }),
+  challenge('treasure-word-curse', 'Fluch: Bewache deinen Platz übertrieben misstrauisch. Der Fluch endet heimlich, sobald eine andere Person „Schatz“ oder „treasure“ sagt.', 'Curse: Guard your place with exaggerated suspicion. The curse secretly ends when another player says “Schatz” or “treasure.”', { coins: 3, title: { de: 'Fluch des misstrauischen Schatzes', en: 'Curse of the Suspicious Treasure' }, flow: 'ongoing', endTrigger: 'secretTrigger', triggerKind: 'treasureWord' }),
+  challenge('standing-fun-curse', 'Fluch: Tu so, als wäre dein Stuhl ein kleines Boot. Der Fluch endet heimlich, sobald eine andere Person für eine Spaßkarte aufsteht.', 'Curse: Pretend your chair is a tiny boat. The curse secretly ends when another player stands up for a fun card.', { coins: 3, title: { de: 'Fluch des winzigen Bootes', en: 'Curse of the Tiny Boat' }, flow: 'ongoing', endTrigger: 'secretTrigger', triggerKind: 'standingFun' }),
+  challenge('correct-quiz-curse', 'Fluch: Reagiere auf jede Behauptung der Crew mit einem prüfenden Blick. Der Fluch endet heimlich, sobald ein Quiz richtig beantwortet wird.', 'Curse: Give every claim from the crew a scrutinising look. The curse secretly ends when a quiz is answered correctly.', { coins: 3, title: { de: 'Fluch der strengen Prüfung', en: 'Curse of the Stern Examination' }, flow: 'ongoing', endTrigger: 'secretTrigger', triggerKind: 'quizCorrect' }),
   challenge('impatient-fingers', 'Tippe bis zu deinem nächsten Zug immer wieder ungeduldig mit den Fingern auf den Tisch, als hättest du großen Zeitdruck.', 'Until your next turn, drum your fingers impatiently on the table as though time were running out.', { coins: 3, title: { de: 'Die ungeduldige Wache', en: 'The Impatient Watch' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
-  challenge('three-hops', 'Steh auf und hüpf dreimal auf der Stelle, wenn das für dich sicher ist. Alternativ wippst du dreimal übertrieben auf den Zehenspitzen.', 'Stand and hop three times in place if that is safe for you. Otherwise rise dramatically onto your toes three times.', { title: { de: 'Dreifacher Seegang', en: 'Triple Sea Legs' } }),
-  challenge('under-table-search', 'Schau auffällig unter den Tisch, als hättest du dort etwas Wichtiges verloren. Krabble nicht und blockiere keine Laufwege. Setz dich danach wieder hin.', 'Look conspicuously under the table as though you lost something important there. Do not crawl or block walkways. Sit back down afterwards.', { title: { de: 'Unter Deck gesucht', en: 'Search Below Deck' } }),
+  challenge('three-hops', 'Steh auf und hüpf dreimal auf der Stelle, wenn das für dich sicher ist. Alternativ wippst du dreimal übertrieben auf den Zehenspitzen.', 'Stand and hop three times in place if that is safe for you. Otherwise rise dramatically onto your toes three times.', { standing: true, title: { de: 'Dreifacher Seegang', en: 'Triple Sea Legs' } }),
+  challenge('under-table-search', 'Schau auffällig unter den Tisch, als hättest du dort etwas Wichtiges verloren. Krabble nicht und blockiere keine Laufwege. Setz dich danach wieder hin.', 'Look conspicuously under the table as though you lost something important there. Do not crawl or block walkways. Sit back down afterwards.', { standing: true, title: { de: 'Unter Deck gesucht', en: 'Search Below Deck' } }),
   challenge('soap-opera-pirate', 'Spiele bis zu deinem nächsten Zug eine völlig überdramatische Figur aus einer Piraten-Seifenoper. Seufze bedeutungsvoll und reagiere theatralisch, ohne eine reale Person oder Gruppe nachzuahmen.', 'Until your next turn, play an outrageously dramatic character from a pirate soap opera. Sigh meaningfully and react theatrically without imitating a real person or group.', { coins: 3, title: { de: 'Piraten-Seifenoper', en: 'Pirate Soap Opera' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('accent-shift', 'Sprich bis zu deinem nächsten Zug in einem freundlichen Dialekt oder Fantasieakzent, den du gut kannst – zum Beispiel kölsch oder sächsisch. Karikiere keine Person oder Herkunft.', 'Until your next turn, use a friendly regional or invented accent you know well. Do not caricature any person or background.', { coins: 3, title: { de: 'Neue Stimme an Bord', en: 'A New Voice Aboard' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('self-compliments', 'Mach dir bis zu deinem nächsten Zug bei passenden Gelegenheiten kurze, völlig übertriebene Komplimente.', 'Until your next turn, give yourself brief, wildly exaggerated compliments whenever an opportunity appears.', { coins: 3, title: { de: 'Eigenlob mit Rückenwind', en: 'Self-Praise with Tailwind' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('aye-aye-sentences', 'Beginne bis zum Beginn deines nächsten Zuges jeden gesprochenen Satz mit „Ai, ai“.', 'Until the start of your next turn, begin every spoken sentence with “Aye, aye”.', { coins: 3, title: { de: 'Ai, ai vorweg', en: 'Aye, Aye First' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('arr-sentences', 'Beende bis zum Beginn deines nächsten Zuges jeden gesprochenen Satz mit einem deutlichen „Arr“.', 'Until the start of your next turn, end every spoken sentence with a clear “Arr”.', { coins: 3, title: { de: 'Arr zum Schluss', en: 'Arr at the End' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('captain-permission', 'Ernenne {targetPlayer} zum Kapitän. Bis zum Beginn deines nächsten Zuges musst du vor jeder eigenen Entscheidung oder Aktion höflich um Erlaubnis bitten.', 'Appoint {targetPlayer} as captain. Until the start of your next turn, politely ask the captain for permission before each decision or action of your own.', { coins: 4, title: { de: 'Befehl des Kapitäns', en: 'Captain’s Orders' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
-  challenge('self-talk', 'Führe 20 Sekunden lang ein ernstes Gespräch mit dir selbst und beantworte dabei deine eigenen Fragen. Mach danach kommentarlos weiter.', 'Hold a serious 20-second conversation with yourself and answer your own questions. Then continue without comment.', { title: { de: 'Zwiegespräch an Deck', en: 'A Talk with Yourself' } }),
+  challenge('self-talk', 'Führe 20 Sekunden lang ein ernstes Gespräch mit dir selbst und beantworte dabei deine eigenen Fragen. Mach danach kommentarlos weiter.', 'Hold a serious 20-second conversation with yourself and answer your own questions. Then continue without comment.', { durationSeconds: 20, title: { de: 'Zwiegespräch an Deck', en: 'A Talk with Yourself' } }),
   challenge('bad-joke', 'Erzähle der Crew einen absichtlich richtig schlechten, harmlosen Witz.', 'Tell the crew an intentionally terrible, harmless joke.', { title: { de: 'Flachwitz aus der Bilge', en: 'A Joke from the Bilge' } }),
   challenge('hiccups', 'Simuliere bis zu deinem nächsten Zug gelegentlich einen harmlosen Schluckauf. Übertreib nicht so stark, dass Gespräche oder Küchenarbeit gestört werden.', 'Until your next turn, occasionally pretend to hiccup. Do not overdo it enough to disrupt conversation or kitchen work.', { coins: 3, title: { de: 'Schluckauf auf See', en: 'Hiccups at Sea' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('mime-self-slap', 'Spiele pantomimisch und mit deutlichem Abstand eine dramatische Backpfeife gegen dich selbst. Berühre oder schlage dich dabei nicht wirklich.', 'Mime a dramatic self-slap while keeping a clear distance. Do not actually touch or hit yourself.', { title: { de: 'Dramatische Erkenntnis', en: 'Dramatic Realisation' } }),
   challenge('hand-trumpet', 'Simuliere einen richtig lauten Pfurz, indem du in deine Hand pustest wie in eine Trompete. Bleib danach völlig ernst.', 'Simulate a very loud fart by blowing into your hand like a trumpet. Keep a completely straight face afterwards.', { title: { de: 'Die Nebelhornprobe', en: 'The Foghorn Test' } }),
-  challenge('chair-circle', 'Dreh dich sicher einmal mit einem geeigneten Drehstuhl im Kreis. Falls der Stuhl nicht dafür geeignet ist, steh auf und geh einmal um ihn herum.', 'Safely spin once in a suitable swivel chair. If the chair is not suitable, stand and walk around it once instead.', { title: { de: 'Einmal rund um die Insel', en: 'Once Around the Island' } }),
+  challenge('chair-circle', 'Dreh dich sicher einmal mit einem geeigneten Drehstuhl im Kreis. Falls der Stuhl nicht dafür geeignet ist, steh auf und geh einmal um ihn herum.', 'Safely spin once in a suitable swivel chair. If the chair is not suitable, stand and walk around it once instead.', { standing: true, title: { de: 'Einmal rund um die Insel', en: 'Once Around the Island' } }),
   challenge('ceremonial-greeting', 'Bestehe freundlich darauf, deinen Sitznachbarn feierlich zu begrüßen. Die andere Person wählt zwischen Handschlag, Faustgruß oder Winken.', 'Politely insist on ceremonially greeting the person beside you. They choose between a handshake, fist bump, or wave.', { title: { de: 'Feierlicher Matrosengruß', en: 'Ceremonial Sailor Greeting' } }),
   challenge('folded-note', 'Nimm einen Zettel und schreibe: „Nicht sagen, was hier draufsteht.“ Falte ihn und gib ihn einer beliebigen Person. Erkläre nichts weiter.', 'Take a note and write: “Do not say what is written here.” Fold it and hand it to any player. Explain nothing further.', { title: { de: 'Die streng geheime Nachricht', en: 'The Highly Secret Note' } }),
   challenge('charade-anchor', 'Stelle pantomimisch einen schweren Schiffsanker dar, der erst hochgezogen und anschließend ins Meer gelassen wird. Sprich nicht, mache keine Geräusche und zeige nicht auf Gegenstände. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Anker“ oder „Schiffsanker“ zu erraten.', 'Mime a heavy ship anchor being hauled up and then lowered into the sea. Do not speak, make sounds, or point at objects. After the start, the rest of the crew has 60 seconds to guess “anchor” or “ship anchor.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der schwere Anker', en: 'Charade: The Heavy Anchor' } }),
@@ -1749,29 +1874,29 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('charade-cannon', 'Stelle pantomimisch dar, wie eine Schiffskanone geladen, ausgerichtet und abgefeuert wird. Bleib an deinem Platz und berühre niemanden. Sprich nicht und mache keinen Kanonenknall. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „Kanone“ oder „Schiffskanone“ zu erraten.', 'Mime loading, aiming, and firing a ship’s cannon. Stay in place and touch nobody. Do not speak or imitate the cannon blast. After the start, the rest of the crew has 60 seconds to guess “cannon” or “ship’s cannon.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Die Schiffskanone', en: 'Charade: The Ship’s Cannon' } }),
   challenge('charade-seasick-pirate', 'Stelle pantomimisch einen seekranken Piraten auf starkem Wellengang dar, der sich am Mast festhält und trotzdem weiter Ausschau hält. Bleib sicher an deinem Platz und spiele nur. Sprich nicht und mache keine Geräusche. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „seekranker Pirat“ oder „Seekrankheit“ zu erraten.', 'Mime a seasick pirate in heavy waves, clinging to the mast while still keeping watch. Stay safely in place and only act it out. Do not speak or make sounds. After the start, the rest of the crew has 60 seconds to guess “seasick pirate” or “seasickness.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der seekranke Pirat', en: 'Charade: The Seasick Pirate' } }),
   challenge('charade-buried-treasure', 'Stelle pantomimisch dar, wie du einer Schatzkarte folgst, an der richtigen Stelle gräbst und einen vergrabenen Schatz findest. Sprich nicht, mache keine Geräusche und benutze keine echten Gegenstände. Die übrige Crew hat nach dem Start 60 Sekunden Zeit, „vergrabener Schatz“ oder „Schatzsuche“ zu erraten.', 'Mime following a treasure map, digging in the right place, and finding buried treasure. Do not speak, make sounds, or use real objects. After the start, the rest of the crew has 60 seconds to guess “buried treasure” or “treasure hunt.”', { skillCheck: true, durationSeconds: 60, successCoins: 3, failureCoins: -2, title: { de: 'Scharade: Der vergrabene Schatz', en: 'Charade: The Buried Treasure' } }),
-  challenge('captain-pose', 'Steh auf und nimm zehn Sekunden lang deine überzeugendste Kapitänspose ein. Setz dich danach wortlos wieder hin.', 'Stand and hold your most convincing captain’s pose for ten seconds. Then sit down again without a word.', { title: { de: 'Die Pose des Kapitäns', en: 'The Captain’s Pose' } }),
+  challenge('captain-pose', 'Steh auf und nimm zehn Sekunden lang deine überzeugendste Kapitänspose ein. Setz dich danach wortlos wieder hin.', 'Stand and hold your most convincing captain’s pose for ten seconds. Then sit down again without a word.', { durationSeconds: 10, title: { de: 'Die Pose des Kapitäns', en: 'The Captain’s Pose' } }),
   challenge('invisible-parrot', 'Begrüße einen unsichtbaren Papagei auf deiner Schulter und frage ihn leise nach seiner Meinung.', 'Greet an invisible parrot on your shoulder and quietly ask for its opinion.', { title: { de: 'Der unsichtbare Papagei', en: 'The Invisible Parrot' } }),
-  challenge('pirate-weather', 'Gib der Crew einen 20-sekündigen Wetterbericht für die aktuelle Piratenreise. Mindestens Wind, Wellen und die Aussicht auf Beute müssen vorkommen.', 'Give the crew a 20-second weather report for the current pirate voyage. Mention wind, waves, and the chance of treasure.', { title: { de: 'Wetterbericht von hoher See', en: 'High-Seas Weather Report' } }),
+  challenge('pirate-weather', 'Gib der Crew einen 20-sekündigen Wetterbericht für die aktuelle Piratenreise. Mindestens Wind, Wellen und die Aussicht auf Beute müssen vorkommen.', 'Give the crew a 20-second weather report for the current pirate voyage. Mention wind, waves, and the chance of treasure.', { durationSeconds: 20, title: { de: 'Wetterbericht von hoher See', en: 'High-Seas Weather Report' } }),
   challenge('royal-toast', 'Erhebe dein vorhandenes Getränk und bringe einen kurzen, dramatischen Trinkspruch auf die Crew aus. Falls du gerade keines hast, genügt ein imaginäres Glas.', 'Raise your current drink and make a short dramatic toast to the crew. If you do not have one right now, an imaginary glass is enough.', { title: { de: 'Der große Crew-Trinkspruch', en: 'The Grand Crew Toast' } }),
   challenge('forbidden-yes', 'Vermeide bis zu deinem nächsten Zug das Wort „ja“. Falls es dir herausrutscht, machst du einfach normal weiter.', 'Avoid the word “yes” until your next turn. If it slips out, simply continue normally.', { coins: 3, title: { de: 'Das verbotene Ja', en: 'The Forbidden Yes' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('dramatic-whisper', 'Sprich deinen nächsten vollständigen Satz in einem verschwörerischen Flüsterton. Danach redest du wieder normal.', 'Speak your next full sentence in a conspiratorial whisper. Then return to normal.', { title: { de: 'Das Flüstern aus der Kajüte', en: 'The Cabin Whisper' } }),
-  challenge('imaginary-rope', 'Zieh zehn Sekunden lang pantomimisch an einem schweren unsichtbaren Tau. Bleib dabei sicher an deinem Platz.', 'Mime pulling a heavy invisible rope for ten seconds. Stay safely in your place while doing it.', { title: { de: 'Das unsichtbare Tau', en: 'The Invisible Rope' } }),
-  challenge('tiny-telescope', 'Forme mit den Händen ein Fernrohr und suche fünf Sekunden lang den Raum nach einer fernen Insel ab.', 'Make a telescope with your hands and scan the room for a distant island for five seconds.', { title: { de: 'Land in Sicht', en: 'Land Ahoy' } }),
+  challenge('imaginary-rope', 'Zieh zehn Sekunden lang pantomimisch an einem schweren unsichtbaren Tau. Bleib dabei sicher an deinem Platz.', 'Mime pulling a heavy invisible rope for ten seconds. Stay safely in your place while doing it.', { durationSeconds: 10, title: { de: 'Das unsichtbare Tau', en: 'The Invisible Rope' } }),
+  challenge('tiny-telescope', 'Forme mit den Händen ein Fernrohr und suche fünf Sekunden lang den Raum nach einer fernen Insel ab.', 'Make a telescope with your hands and scan the room for a distant island for five seconds.', { durationSeconds: 5, title: { de: 'Land in Sicht', en: 'Land Ahoy' } }),
   challenge('course-riddle', 'Erfinde ein kurzes, leicht lösbares Rätsel über eine Zutat oder ein Küchengerät. Die Crew darf genau dreimal raten. Errät sie die Lösung, ist die Challenge geschafft; sonst ist sie gescheitert.', 'Invent a short, easy riddle about an ingredient or kitchen tool. The crew gets exactly three guesses. If they find the answer, the challenge succeeds; otherwise it fails.', { skillCheck: true, title: { de: 'Das Rätsel der Kombüse', en: 'The Galley Riddle' } }),
   challenge('pirate-oath', 'Lege eine Hand aufs Herz und schwöre feierlich, die Crew sicher bis zum nächsten Gang zu begleiten.', 'Place a hand over your heart and solemnly swear to guide the crew safely to the next course.', { title: { de: 'Der feierliche Piratenschwur', en: 'The Solemn Pirate Oath' } }),
   challenge('table-rhythm', 'Trommle mit zwei Fingern einen kurzen Rhythmus. Die Crew hat genau einen Versuch, ihn gemeinsam richtig nachzumachen. Stimmt die Folge, ist die Challenge geschafft.', 'Tap a short rhythm with two fingers. The crew gets exactly one attempt to repeat it correctly together. If the sequence matches, the challenge succeeds.', { skillCheck: true, dexterity: true, durationSeconds: 30, title: { de: 'Der Takt der Galeere', en: 'The Galley Beat' } }),
-  challenge('statue-lookout', 'Erstarre zehn Sekunden lang wie eine steinerne Galionsfigur und blicke entschlossen in die Ferne.', 'Freeze for ten seconds like a stone figurehead and stare determinedly into the distance.', { title: { de: 'Die lebende Galionsfigur', en: 'The Living Figurehead' } }),
+  challenge('statue-lookout', 'Erstarre zehn Sekunden lang wie eine steinerne Galionsfigur und blicke entschlossen in die Ferne.', 'Freeze for ten seconds like a stone figurehead and stare determinedly into the distance.', { durationSeconds: 10, title: { de: 'Die lebende Galionsfigur', en: 'The Living Figurehead' } }),
   challenge('course-nickname', 'Gebt dem entstehenden Gang gemeinsam einen albernen Piraten-Spitznamen. Die aktive Person entscheidet bei Gleichstand.', 'Give the emerging course a silly pirate nickname together. The active player breaks any tie.', { title: { de: 'Der Spitzname der Beute', en: 'A Nickname for the Loot' } }),
   challenge('one-word-captain', 'Antworte auf die nächste Frage, die dir gestellt wird, nur mit „Kapitän“. Danach sprichst du wieder normal.', 'Answer the next question you are asked using only “Captain”. Then speak normally again.', { title: { de: 'Nur ein Wort: Kapitän', en: 'One Word: Captain' } }),
-  challenge('sea-legs', 'Schwanke im Sitzen fünf Sekunden ganz leicht, als hätte das Schiff eine kleine Welle erwischt. Achte auf Abstand zu heißen oder scharfen Dingen.', 'Sway very gently while seated for five seconds as though the ship hit a small wave. Keep clear of anything hot or sharp.', { title: { de: 'Eine kleine Welle', en: 'A Little Wave' } }),
+  challenge('sea-legs', 'Schwanke im Sitzen fünf Sekunden ganz leicht, als hätte das Schiff eine kleine Welle erwischt. Achte auf Abstand zu heißen oder scharfen Dingen.', 'Sway very gently while seated for five seconds as though the ship hit a small wave. Keep clear of anything hot or sharp.', { durationSeconds: 5, title: { de: 'Eine kleine Welle', en: 'A Little Wave' } }),
   challenge('treasure-announcer', 'Kündige den aktuellen Münzstand mit der Stimme eines übertrieben wichtigen königlichen Herolds an.', 'Announce the current coin total in the voice of an absurdly important royal herald.', { title: { de: 'Der Herold der Bordkasse', en: 'Herald of the Ship’s Purse' } }),
   challenge('synchronized-arr', 'Zählt gemeinsam von drei herunter und ruft dann alle gleichzeitig ein möglichst überzeugendes „Arr!“', 'Count down together from three, then everyone gives their most convincing “Arr!” at the same time.', { title: { de: 'Das gemeinsame Arr', en: 'The Crew’s Arr' } }),
   challenge('imaginary-map', 'Breite pantomimisch eine riesige Schatzkarte aus, zeige auf einen erfundenen Ort und nicke bedeutungsvoll.', 'Mime unrolling a huge treasure map, point to an imaginary place, and nod meaningfully.', { title: { de: 'Die Karte ohne Papier', en: 'The Map Without Paper' } }),
-  challenge('pirate-commercial', 'Erfinde in 20 Sekunden einen übertriebenen Werbespruch für den aktuellen Gang, als wäre er die größte Beute der Welt.', 'In 20 seconds, invent an exaggerated advertisement for the current course as though it were the world’s greatest treasure.', { title: { de: 'Reklame für die Beute', en: 'An Advert for the Loot' } }),
+  challenge('pirate-commercial', 'Erfinde in 20 Sekunden einen übertriebenen Werbespruch für den aktuellen Gang, als wäre er die größte Beute der Welt.', 'In 20 seconds, invent an exaggerated advertisement for the current course as though it were the world’s greatest treasure.', { durationSeconds: 20, title: { de: 'Reklame für die Beute', en: 'An Advert for the Loot' } }),
   challenge('friendly-salute', 'Grüße jede Person am Tisch einmal mit einem kleinen, selbst erfundenen Piratengruß, ohne jemanden zu berühren.', 'Give every person at the table a small invented pirate salute without touching anyone.', { title: { de: 'Der Gruß der ganzen Crew', en: 'A Salute for the Whole Crew' } }),
   challenge('compass-north', 'Zeige sehr überzeugt in eine beliebige Richtung und verkünde: „Dort ist Norden.“', 'Point confidently in any direction and announce, “That way is north.”', { title: { de: 'Der zweifelhafte Kompass', en: 'The Questionable Compass' } }),
-  challenge('imaginary-beard', 'Streiche zehn Sekunden nachdenklich über einen unsichtbaren langen Piratenbart und nicke dabei ernst.', 'Thoughtfully stroke an invisible long pirate beard for ten seconds while nodding seriously.', { title: { de: 'Der Bart des alten Seebären', en: 'The Old Sea Dog’s Beard' } }),
-  challenge('captain-inspection', 'Mustere den Tisch fünfzehn Sekunden wie ein Kapitän bei einer wichtigen Schiffsinspektion. Berühre und verändere dabei nichts.', 'Inspect the table for fifteen seconds like a captain conducting an important ship inspection. Touch and change nothing.', { title: { de: 'Inspektion an Deck', en: 'Inspection on Deck' } }),
+  challenge('imaginary-beard', 'Streiche zehn Sekunden nachdenklich über einen unsichtbaren langen Piratenbart und nicke dabei ernst.', 'Thoughtfully stroke an invisible long pirate beard for ten seconds while nodding seriously.', { durationSeconds: 10, title: { de: 'Der Bart des alten Seebären', en: 'The Old Sea Dog’s Beard' } }),
+  challenge('captain-inspection', 'Mustere den Tisch fünfzehn Sekunden wie ein Kapitän bei einer wichtigen Schiffsinspektion. Berühre und verändere dabei nichts.', 'Inspect the table for fifteen seconds like a captain conducting an important ship inspection. Touch and change nothing.', { durationSeconds: 15, title: { de: 'Inspektion an Deck', en: 'Inspection on Deck' } }),
   challenge('three-pirate-laughs', 'Führe nacheinander drei unterschiedliche Piratenlacher vor: leise, vornehm und völlig übertrieben.', 'Perform three different pirate laughs in sequence: quiet, refined, and wildly exaggerated.', { title: { de: 'Dreifaches Piratengelächter', en: 'Three Pirate Laughs' } }),
   challenge('cannon-countdown', 'Zählt gemeinsam von fünf herunter. Bei null ruft die aktive Person „Kanone!“, alle anderen machen ein kurzes, leises Explosionsgeräusch.', 'Count down together from five. At zero, the active player calls “Cannon!” and everyone else makes a brief, quiet explosion sound.', { title: { de: 'Die freundliche Bordkanone', en: 'The Friendly Deck Cannon' } }),
   challenge('message-bottle', 'Flüstere einen kurzen freundlichen Satz in eine imaginäre Flasche, verschließe sie pantomimisch und schiebe sie über den Tisch ins Meer.', 'Whisper a short friendly sentence into an imaginary bottle, mime sealing it, and send it across the table into the sea.', { title: { de: 'Post aus der Flasche', en: 'A Message in a Bottle' } }),
@@ -1779,24 +1904,24 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('invisible-knot', 'Erkläre der Crew mit reinen Handbewegungen, wie man einen völlig erfundenen Seemannsknoten bindet. Echtes Küchenmaterial bleibt liegen.', 'Use only hand gestures to teach the crew a completely invented sailor’s knot. Leave real kitchen items untouched.', { title: { de: 'Der Knoten, den keiner kennt', en: 'The Knot Nobody Knows' } }),
   challenge('gull-call', 'Imitiere einmal kurz und nicht zu laut eine Möwe. Blicke danach empört zur Decke, als wäre das Geräusch von dort gekommen.', 'Briefly imitate a seagull without being too loud. Then glare at the ceiling as though the sound came from there.', { title: { de: 'Die Möwe über der Kombüse', en: 'The Gull Above the Galley' } }),
   challenge('chair-ship-name', 'Gib deinem Stuhl einen würdevollen Schiffsnamen und stelle ihn der Crew in einem einzigen Satz vor.', 'Give your chair a dignified ship name and introduce it to the crew in a single sentence.', { title: { de: 'Die Taufe des Sitzschiffs', en: 'Naming the Chair-Ship' } }),
-  challenge('sea-monster', 'Beschreibe in zwanzig Sekunden ein freundliches Seeungeheuer, das am liebsten Küchenabfälle frisst und beim Kochen hilft.', 'In twenty seconds, describe a friendly sea monster that loves eating kitchen scraps and helping with cooking.', { title: { de: 'Das freundliche Ungeheuer', en: 'The Friendly Sea Monster' } }),
+  challenge('sea-monster', 'Beschreibe in zwanzig Sekunden ein freundliches Seeungeheuer, das am liebsten Küchenabfälle frisst und beim Kochen hilft.', 'In twenty seconds, describe a friendly sea monster that loves eating kitchen scraps and helping with cooking.', { durationSeconds: 20, title: { de: 'Das freundliche Ungeheuer', en: 'The Friendly Sea Monster' } }),
   challenge('treasure-inventory', 'Wähle drei harmlose sichtbare Gegenstände und führe sie mit übertrieben wertvollen Namen als Teil des Piratenschatzes auf.', 'Choose three harmless visible objects and list them as pirate treasure using extravagantly valuable names.', { title: { de: 'Inventur der kostbaren Beute', en: 'Inventory of Precious Loot' } }),
   challenge('ship-bell', 'Sage zweimal deutlich „Ding-ding“ und verkünde anschließend mit ernster Stimme den Beginn einer neuen Schiffswache.', 'Say “ding-ding” twice, then solemnly announce the beginning of a new ship’s watch.', { title: { de: 'Die unsichtbare Schiffsglocke', en: 'The Invisible Ship’s Bell' } }),
   challenge('mast-lookout', 'Steh auf, falls es sicher ist, schirme die Augen mit einer Hand ab und melde kurz, was du am Horizont siehst. Im Sitzen gilt es genauso.', 'Stand if safe, shade your eyes with one hand, and briefly report what you see on the horizon. Doing it seated counts equally.', { title: { de: 'Wache im Krähennest', en: 'Watch in the Crow’s Nest' } }),
-  challenge('distant-wave', 'Winke fünf Sekunden freundlich einem weit entfernten erfundenen Schiff zu und warte ernst auf eine Antwort.', 'Wave for five seconds at an imaginary distant ship and wait seriously for a reply.', { title: { de: 'Gruß an das ferne Schiff', en: 'Greeting the Distant Ship' } }),
+  challenge('distant-wave', 'Winke fünf Sekunden freundlich einem weit entfernten erfundenen Schiff zu und warte ernst auf eine Antwort.', 'Wave for five seconds at an imaginary distant ship and wait seriously for a reply.', { durationSeconds: 5, title: { de: 'Gruß an das ferne Schiff', en: 'Greeting the Distant Ship' } }),
   challenge('cutlery-vote', 'Lasst die Crew per Handzeichen entscheiden, ob Löffel oder Gabel das bessere Piratenwerkzeug ist. Die aktive Person verkündet das Ergebnis.', 'Have the crew vote by show of hands whether a spoon or fork is the better pirate tool. The active player announces the result.', { title: { de: 'Der große Besteckentscheid', en: 'The Great Cutlery Vote' } }),
   challenge('galley-motto', 'Erfindet gemeinsam ein kurzes Motto für eure Kombüse, das mit „Eine Crew, ein …“ beginnt.', 'Invent a short motto for your galley together beginning with “One crew, one …”.', { title: { de: 'Das Motto der Kombüse', en: 'The Galley Motto' } }),
   challenge('pirate-haiku', 'Dichte spontan drei sehr kurze Zeilen über Meer, Essen und Mannschaft. Reime sind ausdrücklich nicht nötig.', 'Improvise three very short lines about sea, food, and crew. Rhymes are explicitly unnecessary.', { title: { de: 'Drei Zeilen auf hoher See', en: 'Three Lines on the High Seas' } }),
   challenge('secret-wink', 'Zwinkere der nächsten Person, die dich direkt ansieht, einmal verschwörerisch zu. Verhalte dich danach wieder völlig normal.', 'Give one conspiratorial wink to the next person who looks directly at you. Then behave completely normally again.', { title: { de: 'Das verschwörerische Zwinkern', en: 'The Conspiratorial Wink' } }),
-  challenge('slow-motion-reach', 'Führe zehn Sekunden lang pantomimisch in Zeitlupe vor, wie du nach einem weit entfernten Schatz greifst. Greife nicht nach echten Gegenständen.', 'For ten seconds, mime reaching for a distant treasure in slow motion. Do not reach for real objects.', { title: { de: 'Die Beute in Zeitlupe', en: 'Treasure in Slow Motion' } }),
+  challenge('slow-motion-reach', 'Führe zehn Sekunden lang pantomimisch in Zeitlupe vor, wie du nach einem weit entfernten Schatz greifst. Greife nicht nach echten Gegenständen.', 'For ten seconds, mime reaching for a distant treasure in slow motion. Do not reach for real objects.', { durationSeconds: 10, title: { de: 'Die Beute in Zeitlupe', en: 'Treasure in Slow Motion' } }),
   challenge('anchor-drop', 'Mime mit beiden Händen, wie du vorsichtig einen schweren Anker hinablässt, und wische dir danach erleichtert die Stirn.', 'Mime carefully lowering a heavy anchor with both hands, then wipe your brow in relief.', { title: { de: 'Anker fallen lassen', en: 'Lowering the Anchor' } }),
-  challenge('captain-log', 'Sprich einen zwanzigsekündigen Eintrag für das Kapitänslogbuch: aktueller Gang, Stimmung der Crew und Zustand der See.', 'Deliver a twenty-second captain’s log entry covering the current course, crew morale, and state of the sea.', { title: { de: 'Eintrag ins Kapitänslogbuch', en: 'Captain’s Log Entry' } }),
+  challenge('captain-log', 'Sprich einen zwanzigsekündigen Eintrag für das Kapitänslogbuch: aktueller Gang, Stimmung der Crew und Zustand der See.', 'Deliver a twenty-second captain’s log entry covering the current course, crew morale, and state of the sea.', { durationSeconds: 20, title: { de: 'Eintrag ins Kapitänslogbuch', en: 'Captain’s Log Entry' } }),
   challenge('crew-flag', 'Beschreibt gemeinsam in höchstens einer Minute eine Flagge für eure Crew: Farbe, Symbol und einen völlig unnötigen Zusatz.', 'In no more than one minute, describe a flag for your crew: its colour, symbol, and one completely unnecessary extra detail.', { title: { de: 'Die Flagge der Mannschaft', en: 'The Crew’s Flag' } }),
   challenge('compass-crew', 'Die aktive Person ruft eine Himmelsrichtung. Alle zeigen sofort in die Richtung, die sie dafür halten; unterschiedliche Antworten sind ausdrücklich erlaubt.', 'The active player calls a compass direction. Everyone immediately points where they think it is; different answers are explicitly allowed.', { title: { de: 'Kompassprobe der Crew', en: 'The Crew Compass Test' } }),
-  challenge('treasure-guard', 'Verschränke zehn Sekunden die Arme und bewache eine unsichtbare Schatztruhe vor dir mit besonders ernstem Blick.', 'Fold your arms for ten seconds and guard an invisible treasure chest in front of you with an especially serious expression.', { title: { de: 'Wache vor der leeren Truhe', en: 'Guarding the Empty Chest' } }),
+  challenge('treasure-guard', 'Verschränke zehn Sekunden die Arme und bewache eine unsichtbare Schatztruhe vor dir mit besonders ernstem Blick.', 'Fold your arms for ten seconds and guard an invisible treasure chest in front of you with an especially serious expression.', { durationSeconds: 10, title: { de: 'Wache vor der leeren Truhe', en: 'Guarding the Empty Chest' } }),
   challenge('suspicious-cup', 'Mustere dein eigenes Getränk kurz misstrauisch, rieche nur aus sicherem Abstand daran und nicke dann erleichtert.', 'Briefly inspect your own drink with suspicion, smell it only from a safe distance, then nod with relief.', { title: { de: 'Der verdächtige Becher', en: 'The Suspicious Cup' } }),
-  challenge('crew-applause', 'Schenkt allen Personen mit einer laufenden oder bereits erledigten Küchenaufgabe gemeinsam fünf Sekunden Applaus.', 'Give everyone with a current or completed kitchen task five seconds of applause together.', { title: { de: 'Applaus für die Kombüse', en: 'Applause for the Galley' }, requirements: ['courseWorkStarted'] }),
-  challenge('storm-chorus', 'Erzeugt gemeinsam zehn Sekunden lang einen leisen Sturm nur mit Fingerschnippen, Händereiben und sanftem Klopfen.', 'Create a quiet ten-second storm together using only finger snaps, rubbing hands, and gentle tapping.', { title: { de: 'Der Sturm im Kleinformat', en: 'A Pocket-Sized Storm' } }),
+  challenge('crew-applause', 'Schenkt allen Personen mit einer laufenden oder bereits erledigten Küchenaufgabe gemeinsam fünf Sekunden Applaus.', 'Give everyone with a current or completed kitchen task five seconds of applause together.', { durationSeconds: 5, title: { de: 'Applaus für die Kombüse', en: 'Applause for the Galley' }, requirements: ['courseWorkStarted'] }),
+  challenge('storm-chorus', 'Erzeugt gemeinsam zehn Sekunden lang einen leisen Sturm nur mit Fingerschnippen, Händereiben und sanftem Klopfen.', 'Create a quiet ten-second storm together using only finger snaps, rubbing hands, and gentle tapping.', { durationSeconds: 10, title: { de: 'Der Sturm im Kleinformat', en: 'A Pocket-Sized Storm' } }),
   challenge('parrot-echo', 'Wiederhole das letzte Wort des nächsten vollständigen Satzes, den eine andere Person sagt, einmal leise wie ein Papagei.', 'Quietly repeat the final word of the next full sentence spoken by another player, like a parrot.', { title: { de: 'Das Echo des Papageis', en: 'The Parrot’s Echo' } }),
   challenge('secret-coordinate', 'Verkünde eine frei erfundene Schatzkoordinate aus Zahl, Buchstabe und Himmelsrichtung. Bestehe darauf, dass sie „ungefähr stimmen müsste“.', 'Announce an invented treasure coordinate containing a number, letter, and compass direction. Insist it “should be roughly correct.”', { title: { de: 'Die geheime Koordinate', en: 'The Secret Coordinate' } }),
   challenge('royal-taster', 'Rieche kurz in die Luft und erkläre mit wichtiger Stimme, dass die Kombüse die königliche Geschmacksprüfung bestanden hat.', 'Briefly sniff the air and announce importantly that the galley has passed the royal taste inspection.', { title: { de: 'Die königliche Geschmackswache', en: 'The Royal Taste Watch' } }),
@@ -1805,7 +1930,7 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('course-prophecy', 'Sage mit geheimnisvoller Stimme voraus, welche Geschmacksrichtung oder welcher Arbeitsschritt als Nächstes wichtig wird.', 'Mysteriously predict which flavour direction or work step will become important next.', { title: { de: 'Die Prophezeiung des Gangs', en: 'The Course Prophecy' } }),
   challenge('harbor-name', 'Erfinde für den aktuellen Raum einen prächtigen Piratenhafennamen und verkünde, dass ihr soeben dort angelegt habt.', 'Invent a grand pirate-harbour name for the current room and announce that the crew has just docked there.', { title: { de: 'Ein neuer Hafenname', en: 'A New Harbour Name' } }),
   challenge('cannonball-catch', 'Fange pantomimisch eine federleichte unsichtbare Kanonenkugel, bestaune sie kurz und lege sie vorsichtig ab.', 'Mime catching a feather-light invisible cannonball, admire it briefly, and set it down carefully.', { title: { de: 'Die federleichte Kanonenkugel', en: 'The Feather-Light Cannonball' } }),
-  challenge('shanty-hum', 'Summe fünfzehn Sekunden eine frei erfundene Seemannsmelodie. Die Crew darf im Takt mit einem Finger wippen.', 'Hum an invented sailor’s tune for fifteen seconds. The crew may keep time with one finger.', { title: { de: 'Die Melodie ohne Worte', en: 'The Wordless Shanty' } }),
+  challenge('shanty-hum', 'Summe fünfzehn Sekunden eine frei erfundene Seemannsmelodie. Die Crew darf im Takt mit einem Finger wippen.', 'Hum an invented sailor’s tune for fifteen seconds. The crew may keep time with one finger.', { durationSeconds: 15, title: { de: 'Die Melodie ohne Worte', en: 'The Wordless Shanty' } }),
   challenge('flag-signal', 'Erfinde mit beiden Händen ein einfaches Flaggensignal und erkläre der Crew anschließend, was es angeblich bedeutet.', 'Invent a simple flag signal using both hands, then tell the crew what it supposedly means.', { title: { de: 'Das Signal der unsichtbaren Flaggen', en: 'The Invisible Flag Signal' } }),
   challenge('captain-address', 'Sprich die jeweils aktive Person bis zu deinem nächsten Zug nur mit „Käpt’n“ an.', 'Until your next turn, address the active player only as “Captain.”', { coins: 3, title: { de: 'Alle heißen Käpt’n', en: 'Everyone Is Captain' }, flow: 'ongoing', endTrigger: 'ownerNextTurn' }),
   challenge('seated-wave', 'Startet eine kleine La-Ola-Welle einmal rund um den Tisch. Alle bleiben dabei sicher sitzen oder stehen ruhig am eigenen Platz.', 'Send a small Mexican wave once around the table. Everyone stays safely seated or stands calmly in their own place.', { title: { de: 'Die Welle rund ums Deck', en: 'The Wave Around the Deck' } }),
@@ -1815,38 +1940,37 @@ const WATCH_CHALLENGES = Object.freeze([
   challenge('skill-paper-balance', 'Lege einen gefalteten Zettel auf deinen Handrücken. Halte ihn dort 15 Sekunden und drehe das Handgelenk dabei einmal langsam nach links und zurück, ohne dass der Zettel herunterfällt.', 'Place a folded note on the back of your hand. Keep it there for 15 seconds while slowly turning your wrist left and back once without dropping the note.', { skillCheck: true, dexterity: true, durationSeconds: 15, title: { de: 'Fracht auf ruhiger Hand', en: 'Cargo on a Steady Hand' } }),
   challenge('skill-opposite-feet', 'Bleib sicher sitzen. Stelle bei einem Fuß nur die Ferse und beim anderen nur die Zehenspitzen auf den Boden. Tausche beide Positionen sechsmal in 15 Sekunden, ohne dass beide Füße gleichzeitig dieselbe Position haben.', 'Remain safely seated. Put only the heel of one foot and only the toes of the other on the floor. Swap both positions six times in 15 seconds without both feet ever taking the same position.', { skillCheck: true, dexterity: true, durationSeconds: 15, title: { de: 'Der verwirrte Deckschritt', en: 'The Tangled Deck Step' } }),
   challenge('skill-opposite-circles', 'Strecke beide Zeigefinger mit Abstand vor dir aus. Zeichne gleichzeitig fünf Kreise: links im Uhrzeigersinn, rechts gegen den Uhrzeigersinn. Richtungswechsel oder gleichlaufende Kreise bedeuten einen Fehlversuch; du hast zwei Versuche.', 'Hold both index fingers apart in front of you. Draw five circles at the same time: left clockwise, right counter-clockwise. Changing direction or making matching circles counts as a failed attempt; you get two attempts.', { skillCheck: true, dexterity: true, durationSeconds: 30, title: { de: 'Zwei Strudel voraus', en: 'Two Whirlpools Ahead' } }),
-  challenge('coop-ship-name-debate', '{activePlayer} und {partner}: Diskutiert höchstens 45 Sekunden, welcher Name besser zu eurem Piratenschiff passt: „Die Wilde Gabel“ oder „Der Tanzende Kessel“. Einigt euch auf einen Sieger.', '{activePlayer} and {partner}: Debate for no more than 45 seconds which name better suits your pirate ship: “The Wild Fork” or “The Dancing Cauldron.” Agree on a winner.', { cooperative: true, partnerCount: 1, title: { de: 'Der große Schiffsnamenstreit', en: 'The Great Ship-Name Debate' } }),
+  challenge('coop-ship-name-debate', '{activePlayer} und {partner}: Diskutiert höchstens 45 Sekunden, welcher Name besser zu eurem Piratenschiff passt: „Die Wilde Gabel“ oder „Der Tanzende Kessel“. Einigt euch auf einen Sieger.', '{activePlayer} and {partner}: Debate for no more than 45 seconds which name better suits your pirate ship: “The Wild Fork” or “The Dancing Cauldron.” Agree on a winner.', { cooperative: true, partnerCount: 1, durationSeconds: 45, title: { de: 'Der große Schiffsnamenstreit', en: 'The Great Ship-Name Debate' } }),
   challenge('coop-snack-debate', '{activePlayer} und {partner}: Diskutiert kurz, welcher harmlose Snack auf einer langen Piratenreise unverzichtbar wäre. Jede Person nennt genau ein Argument.', '{activePlayer} and {partner}: Briefly debate which harmless snack would be essential on a long pirate voyage. Each person gives exactly one argument.', { cooperative: true, partnerCount: 1, title: { de: 'Proviant vor Gericht', en: 'Provisions on Trial' } }),
-  challenge('coop-dance-invite', '{activePlayer}: Fordere {partner} zu einem sicheren 20-Sekunden-Piratentanz am eigenen Platz auf. Erfindet gemeinsam zwei einfache Bewegungen und wiederholt sie.', '{activePlayer}: Invite {partner} to a safe 20-second pirate dance at your own places. Invent two simple moves together and repeat them.', { cooperative: true, partnerCount: 1, title: { de: 'Tanzduell ohne Gegner', en: 'A Dance Duel without Rivals' } }),
+  challenge('coop-dance-invite', '{activePlayer}: Fordere {partner} zu einem sicheren 20-Sekunden-Piratentanz am eigenen Platz auf. Erfindet gemeinsam zwei einfache Bewegungen und wiederholt sie.', '{activePlayer}: Invite {partner} to a safe 20-second pirate dance at your own places. Invent two simple moves together and repeat them.', { cooperative: true, partnerCount: 1, durationSeconds: 20, title: { de: 'Tanzduell ohne Gegner', en: 'A Dance Duel without Rivals' } }),
   challenge('coop-handshake', '{activePlayer} und {partner}: Erfindet einen extravaganten Piratengruß aus drei kurzen Bewegungen. Handschlag, Faustgruß oder eine komplett berührungslose Variante sind gleichermaßen erlaubt.', '{activePlayer} and {partner}: Invent an extravagant pirate greeting made of three short moves. A handshake, fist bump, or entirely contact-free version are equally valid.', { cooperative: true, partnerCount: 1, title: { de: 'Der extravagante Piratengruß', en: 'The Extravagant Pirate Greeting' } }),
   challenge('coop-shanty-duet', '{activePlayer} und {partner}: Singt ein kurzes Duett. Eine Person beginnt mit „Hejo, hejo“, die andere antwortet „wir segeln los“, danach singt ihr die ganze Zeile gemeinsam.', '{activePlayer} and {partner}: Sing a short duet. One starts with “Heave-ho, heave-ho,” the other answers “off to sea we go,” then sing the whole line together.', { cooperative: true, partnerCount: 1, title: { de: 'Duett auf hoher See', en: 'Duet on the High Seas' } }),
   challenge('coop-mirror-captains', '{activePlayer} und {partner}: Stellt euch sicher gegenüber oder bleibt sitzen. Eine Person macht drei langsame Kapitänsposen vor, die andere versucht sie gleichzeitig zu spiegeln. Alle drei Spiegelungen müssen beim ersten Durchlauf stimmen.', '{activePlayer} and {partner}: Safely face each other or remain seated. One performs three slow captain poses while the other tries to mirror them at the same time. All three reflections must match on the first run.', { cooperative: true, partnerCount: 1, skillCheck: true, title: { de: 'Die Spiegelkapitäne', en: 'The Mirror Captains' } }),
-  challenge('coop-weather-dialogue', '{activePlayer} und {partner}: Gebt gemeinsam einen 30-sekündigen Seewetterbericht. Wechselt euch nach jedem Satz ab und erwähnt Wind, Wellen und Abendessen.', '{activePlayer} and {partner}: Give a 30-second sea-weather report together. Alternate after every sentence and mention wind, waves, and dinner.', { cooperative: true, partnerCount: 1, title: { de: 'Wetterstudio an Deck', en: 'The Deck Weather Studio' } }),
+  challenge('coop-weather-dialogue', '{activePlayer} und {partner}: Gebt gemeinsam einen 30-sekündigen Seewetterbericht. Wechselt euch nach jedem Satz ab und erwähnt Wind, Wellen und Abendessen.', '{activePlayer} and {partner}: Give a 30-second sea-weather report together. Alternate after every sentence and mention wind, waves, and dinner.', { cooperative: true, partnerCount: 1, durationSeconds: 30, title: { de: 'Wetterstudio an Deck', en: 'The Deck Weather Studio' } }),
   challenge('coop-pirate-rps', '{activePlayer} und {partner}: Spielt eine Runde „Papagei, Anker, Kanone“ nach den Regeln von Schere-Stein-Papier. Erfindet gemeinsam, welches Zeichen welches schlägt, bevor ihr spielt.', '{activePlayer} and {partner}: Play one round of “Parrot, Anchor, Cannon” using rock-paper-scissors rules. Agree which sign beats which before playing.', { cooperative: true, partnerCount: 1, title: { de: 'Papagei, Anker, Kanone', en: 'Parrot, Anchor, Cannon' } }),
   challenge('coop-secret-greeting', '{activePlayer} und {partner}: Erfindet wortlos einen gut sichtbaren Geheimgruß aus zwei Gesten und führt ihn danach genau einmal synchron vor. Stimmen Reihenfolge oder Timing nicht, ist der Versuch gescheitert.', '{activePlayer} and {partner}: Silently invent a clearly visible secret greeting made of two gestures, then perform it in sync exactly once. If the order or timing does not match, the attempt fails.', { cooperative: true, partnerCount: 1, skillCheck: true, title: { de: 'Der wortlose Bund', en: 'The Wordless Pact' } }),
-  challenge('coop-double-figurehead', '{activePlayer} und {partner}: Werdet für zehn Sekunden zu zwei unterschiedlichen Galionsfiguren desselben Schiffs. Eine blickt mutig, die andere dramatisch besorgt.', '{activePlayer} and {partner}: Become two different figureheads on the same ship for ten seconds. One looks brave, the other dramatically worried.', { cooperative: true, partnerCount: 1, title: { de: 'Doppelte Galionsfigur', en: 'Double Figurehead' } }),
+  challenge('coop-double-figurehead', '{activePlayer} und {partner}: Werdet für zehn Sekunden zu zwei unterschiedlichen Galionsfiguren desselben Schiffs. Eine blickt mutig, die andere dramatisch besorgt.', '{activePlayer} and {partner}: Become two different figureheads on the same ship for ten seconds. One looks brave, the other dramatically worried.', { cooperative: true, partnerCount: 1, durationSeconds: 10, title: { de: 'Doppelte Galionsfigur', en: 'Double Figurehead' } }),
   challenge('coop-command-echo', '{activePlayer} spricht drei harmlose Fantasiekommandos wie „Segel aus Käse setzen!“. {partner} wiederholt jedes Kommando mit maximaler Kapitänswürde.', '{activePlayer} gives three harmless imaginary commands such as “Raise the cheese sails!” {partner} repeats each with maximum captainly dignity.', { cooperative: true, partnerCount: 1, title: { de: 'Kommando und Echo', en: 'Command and Echo' } }),
   challenge('coop-compliment-duel', '{activePlayer} und {partner}: Macht euch abwechselnd je zwei kurze, ehrliche Komplimente. Jedes Kompliment muss etwas anderes betreffen.', '{activePlayer} and {partner}: Take turns giving each other two brief, genuine compliments. Every compliment must be about something different.', { cooperative: true, partnerCount: 1, title: { de: 'Das freundliche Komplimentduell', en: 'The Friendly Compliment Duel' } }),
   challenge('coop-pantomime-guess', '{activePlayer} stellt pantomimisch einen harmlosen Gegenstand auf einem Piratenschiff dar. {partner} hat drei Versuche, ihn zu erraten; echtes Küchenmaterial bleibt unberührt. Ohne richtige Antwort ist die Challenge gescheitert.', '{activePlayer} mimes a harmless object found on a pirate ship. {partner} gets three guesses; real kitchen equipment remains untouched. Without a correct answer, the challenge fails.', { cooperative: true, partnerCount: 1, skillCheck: true, title: { de: 'Pantomime unter Segeln', en: 'Mime under Sail' } }),
   challenge('coop-rhythm-copy', '{activePlayer} klopft mit zwei Fingern einen kurzen Rhythmus auf den Tisch. {partner} hat einen Versuch, ihn richtig zu wiederholen und genau einen Schlag zu ergänzen; danach spielt ihr die erweiterte Folge gemeinsam.', '{activePlayer} taps a short rhythm on the table. {partner} gets one attempt to repeat it correctly and add exactly one beat; then perform the extended sequence together.', { cooperative: true, partnerCount: 1, skillCheck: true, title: { de: 'Der wachsende Bordtakt', en: 'The Growing Deck Beat' } }),
-  challenge('coop-pirate-interview', '{activePlayer} interviewt {partner} 30 Sekunden als berühmte Piratenpersönlichkeit. Stellt zwei Fragen über ein erfundenes Abenteuer und beantwortet sie spontan.', '{activePlayer} interviews {partner} for 30 seconds as a famous pirate. Ask two questions about an imaginary adventure and answer them spontaneously.', { cooperative: true, partnerCount: 1, title: { de: 'Interview mit einer Legende', en: 'Interview with a Legend' } }),
+  challenge('coop-pirate-interview', '{activePlayer} interviewt {partner} 30 Sekunden als berühmte Piratenpersönlichkeit. Stellt zwei Fragen über ein erfundenes Abenteuer und beantwortet sie spontan.', '{activePlayer} interviews {partner} for 30 seconds as a famous pirate. Ask two questions about an imaginary adventure and answer them spontaneously.', { cooperative: true, partnerCount: 1, durationSeconds: 30, title: { de: 'Interview mit einer Legende', en: 'Interview with a Legend' } }),
   challenge('coop-air-map', '{activePlayer} und {partner}: Zeichnet abwechselnd mit einem Finger dieselbe unsichtbare Schatzkarte in die Luft. Eine Person zeichnet Insel und Weg, die andere ergänzt Schatz und Seeungeheuer.', '{activePlayer} and {partner}: Take turns drawing the same invisible treasure map in the air. One draws the island and route; the other adds treasure and a sea monster.', { cooperative: true, partnerCount: 1, title: { de: 'Die Schatzkarte in der Luft', en: 'The Treasure Map in the Air' } }),
   challenge('coop-synchronous-toast', '{activePlayer} und {partner}: Erfindet einen Trinkspruch mit höchstens acht Wörtern und sprecht ihn in genau einem Versuch exakt gleichzeitig. Eure vorhandenen Getränke oder leere imaginäre Gläser genügen.', '{activePlayer} and {partner}: Invent a toast of no more than eight words and say it at exactly the same time in one attempt. Your current drinks or empty imaginary glasses are enough.', { cooperative: true, partnerCount: 1, skillCheck: true, title: { de: 'Der synchrone Trinkspruch', en: 'The Synchronous Toast' } }),
   challenge('coop-one-word-story', '{activePlayer} und {partner}: Erzählt eine Piratengeschichte aus genau zwölf Wörtern, indem ihr immer abwechselnd nur ein Wort sagt. Versprecht ihr euch, wechselt ihr die Reihenfolge oder stimmt die Wortzahl nicht, ist die Challenge gescheitert.', '{activePlayer} and {partner}: Tell a pirate story of exactly twelve words by alternating one word at a time. If you misspeak, break the order, or end on the wrong word count, the challenge fails.', { cooperative: true, partnerCount: 1, skillCheck: true, title: { de: 'Zwölf Wörter Seemannsgarn', en: 'A Twelve-Word Sea Tale' } }),
-  challenge('coop-gull-dialogue', '{activePlayer} und {partner}: Führt fünfzehn Sekunden einen leisen Dialog zwischen zwei empörten Hafenmöwen. Niemand muss laut kreischen.', '{activePlayer} and {partner}: Perform a quiet fifteen-second dialogue between two indignant harbour gulls. Nobody needs to screech loudly.', { cooperative: true, partnerCount: 1, title: { de: 'Zwei Möwen beschweren sich', en: 'Two Gulls Complain' } }),
-  challenge('coop-rope-pull', '{activePlayer} und {partner}: Zieht zehn Sekunden gemeinsam an demselben unsichtbaren Tau. Bleibt an euren sicheren Plätzen und stimmt eure Bewegungen aufeinander ab.', '{activePlayer} and {partner}: Pull the same invisible rope together for ten seconds. Stay safely in place and coordinate your movements.', { cooperative: true, partnerCount: 1, title: { de: 'Gemeinsam am unsichtbaren Tau', en: 'Together on the Invisible Rope' } }),
+  challenge('coop-gull-dialogue', '{activePlayer} und {partner}: Führt fünfzehn Sekunden einen leisen Dialog zwischen zwei empörten Hafenmöwen. Niemand muss laut kreischen.', '{activePlayer} and {partner}: Perform a quiet fifteen-second dialogue between two indignant harbour gulls. Nobody needs to screech loudly.', { cooperative: true, partnerCount: 1, durationSeconds: 15, title: { de: 'Zwei Möwen beschweren sich', en: 'Two Gulls Complain' } }),
+  challenge('coop-rope-pull', '{activePlayer} und {partner}: Zieht zehn Sekunden gemeinsam an demselben unsichtbaren Tau. Bleibt an euren sicheren Plätzen und stimmt eure Bewegungen aufeinander ab.', '{activePlayer} and {partner}: Pull the same invisible rope together for ten seconds. Stay safely in place and coordinate your movements.', { cooperative: true, partnerCount: 1, durationSeconds: 10, title: { de: 'Gemeinsam am unsichtbaren Tau', en: 'Together on the Invisible Rope' } }),
   challenge('coop-three-voice-chorus', '{activePlayer}, {partner} und {partner2}: Singt zweimal gemeinsam: „Ai, ai, der Wind weht frei – unsere Crew ist mit dabei!“ Eine einfache selbst erfundene Melodie reicht.', '{activePlayer}, {partner}, and {partner2}: Sing together twice: “Aye, aye, the wind blows free — our brave crew sails the sea!” Any simple invented melody is enough.', { cooperative: true, partnerCount: 2, title: { de: 'Der dreistimmige Piratenchor', en: 'The Three-Voice Pirate Chorus' } }),
-  challenge('coop-island-debate', '{activePlayer}, {partner} und {partner2}: Diskutiert 45 Sekunden, was auf einer perfekten Schatzinsel wichtiger ist: Schatten, Obst oder eine Hängematte. Jede Person verteidigt eine Sache.', '{activePlayer}, {partner}, and {partner2}: Debate for 45 seconds what matters most on a perfect treasure island: shade, fruit, or a hammock. Each person defends one.', { cooperative: true, partnerCount: 2, title: { de: 'Rat der Schatzinsel', en: 'Treasure Island Council' } }),
-  challenge('coop-sea-soundscape', '{activePlayer}, {partner} und {partner2}: Erzeugt gemeinsam zehn Sekunden Meereskulisse. Eine Person macht Wind, eine Wellen und eine eine leise Möwe.', '{activePlayer}, {partner}, and {partner2}: Create a ten-second seascape together. One makes wind, one waves, and one a quiet gull.', { cooperative: true, partnerCount: 2, title: { de: 'Das kleine Meereshörspiel', en: 'The Tiny Sea Soundscape' } }),
+  challenge('coop-island-debate', '{activePlayer}, {partner} und {partner2}: Diskutiert 45 Sekunden, was auf einer perfekten Schatzinsel wichtiger ist: Schatten, Obst oder eine Hängematte. Jede Person verteidigt eine Sache.', '{activePlayer}, {partner}, and {partner2}: Debate for 45 seconds what matters most on a perfect treasure island: shade, fruit, or a hammock. Each person defends one.', { cooperative: true, partnerCount: 2, durationSeconds: 45, title: { de: 'Rat der Schatzinsel', en: 'Treasure Island Council' } }),
+  challenge('coop-sea-soundscape', '{activePlayer}, {partner} und {partner2}: Erzeugt gemeinsam zehn Sekunden Meereskulisse. Eine Person macht Wind, eine Wellen und eine eine leise Möwe.', '{activePlayer}, {partner}, and {partner2}: Create a ten-second seascape together. One makes wind, one waves, and one a quiet gull.', { cooperative: true, partnerCount: 2, durationSeconds: 10, title: { de: 'Das kleine Meereshörspiel', en: 'The Tiny Sea Soundscape' } }),
   challenge('coop-pose-sequence', '{activePlayer}, {partner} und {partner2}: Erfindet drei sichere Piratenposen und zeigt sie danach in genau einem Versuch gleichzeitig in derselben Reihenfolge. Im Sitzen gilt die Aufgabe genauso.', '{activePlayer}, {partner}, and {partner2}: Invent three safe pirate poses, then perform them together in the same order and at the same time in exactly one attempt. Doing them seated counts equally.', { cooperative: true, partnerCount: 2, skillCheck: true, title: { de: 'Die Pose der drei Freibeuter', en: 'Pose of the Three Freebooters' } }),
   challenge('coop-three-line-poem', '{activePlayer}, {partner} und {partner2}: Dichtet ein dreizeiliges Piratengedicht. Jede Person erfindet genau eine Zeile; Reime sind nicht erforderlich.', '{activePlayer}, {partner}, and {partner2}: Create a three-line pirate poem. Each person invents exactly one line; rhymes are not required.', { cooperative: true, partnerCount: 2, title: { de: 'Drei Zeilen, drei Piraten', en: 'Three Lines, Three Pirates' } }),
   challenge('coop-ship-name-jury', '{activePlayer} nennt zwei absurde Schiffsnamen. {partner} und {partner2} beraten kurz als Jury und verkünden gemeinsam den Sieger.', '{activePlayer} proposes two absurd ship names. {partner} and {partner2} briefly deliberate as judges and announce the winner together.', { cooperative: true, partnerCount: 2, title: { de: 'Das Schiffsnamen-Gericht', en: 'The Ship-Name Court' } }),
   challenge('coop-cannonball-circle', '{activePlayer}, {partner} und {partner2}: Reicht eine federleichte unsichtbare Kanonenkugel einmal im Kreis weiter. Jede Person verändert pantomimisch ihr Gewicht.', '{activePlayer}, {partner}, and {partner2}: Pass a feather-light invisible cannonball around once. Each person changes its imaginary weight.', { cooperative: true, partnerCount: 2, title: { de: 'Die wandernde Kanonenkugel', en: 'The Travelling Cannonball' } }),
   challenge('coop-compliment-chain', '{activePlayer} macht {partner} ein ehrliches Kompliment, {partner} macht {partner2} eines und {partner2} schließt die Kette mit einem Kompliment an {activePlayer}.', '{activePlayer} gives {partner} a genuine compliment, {partner} gives one to {partner2}, and {partner2} closes the chain by complimenting {activePlayer}.', { cooperative: true, partnerCount: 2, title: { de: 'Die Komplimentkette', en: 'The Compliment Chain' } }),
   challenge('coop-human-compass', '{activePlayer}, {partner} und {partner2}: Wählt gemeinsam Norden, Osten und Westen im Raum. Auf Kommando zeigt jede Person gleichzeitig in eine andere vereinbarte Richtung.', '{activePlayer}, {partner}, and {partner2}: Agree where north, east, and west are in the room. On command, each points simultaneously in a different agreed direction.', { cooperative: true, partnerCount: 2, title: { de: 'Der dreiköpfige Kompass', en: 'The Three-Headed Compass' } }),
-  challenge('coop-mini-orchestra', '{activePlayer}, {partner} und {partner2}: Spielt fünfzehn Sekunden als Mini-Bordorchester. Eine Person summt, eine klopft mit zwei Fingern den Takt und eine macht leise Windgeräusche.', '{activePlayer}, {partner}, and {partner2}: Perform for fifteen seconds as a tiny deck orchestra. One hums, one taps the beat with two fingers, and one makes quiet wind sounds.', { cooperative: true, partnerCount: 2, title: { de: 'Das Mini-Bordorchester', en: 'The Tiny Deck Orchestra' } }),
-  ...LONG_COURSE_CHALLENGES,
-  challenge('five-minute-break', 'Fünf Minuten Pause: Trinkt etwas, setzt euch hin und lasst die Küche sicher ruhen. Laufende Geräte bleiben natürlich beaufsichtigt.', 'Five-minute break: have a drink, sit down, and let the kitchen rest safely. Running appliances must of course remain supervised.', { minutes: 5, coins: 0, title: { de: 'Ruhiges Fahrwasser', en: 'Calm Waters' } })
+  challenge('coop-mini-orchestra', '{activePlayer}, {partner} und {partner2}: Spielt fünfzehn Sekunden als Mini-Bordorchester. Eine Person summt, eine klopft mit zwei Fingern den Takt und eine macht leise Windgeräusche.', '{activePlayer}, {partner}, and {partner2}: Perform for fifteen seconds as a tiny deck orchestra. One hums, one taps the beat with two fingers, and one makes quiet wind sounds.', { cooperative: true, partnerCount: 2, durationSeconds: 15, title: { de: 'Das Mini-Bordorchester', en: 'The Tiny Deck Orchestra' } }),
+  ...LONG_COURSE_CHALLENGES
 ]);
 
 function validateEventCatalog() {
@@ -2538,10 +2662,6 @@ const clone = (value) => typeof structuredClone === 'function'
 
 const TASK_ASSIGNEE_CHOICE_INTERVAL = 3;
 const MAX_INGREDIENTS_PER_TURN = 2;
-const DEFAULT_FUN_CARDS_PER_CHAPTER = 16;
-const MAIN_FUN_CARDS_PER_CHAPTER = 144;
-const DEFAULT_STORY_QUIZZES_PER_CHAPTER = 3;
-const MAIN_STORY_QUIZZES_PER_CHAPTER = 6;
 const MAX_EVENT_CHAIN_DEPTH = 2;
 const COCKTAIL_CHAPTER_INDEX = CHAPTERS.findIndex((chapter) => chapter.id === 'cocktails');
 const RETIRED_INGREDIENT_IDS = new Set(['yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'juices']);
@@ -2612,7 +2732,6 @@ function chapterState(playerIds, chapterIndex = 0) {
     scheduledChallenges: [],
     funCardIdsDrawn: [],
     storyQuizIdsDrawn: [],
-    nextStoryQuizAt: 4,
     portionCaptainPlayerId: null,
     soupReady: false,
     cauldronWatchIntervals: 0,
@@ -2622,6 +2741,7 @@ function chapterState(playerIds, chapterIndex = 0) {
     cocktailTechniques: { alcoholic: null, 'alcohol-free': null },
     cocktailSpiritTarget: null,
     autoLockedIngredientIds: [],
+    eventDeckHistory: [],
     courseStyle: chapterIndex === 1 ? null : 'not-required',
     stage: chapterIndex === 0 ? 'tasks' : 'clearing'
   };
@@ -2642,6 +2762,7 @@ function freshTurn() {
     chainEventIds: [],
     chainEventSignatures: [],
     chainEventChoiceSignatures: [],
+    forcedEventDeckKind: null,
     pendingIngredientIds: [],
     pendingContext: null,
     previousPhase: null,
@@ -2678,6 +2799,7 @@ function freshTurn() {
     storyAnswerId: null,
     storyAnswerCorrect: null,
     storyCoinDelta: null,
+    pendingCardOffer: null,
     coinChangeRequested: null,
     coinChangeModified: null,
     coinChangeApplied: null,
@@ -2731,7 +2853,7 @@ function reconcileEventQueues(chapterIndex, chapterQueues, drawnEventIds = []) {
     result[stage].forEach((queue, locationIndex) => {
       result[stage][locationIndex] = queue.filter((eventId) => {
         const event = eventById(eventId);
-        if (!event || event.chapterId !== CHAPTERS[chapterIndex].id || event.stage !== stage ||
+        if (!event || isNonFundamentalEvent(event) || event.chapterId !== CHAPTERS[chapterIndex].id || event.stage !== stage ||
           event.locationIndex !== locationIndex || drawn.has(eventId) || queued.has(eventId)) return false;
         queued.add(eventId);
         return true;
@@ -2739,7 +2861,7 @@ function reconcileEventQueues(chapterIndex, chapterQueues, drawnEventIds = []) {
     });
   });
   EVENT_DECKS[chapterIndex].forEach((event) => {
-    if (queued.has(event.id) || drawn.has(event.id)) return;
+    if (isNonFundamentalEvent(event) || queued.has(event.id) || drawn.has(event.id)) return;
     result[event.stage][event.locationIndex].unshift(event.id);
     queued.add(event.id);
   });
@@ -2925,7 +3047,6 @@ class GameEngine {
     this.state.chapter.scheduledChallenges ??= [];
     this.state.chapter.funCardIdsDrawn ??= [];
     this.state.chapter.storyQuizIdsDrawn ??= [];
-    this.state.chapter.nextStoryQuizAt ??= 4;
     this.state.chapter.portionCaptainPlayerId ??= null;
     this.state.chapter.soupReady ??= false;
     this.state.chapter.cauldronWatchIntervals ??= 0;
@@ -2940,6 +3061,9 @@ class GameEngine {
       this.state.chapter.cocktailSpiritTarget = fixedSpiritCount ? Math.min(3, fixedSpiritCount) : null;
     } else this.state.chapter.cocktailSpiritTarget ??= null;
     this.state.chapter.autoLockedIngredientIds ??= [];
+    this.state.chapter.eventDeckHistory = (this.state.chapter.eventDeckHistory ?? [])
+      .filter((kind) => ['fundamental', 'nonFundamental'].includes(kind))
+      .slice(-2);
     this.state.chapter.courseStyle ??= this.state.chapterIndex === 1 ? null : 'not-required';
     if (this.state.chapter.stage === 'ingredients') {
       this.autoLockExpiringIngredients(this.state.updatedAt ?? Date.now());
@@ -2973,6 +3097,45 @@ class GameEngine {
     const shuffledMissingFunCards = shuffle(missingFunCardIds, this.state.rngState || 1);
     this.state.rngState = shuffledMissingFunCards.state;
     this.state.funCardQueue = [...retainedFunCardIds, ...shuffledMissingFunCards.value];
+    this.state.blessingTargets ??= {};
+    const legacyBlessings = [
+      ...(this.state.chapter.scheduledChallenges ?? []),
+      ...(this.state.chapter.queuedChallenges ?? [])
+    ].filter((entry) => WATCH_CHALLENGES.find((challenge) => challenge.id === entry.id)?.cardKind === 'blessing');
+    legacyBlessings.forEach((entry) => { this.state.blessingTargets[entry.id] = entry.targetPlayerId; });
+    this.state.chapter.scheduledChallenges = [];
+    this.state.chapter.queuedChallenges = [];
+    const drawnNonFundamentalIds = new Set([
+      ...(this.state.eventsDrawn ?? []),
+      ...(this.state.funCardsDrawn ?? [])
+    ]);
+    const nonFundamentalEvents = EVENT_DECKS.flat().filter(isNonFundamentalEvent).map((event) => event.id);
+    const ordinaryChallengeIds = WATCH_CHALLENGES
+      .filter((challenge) => !challenge.followUpOnly)
+      .map((challenge) => challenge.id);
+    const unlockedQuizIds = this.state.storyQuizQueue.filter((id) => this.storyQuizPrerequisitesMet(storyCardById(id)));
+    const blessingIds = [...new Set([
+      ...legacyBlessings.map((entry) => entry.id),
+      ...Object.keys(this.state.blessingTargets)
+    ])];
+    const knownNonFundamentalIds = new Set([
+      ...nonFundamentalEvents,
+      ...ordinaryChallengeIds,
+      ...unlockedQuizIds,
+      ...blessingIds
+    ]);
+    const retainedNonFundamentalIds = [...new Set((this.state.nonFundamentalQueue ?? []).filter((id) =>
+      knownNonFundamentalIds.has(id) && !drawnNonFundamentalIds.has(id)
+    ))];
+    const missingNonFundamentalIds = [...knownNonFundamentalIds]
+      .filter((id) => !drawnNonFundamentalIds.has(id) && !retainedNonFundamentalIds.includes(id));
+    const shuffledMissingNonFundamental = shuffle(missingNonFundamentalIds, this.state.rngState || 1);
+    this.state.rngState = shuffledMissingNonFundamental.state;
+    this.state.nonFundamentalQueue = [...retainedNonFundamentalIds, ...shuffledMissingNonFundamental.value];
+    const requestedLockId = this.state.nonFundamentalLockedCardId;
+    this.state.nonFundamentalLockedCardId = requestedLockId && this.state.nonFundamentalQueue.includes(requestedLockId)
+      ? requestedLockId
+      : blessingIds.find((id) => this.state.nonFundamentalQueue.includes(id)) ?? null;
     this.state.turnsElapsed ??= this.state.players.reduce((total, player) => total + (player.turns ?? 0), 0);
     const validBusyAnchor = Number.isInteger(this.state.busyAfterPlayerIndex) &&
       this.state.busyAfterPlayerIndex >= 0 && this.state.busyAfterPlayerIndex < this.state.players.length;
@@ -3088,23 +3251,13 @@ class GameEngine {
           const locationEvents = EVENT_DECKS[chapterIndex]
             .filter((event) => event.locationIndex === locationIndex && event.stage === stage);
           const ids = locationEvents
-            .filter((event) => !['pantry-mischief', 'work-mischief'].includes(event.archetype))
+            .filter((event) => !isNonFundamentalEvent(event) && event.archetype !== 'pantry-mischief')
             .map((event) => event.id);
           const shuffled = shuffle(ids, rngState);
           rngState = shuffled.state;
           const queue = [...shuffled.value];
           const pantryFun = locationEvents.filter((event) => event.archetype === 'pantry-mischief');
           pantryFun.forEach((event) => queue.splice(Math.min(2, queue.length), 0, event.id));
-          const taskFunIds = locationEvents
-            .filter((event) => event.archetype === 'work-mischief')
-            .map((event) => event.id);
-          const shuffledFun = shuffle(taskFunIds, rngState);
-          rngState = shuffledFun.state;
-          if (stage === 'tasks' && chapterIndex === 0 && locationIndex === 0) {
-            queue.unshift(...shuffledFun.value);
-          } else if (stage === 'tasks') {
-            shuffledFun.value.forEach((eventId, index) => queue.splice(Math.min(index * 2 + 1, queue.length), 0, eventId));
-          }
           stageQueues[stage].push(queue);
         }
       }
@@ -3133,6 +3286,13 @@ class GameEngine {
 
     const storyQuizDeck = shuffle(STORY_QUIZ_CARDS.map((card) => card.id), rngState);
     rngState = storyQuizDeck.state;
+
+    const globalNonFundamentalCards = [
+      ...EVENT_DECKS.flat().filter(isNonFundamentalEvent).map((event) => event.id),
+      ...funCardDeck.value.filter((id) => !WATCH_CHALLENGES.find((challenge) => challenge.id === id)?.followUpOnly)
+    ];
+    const nonFundamentalDeck = shuffle(globalNonFundamentalCards, rngState);
+    rngState = nonFundamentalDeck.state;
 
     const state = {
       version: STATE_VERSION,
@@ -3175,6 +3335,9 @@ class GameEngine {
       visitedLocationIds: [],
       storyQuizQueue: storyQuizDeck.value,
       funCardQueue: funCardDeck.value,
+      nonFundamentalQueue: nonFundamentalDeck.value,
+      nonFundamentalLockedCardId: null,
+      blessingTargets: {},
       funCardsDrawn: [],
       discardedEvents: [],
       tasks: [],
@@ -3375,6 +3538,22 @@ class GameEngine {
     return completed.length;
   }
 
+  resolveSecretTriggerCurses(triggerKind, now = Date.now(), actorPlayerId = null) {
+    const completed = this.state.activeChallenges.filter((instance) => {
+      if (instance.endTrigger !== 'secretTrigger' || instance.triggerKind !== triggerKind) return false;
+      return !actorPlayerId || instance.ownerPlayerId !== actorPlayerId;
+    });
+    completed.forEach((instance) => this.completeActiveChallenge(instance, `secretTrigger:${triggerKind}`, now));
+    return completed.length;
+  }
+
+  releaseTriggeredCurse(instanceId, now = Date.now()) {
+    const instance = this.state.activeChallenges.find((entry) =>
+      entry.instanceId === instanceId && entry.endTrigger === 'secretTrigger'
+    );
+    return instance ? this.completeActiveChallenge(instance, `secretTrigger:${instance.triggerKind}`, now) : false;
+  }
+
   expireActiveChallenges(reason, now = Date.now()) {
     const expired = [...this.state.activeChallenges];
     this.state.activeChallenges = [];
@@ -3388,33 +3567,39 @@ class GameEngine {
 
   scheduleFollowUp(challenge, targetPlayerId, now = Date.now()) {
     if (!challenge?.followUpId || !targetPlayerId) return false;
-    const delay = randomInt(this.state.rngState, 3, 5);
+    if (this.state.nonFundamentalLockedCardId || this.state.blessingTargets?.[challenge.followUpId]) return false;
+    const delay = randomInt(this.state.rngState, 3, 10);
     this.state.rngState = delay.state;
-    const scheduled = {
-      id: challenge.followUpId,
-      targetPlayerId,
-      dueTurn: this.state.turnsElapsed + delay.value,
-      delayTurns: delay.value,
-      scheduledAt: now
-    };
-    this.state.chapter.scheduledChallenges.push(scheduled);
+    const queue = this.state.nonFundamentalQueue ?? [];
+    const existingIndex = queue.indexOf(challenge.followUpId);
+    if (existingIndex >= 0) queue.splice(existingIndex, 1);
+    const insertionIndex = Math.min(delay.value, queue.length);
+    queue.splice(insertionIndex, 0, challenge.followUpId);
+    this.state.nonFundamentalQueue = queue;
+    this.state.nonFundamentalLockedCardId = challenge.followUpId;
+    this.state.blessingTargets ??= {};
+    this.state.blessingTargets[challenge.followUpId] = targetPlayerId;
+    const scheduled = { id: challenge.followUpId, targetPlayerId, cardDistance: insertionIndex, delayTurns: delay.value, scheduledAt: now };
     this.log('watchFollowUpScheduled', scheduled, now);
     return true;
   }
 
   releaseDueFollowUps(force = false, now = Date.now()) {
-    const scheduled = this.state.chapter.scheduledChallenges ?? [];
-    const due = scheduled.filter((entry) => force || entry.dueTurn <= this.state.turnsElapsed);
-    if (!due.length) return 0;
-    this.state.chapter.scheduledChallenges = scheduled.filter((entry) => !due.includes(entry));
-    due.forEach((entry) => this.state.chapter.queuedChallenges.push({ id: entry.id, targetPlayerId: entry.targetPlayerId }));
-    this.log('watchFollowUpsReleased', { challengeIds: due.map((entry) => entry.id), forced: force }, now);
-    return due.length;
+    return 0;
   }
 
   unresolvedFollowUpCount() {
-    const active = this.state.activeChallenges.filter((instance) => instance.endTrigger === 'followUp').length;
-    return active + (this.state.chapter.scheduledChallenges?.length ?? 0) + (this.state.chapter.queuedChallenges?.length ?? 0);
+    const unresolved = new Set();
+    this.state.activeChallenges
+      .filter((instance) => instance.endTrigger === 'followUp')
+      .forEach((instance) => {
+        const curse = WATCH_CHALLENGES.find((entry) => entry.id === instance.challengeId);
+        unresolved.add(`${curse?.followUpId ?? instance.challengeId}:${instance.ownerPlayerId}`);
+      });
+    Object.entries(this.state.blessingTargets ?? {}).forEach(([blessingId, targetPlayerId]) => {
+      unresolved.add(`${blessingId}:${targetPlayerId}`);
+    });
+    return unresolved.size;
   }
 
   get activeGroup() {
@@ -4352,9 +4537,124 @@ class GameEngine {
   }
 
   eventQueueForCard(event = this.currentEvent) {
+    if (isNonFundamentalEvent(event)) return this.state.nonFundamentalQueue ?? [];
     return event
       ? this.state.eventQueues[this.state.chapterIndex]?.[event.stage]?.[event.locationIndex] ?? this.eventQueue(event.stage)
       : [];
+  }
+
+  fundamentalCardAvailable(stage = this.currentEventStage(), group = this.activeGroup) {
+    if (stage === 'cooking') return false;
+    const alreadyDrawn = new Set(this.state.eventsDrawn);
+    const stageQueues = this.state.eventQueues[this.state.chapterIndex]?.[stage] ?? [];
+    const preferredQueue = this.eventQueue(stage, group);
+    const queues = [preferredQueue, ...stageQueues.filter((queue) => queue !== preferredQueue)];
+    return queues.some((queue) => queue.some((eventId) => {
+      const candidate = eventById(eventId);
+      if (!candidate || alreadyDrawn.has(eventId) || isNonFundamentalEvent(candidate)) return false;
+      const contextualized = this.contextualizeEvent(candidate);
+      const actions = contextualized.type === 'choice' ? contextualized.options : contextualized.outcomes;
+      return (actions ?? []).length > 0;
+    }));
+  }
+
+  nonFundamentalCardsAvailable() {
+    return (this.state.nonFundamentalQueue ?? []).some((id) => this.nonFundamentalCardAvailable(id));
+  }
+
+  nextEventDeckKind({ consumeRandom = false } = {}) {
+    if (this.pendingLocationStoryForCurrentChapter() && this.state.turn.chainDepth === 0) return 'story';
+    if (['fundamental', 'nonFundamental'].includes(this.state.turn.forcedEventDeckKind)) {
+      return this.state.turn.forcedEventDeckKind;
+    }
+    if (this.state.turn.chainDepth > 0) return 'nonFundamental';
+    const stage = this.currentEventStage();
+    const fundamentalAvailable = this.fundamentalCardAvailable(stage);
+    const nonFundamentalAvailable = this.nonFundamentalCardsAvailable();
+    if (!fundamentalAvailable) return nonFundamentalAvailable ? 'nonFundamental' : null;
+    if (!nonFundamentalAvailable) return 'fundamental';
+    const history = this.state.chapter.eventDeckHistory ?? [];
+    const recent = history.slice(-2);
+    if (recent.length === 2 && recent[0] === recent[1]) {
+      return recent[0] === 'fundamental' ? 'nonFundamental' : 'fundamental';
+    }
+    const selection = randomInt(this.state.rngState, 0, 1);
+    if (consumeRandom) this.state.rngState = selection.state;
+    return selection.value === 0 ? 'fundamental' : 'nonFundamental';
+  }
+
+  recordEventDeckDraw(kind) {
+    if (!['fundamental', 'nonFundamental'].includes(kind)) return false;
+    this.state.chapter.eventDeckHistory ??= [];
+    this.state.chapter.eventDeckHistory.push(kind);
+    this.state.chapter.eventDeckHistory = this.state.chapter.eventDeckHistory.slice(-2);
+    return true;
+  }
+
+  nonFundamentalCard(cardId) {
+    const story = storyCardById(cardId);
+    if (story?.storyKind === 'quiz') return story;
+    const challenge = WATCH_CHALLENGES.find((entry) => entry.id === cardId);
+    if (challenge) return challenge;
+    const event = eventById(cardId);
+    return event && isNonFundamentalEvent(event) ? event : null;
+  }
+
+  shuffleNonFundamentalDeck(now = Date.now(), reason = 'shuffle') {
+    const queue = this.state.nonFundamentalQueue ?? [];
+    const lockIndex = this.state.nonFundamentalLockedCardId
+      ? queue.indexOf(this.state.nonFundamentalLockedCardId)
+      : -1;
+    const shuffleStart = lockIndex >= 0 ? lockIndex + 1 : 0;
+    const shuffled = shuffle(queue.slice(shuffleStart), this.state.rngState);
+    this.state.rngState = shuffled.state;
+    this.state.nonFundamentalQueue = [...queue.slice(0, shuffleStart), ...shuffled.value];
+    this.log('nonFundamentalDeckShuffled', {
+      reason,
+      lockedCardId: lockIndex >= 0 ? this.state.nonFundamentalLockedCardId : null,
+      shuffledCards: shuffled.value.length
+    }, now);
+    return true;
+  }
+
+  unlockEligibleStoryQuizzes(now = Date.now()) {
+    const queue = this.state.nonFundamentalQueue ?? [];
+    const drawn = new Set(this.state.eventsDrawn);
+    const newlyUnlocked = this.state.storyQuizQueue.filter((id) => {
+      const card = storyCardById(id);
+      return !drawn.has(id) && !queue.includes(id) && this.storyQuizPrerequisitesMet(card);
+    });
+    if (!newlyUnlocked.length) return [];
+    queue.push(...newlyUnlocked);
+    this.state.nonFundamentalQueue = queue;
+    this.shuffleNonFundamentalDeck(now, 'quizUnlocked');
+    this.log('storyQuizzesUnlocked', { storyQuizIds: newlyUnlocked }, now);
+    return newlyUnlocked;
+  }
+
+  fundamentalCardsComplete() {
+    const chapterTasks = this.state.tasks.filter((instance) => instance.chapterIndex === this.state.chapterIndex);
+    const tasksComplete = !this.hasUnassignedCourseTasks() && chapterTasks.length > 0 &&
+      chapterTasks.every((instance) => instance.status === 'done');
+    const ingredientsComplete = this.state.chapterIndex === 0 || this.ingredientsLockedForCourse();
+    const storiesComplete = !this.state.pendingLocationStoryIds.some((id) => storyCardById(id)?.chapterIndex === this.state.chapterIndex);
+    return tasksComplete && ingredientsComplete && storiesComplete;
+  }
+
+  nonFundamentalCardAvailable(cardId) {
+    const card = this.nonFundamentalCard(cardId);
+    if (!card) return false;
+    if (card.storyKind === 'quiz') return this.storyQuizPrerequisitesMet(card);
+    if (card.stage) {
+      const contextualized = this.contextualizeEvent(card);
+      if (contextualized.orderedCoinRoll && this.state.turn.chainDepth >= MAX_EVENT_CHAIN_DEPTH) return false;
+      const actions = contextualized.type === 'choice' ? contextualized.options : contextualized.outcomes;
+      return (actions ?? []).length > 0;
+    }
+    if (card.cardKind === 'blessing') return Boolean(this.state.blessingTargets?.[card.id]);
+    if (card.cardKind === 'curse' && this.fundamentalCardsComplete()) return false;
+    if (card.followUpId && this.unresolvedFollowUpCount() > 0) return false;
+    return !this.state.funCardsDrawn.includes(card.id) && this.challengeRequirementsMet(card);
   }
 
   actionAvailable(actionCode) {
@@ -4377,11 +4677,18 @@ class GameEngine {
       case 'watchChallengeAlt':
       case 'treasureAndWatch': return ['ingredients', 'tasks', 'cooking'].includes(this.currentEventStage()) &&
         this.watchChallengeCandidates(actionCode).length > 0;
-      case 'fiveMinuteBreak': return ['ingredients', 'cooking'].includes(this.currentEventStage()) && !this.hasOpenTasks() &&
-        this.state.chapter.funCardIdsDrawn.length < this.funCardLimit() &&
-        !this.state.funCardsDrawn.includes('five-minute-break');
+      case 'drawAnyQuiz': return this.storyQuizCandidates().length > 0;
+      case 'drawIslandQuiz': return this.storyQuizCandidates('island-detail').length > 0;
+      case 'drawLocationQuiz': return this.storyQuizCandidates('location-detail').length > 0;
+      case 'drawRouteQuiz': return this.storyQuizCandidates('route').length > 0;
+      case 'drawSoloFun': return this.funCardCandidates('solo').length > 0;
+      case 'drawCoopFun': return this.funCardCandidates('coop').length > 0;
+      case 'chooseNamedQuiz': return this.storyQuizCandidates().length >= 2;
+      case 'chooseNamedFun': return this.funCardCandidates('any', { named: true }).length >= 2;
       case 'treasure':
-      case 'coinLoss': return true;
+      case 'treasureSmall':
+      case 'coinLoss':
+      case 'coinLossSmall': return true;
       case 'chain':
       case 'treasureAndChain': return this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH;
       default: return false;
@@ -4398,7 +4705,7 @@ class GameEngine {
   }
 
   contextualizeEvent(event) {
-    event = contextualizeEventLocation(event, this.activeGroup.locationIndex);
+    event = contextualizeEventLocation(event, this.activeGroup.locationIndex, this.state.chapterIndex);
     const fallbacks = this.fallbackActions(event.stage);
     if (event.type === 'choice') {
       const options = [...new Set((event.options ?? []).filter((action) => this.actionAvailable(action)))];
@@ -4461,10 +4768,6 @@ class GameEngine {
     });
   }
 
-  funCardLimit() {
-    return this.currentChapter.id === 'main' ? MAIN_FUN_CARDS_PER_CHAPTER : DEFAULT_FUN_CARDS_PER_CHAPTER;
-  }
-
   mainOvenJourneyStarted() {
     if (this.currentChapter.id !== 'main') return false;
     return this.state.tasks.some((instance) => {
@@ -4475,16 +4778,16 @@ class GameEngine {
   }
 
   watchChallengeCandidates(actionCode = 'watchChallenge') {
-    if (this.state.chapter.funCardIdsDrawn.length >= this.funCardLimit()) return [];
     const roundKey = String(this.state.chapter.round);
     const used = new Set(this.state.chapter.challengeIdsByRound[roundKey] ?? []);
     const active = new Set(this.state.activeChallenges.map((instance) => instance.challengeId));
     const drawn = new Set(this.state.funCardsDrawn);
     const challengesById = new Map(WATCH_CHALLENGES.map((entry) => [entry.id, entry]));
-    const available = this.state.funCardQueue
+    const available = (this.state.nonFundamentalQueue ?? [])
       .map((id) => challengesById.get(id))
-      .filter((entry) => entry && !entry.followUpOnly && entry.id !== 'five-minute-break' && !active.has(entry.id) &&
-        !drawn.has(entry.id) && this.challengeRequirementsMet(entry));
+      .filter((entry) => entry && !entry.followUpOnly && !active.has(entry.id) &&
+        !drawn.has(entry.id) && !(entry.cardKind === 'curse' && this.fundamentalCardsComplete()) &&
+        !(entry.followUpId && this.unresolvedFollowUpCount() > 0) && this.challengeRequirementsMet(entry));
     const pool = available.filter((entry) => !used.has(entry.id));
     const candidates = pool.length ? pool : available;
     if (!this.mainOvenJourneyStarted()) return candidates;
@@ -4558,8 +4861,11 @@ class GameEngine {
     const storedEffect = this.nextStoredIngredientEffect('event');
     const revealsEvent = ['revealEvent', 'nextPlayer'].includes(storedEffect?.effect);
     if ((!scout && !revealsEvent) || this.state.turn.phase !== 'draw') return null;
-    const pendingQuiz = this.storyQuizDue() ? this.eligibleStoryQuiz() : null;
-    if (pendingQuiz) return pendingQuiz;
+    if (this.nextEventDeckKind() === 'nonFundamental') {
+      const cardId = this.state.nonFundamentalQueue.find((id) => this.nonFundamentalCardAvailable(id));
+      const card = this.nonFundamentalCard(cardId);
+      return card?.stage ? this.contextualizeEvent(card) : card;
+    }
     const queue = this.eventQueue();
     const event = eventById(queue[0]);
     return event ? this.contextualizeEvent(event) : null;
@@ -4606,20 +4912,90 @@ class GameEngine {
   }
 
   eligibleStoryQuiz() {
-    const quizId = this.state.storyQuizQueue.find((id) => this.storyQuizPrerequisitesMet(storyCardById(id)));
-    return quizId ? storyCardById(quizId) : null;
+    return this.storyQuizCandidates()[0] ?? null;
+  }
+
+  storyQuizCandidates(quizKind = 'any') {
+    return (this.state.nonFundamentalQueue ?? [])
+      .map((id) => storyCardById(id))
+      .filter((card) => this.storyQuizPrerequisitesMet(card) && (quizKind === 'any' || card.quizKind === quizKind));
+  }
+
+  funCardCandidates(kind = 'any', { named = false } = {}) {
+    return this.watchChallengeCandidates()
+      .filter((challenge) => {
+        if (named && challenge.cardKind !== 'fun') return false;
+        if (kind === 'solo') return challenge.cardKind === 'fun' && !challenge.cooperative;
+        if (kind === 'coop') return challenge.cardKind === 'fun' && challenge.cooperative;
+        return true;
+      });
+  }
+
+  cardOfferCards() {
+    const offer = this.state.turn.pendingCardOffer;
+    if (!offer) return [];
+    return offer.kind === 'quiz'
+      ? offer.cardIds.map((id) => storyCardById(id)).filter(Boolean)
+      : offer.cardIds.map((id) => WATCH_CHALLENGES.find((challenge) => challenge.id === id)).filter(Boolean);
+  }
+
+  prepareCardOffer(kind, actionCode, now = Date.now()) {
+    if (!['quiz', 'fun'].includes(kind) || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
+    const candidates = kind === 'quiz'
+      ? this.storyQuizCandidates()
+      : this.funCardCandidates('any', { named: true });
+    if (candidates.length < 2) return false;
+    this.state.turn.pendingCardOffer = {
+      kind,
+      actionCode,
+      sourceEventId: this.currentEvent?.id ?? null,
+      cardIds: candidates.slice(0, 3).map((card) => card.id)
+    };
+    this.state.turn.phase = 'cardChoice';
+    this.log('cardOfferOpened', {
+      kind,
+      actionCode,
+      sourceEventId: this.currentEvent?.id ?? null,
+      cardIds: this.state.turn.pendingCardOffer.cardIds
+    }, now);
+    return true;
+  }
+
+  startStoryQuizFromEvent(card, actionCode, now = Date.now()) {
+    const sourceEvent = this.currentEvent;
+    if (!sourceEvent || sourceEvent.storyKind || !card || !this.storyQuizCandidates(card.quizKind).some((candidate) => candidate.id === card.id)) return false;
+    this.state.turn.outcomeCode = actionCode;
+    this.state.turn.pendingCardOffer = null;
+    this.markEventResolved(sourceEvent, now);
+    this.state.turn.phase = 'draw';
+    const opened = this.openStoryCard(card, now);
+    if (opened) this.log('storyQuizSelected', { storyQuizId: card.id, sourceEventId: sourceEvent.id, actionCode }, now);
+    return Boolean(opened);
+  }
+
+  chooseOfferedCard(cardId, now = Date.now()) {
+    const offer = this.state.turn.pendingCardOffer;
+    if (this.state.turn.phase !== 'cardChoice' || !offer?.cardIds.includes(cardId) || this.currentEvent?.id !== offer.sourceEventId) return false;
+    let selected = false;
+    if (offer.kind === 'quiz') {
+      selected = this.startStoryQuizFromEvent(storyCardById(cardId), offer.actionCode, now);
+    } else {
+      const challenge = this.funCardCandidates('any', { named: true }).find((candidate) => candidate.id === cardId);
+      if (challenge) {
+        this.state.turn.outcomeCode = offer.actionCode;
+        this.state.turn.pendingCardOffer = null;
+        selected = this.startWatchChallenge('watchChallenge', now, {
+          selectedByName: true,
+          selectionAction: offer.actionCode
+        }, challenge.id);
+      }
+    }
+    if (selected) this.log('offeredCardChosen', { kind: offer.kind, cardId, sourceEventId: offer.sourceEventId }, now);
+    return selected;
   }
 
   storyQuizDue() {
-    return this.state.turn.chainDepth === 0 &&
-      (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < this.storyQuizLimit() &&
-      this.state.chapter.eventsResolved >= this.state.chapter.nextStoryQuizAt;
-  }
-
-  storyQuizLimit() {
-    return this.currentChapter.id === 'main'
-      ? MAIN_STORY_QUIZZES_PER_CHAPTER
-      : DEFAULT_STORY_QUIZZES_PER_CHAPTER;
+    return false;
   }
 
   openStoryCard(card, now = Date.now()) {
@@ -4633,10 +5009,9 @@ class GameEngine {
       const quizIndex = this.state.storyQuizQueue.indexOf(card.id);
       if (quizIndex < 0) return null;
       this.state.storyQuizQueue.splice(quizIndex, 1);
+      const globalQuizIndex = this.state.nonFundamentalQueue.indexOf(card.id);
+      if (globalQuizIndex >= 0) this.state.nonFundamentalQueue.splice(globalQuizIndex, 1);
       this.state.chapter.storyQuizIdsDrawn.push(card.id);
-      const nextQuiz = randomInt(this.state.rngState, 5, 8);
-      this.state.rngState = nextQuiz.state;
-      this.state.chapter.nextStoryQuizAt = this.state.chapter.eventsResolved + nextQuiz.value;
     } else return null;
     this.state.turn.currentEventId = card.id;
     this.state.turn.phase = 'event';
@@ -4664,6 +5039,7 @@ class GameEngine {
       chapterIndex: card.chapterIndex,
       locationKey: card.locationKey ?? null
     }, now);
+    this.unlockEligibleStoryQuizzes(now);
     this.evaluateChapter(now);
     return true;
   }
@@ -4691,11 +5067,20 @@ class GameEngine {
       modifiedCoins,
       appliedCoins
     }, now);
+    if (correct) this.resolveSecretTriggerCurses('quizCorrect', now);
     return true;
   }
 
   distinctEventReplacementAvailable(event = this.currentEvent) {
     if (!event || event.storyKind) return false;
+    if (isNonFundamentalEvent(event)) {
+      const drawn = new Set(this.state.eventsDrawn);
+      return (this.state.nonFundamentalQueue ?? []).some((id) => {
+        const candidate = eventById(id);
+        return candidate && isNonFundamentalEvent(candidate) && !drawn.has(id) && candidate.id !== event.id &&
+          this.nonFundamentalCardAvailable(id);
+      });
+    }
     const stageQueues = this.state.eventQueues[this.state.chapterIndex]?.[event.stage] ?? [];
     const alreadyDrawn = new Set(this.state.eventsDrawn);
     return stageQueues.some((queue) => queue.some((eventId) => {
@@ -4703,6 +5088,72 @@ class GameEngine {
       const candidate = eventById(eventId);
       return Boolean(candidate) && !(event.stage === 'cooking' && this.hasUnassignedCourseTasks() && candidate.archetype === 'watch');
     }));
+  }
+
+  drawNonFundamentalCard(now = Date.now(), skipStoredIngredientEffect = false) {
+    const queue = this.state.nonFundamentalQueue ?? [];
+    const cardIndex = queue.findIndex((id) => this.nonFundamentalCardAvailable(id));
+    if (cardIndex < 0) {
+      if (this.state.turn.chainDepth > 0) {
+        this.state.turn.chainPending = false;
+        this.state.turn.outcomeCode = 'chainComplete';
+        this.state.turn.phase = 'resolved';
+        this.log('eventChainCompleted', {
+          playerId: this.activePlayer.id,
+          chainDepth: this.state.turn.chainDepth,
+          reason: 'globalDeckExhausted'
+        }, now);
+        return { fallback: true, action: 'chainComplete' };
+      }
+      return null;
+    }
+    const cardId = queue.splice(cardIndex, 1)[0];
+    const card = this.nonFundamentalCard(cardId);
+    if (!card) return null;
+
+    if (card.storyKind === 'quiz') {
+      const opened = this.openStoryCard(card, now);
+      if (opened) this.recordEventDeckDraw('nonFundamental');
+      return opened;
+    }
+    if (!card.stage) {
+      if (card.cardKind === 'blessing' && this.state.nonFundamentalLockedCardId === card.id) {
+        this.state.nonFundamentalLockedCardId = null;
+      }
+      this.state.turn.currentEventId = null;
+      const started = this.startWatchChallenge('watchChallenge', now, {
+        globalDeck: true,
+        cardKind: card.cardKind
+      }, card.id);
+      if (!started) queue.push(card.id);
+      if (started) this.recordEventDeckDraw('nonFundamental');
+      return started ? this.currentWatchChallenge : null;
+    }
+
+    this.state.turn.currentEventId = card.id;
+    this.state.turn.phase = 'event';
+    if (!this.state.eventsDrawn.includes(card.id)) this.state.eventsDrawn.push(card.id);
+    this.captureIngredientActionTarget(this.currentEvent);
+    this.state.turn.eventChoiceSignature = `${this.currentEvent.type}:${[...new Set(this.currentEvent.options ?? this.currentEvent.outcomes ?? [])].sort().join('|')}`;
+    this.state.turn.eventSignature = `${this.currentEvent.archetype ?? ''}:${this.currentEvent.funVariant ?? ''}`;
+    this.recordEventDeckDraw('nonFundamental');
+    this.log('nonFundamentalCardDrawn', { cardId, kind: 'event', playerId: this.activePlayer.id }, now);
+
+    const storedEventEffect = skipStoredIngredientEffect ? null : this.nextStoredIngredientEffect('event');
+    if (storedEventEffect) this.consumeStoredIngredientEffect(storedEventEffect.effect, 'event', now);
+    if (storedEventEffect?.effect === 'replaceEvent') {
+      this.state.eventsDrawn = this.state.eventsDrawn.filter((id) => id !== card.id);
+      queue.push(card.id);
+      const turnContext = continuedTurnContext(this.state.turn);
+      this.state.turn = { ...freshTurn(), ...turnContext };
+      return this.drawNonFundamentalCard(now, true);
+    }
+    if (storedEventEffect?.effect === 'ignoreEvent') {
+      this.state.turn.outcomeCode = 'ignored';
+      this.state.turn.phase = 'resolved';
+      this.markEventResolved(this.currentEvent, now);
+    }
+    return this.currentEvent;
   }
 
   beginEvent(now = Date.now(), skipStoredIngredientEffect = false) {
@@ -4742,11 +5193,13 @@ class GameEngine {
     }
     const pendingStory = this.pendingLocationStoryForCurrentChapter();
     if (pendingStory && this.state.turn.chainDepth === 0) return this.openStoryCard(pendingStory, now);
-    if (this.storyQuizDue()) {
-      const storyQuiz = this.eligibleStoryQuiz();
-      if (storyQuiz) return this.openStoryCard(storyQuiz, now);
-    }
     const stage = this.currentEventStage();
+    const deckKind = this.nextEventDeckKind({ consumeRandom: true });
+    this.state.turn.forcedEventDeckKind = null;
+    if (deckKind === 'nonFundamental') {
+      const nonFundamentalCard = this.drawNonFundamentalCard(now, skipStoredIngredientEffect);
+      if (nonFundamentalCard || this.state.turn.phase !== 'draw') return nonFundamentalCard;
+    }
     const stageQueues = this.state.eventQueues[this.state.chapterIndex][stage];
     const preferredQueue = this.eventQueue(stage, group);
     const alreadyDrawn = new Set(this.state.eventsDrawn);
@@ -4804,6 +5257,8 @@ class GameEngine {
         this.log('eventChainCompleted', { playerId: this.activePlayer.id, chainDepth: this.state.turn.chainDepth, reason: 'noDistinctEvent' }, now);
         return { fallback: true, action: 'chainComplete' };
       }
+      const nonFundamentalCard = this.drawNonFundamentalCard(now, skipStoredIngredientEffect);
+      if (nonFundamentalCard || this.state.turn.phase !== 'draw') return nonFundamentalCard;
       if (stage === 'ingredients') {
         if (this.unlockedCourseIngredients().length) {
           this.lockLastIngredient(now);
@@ -4827,8 +5282,7 @@ class GameEngine {
         this.log('fallbackTaskAssigned', { instanceId: task.instanceId }, now);
         return task;
       }
-      if (!chainActive && this.hasOpenTasks() &&
-        (this.state.chapter.storyQuizIdsDrawn?.length ?? 0) < this.storyQuizLimit()) {
+      if (!chainActive && this.hasOpenTasks()) {
         const fallbackStoryQuiz = this.eligibleStoryQuiz();
         if (fallbackStoryQuiz) {
           this.log('fallbackStoryQuizDrawn', {
@@ -4874,6 +5328,7 @@ class GameEngine {
     this.captureIngredientActionTarget(this.currentEvent);
     this.state.turn.eventChoiceSignature = controlSignature(this.currentEvent);
     this.state.turn.eventSignature = eventSignature(this.currentEvent);
+    this.recordEventDeckDraw('fundamental');
     this.log('eventDrawn', { eventId, stage, playerId: this.activePlayer.id, groupId: group.id }, now);
 
     const pendingStoredEventEffect = skipStoredIngredientEffect ? null : this.nextStoredIngredientEffect('event');
@@ -4888,6 +5343,7 @@ class GameEngine {
       queue.push(eventId);
       this.log('eventReplacedByIngredient', { eventId }, now);
       const turnContext = continuedTurnContext(this.state.turn);
+      turnContext.forcedEventDeckKind = 'fundamental';
       this.state.turn = { ...freshTurn(), ...turnContext };
       return this.beginEvent(now, true);
     }
@@ -4921,6 +5377,7 @@ class GameEngine {
     const appliedCoins = requestedCoins ? this.addCoins(requestedCoins, 'challenge', now) : 0;
     const modifiedCoins = requestedCoins ? (this.state.lastCoinChange?.modifiedAmount ?? requestedCoins) : 0;
     if (challenge.followUpId) this.scheduleFollowUp(challenge, this.activePlayer.id, now);
+    if (challenge.standing) this.resolveSecretTriggerCurses('standingFun', now, this.activePlayer.id);
     this.state.turn.watchOutcome = challenge.skillCheck ? outcome : null;
     this.state.turn.watchCoinDelta = modifiedCoins;
     this.state.turn.watchCoinApplied = appliedCoins;
@@ -4976,11 +5433,13 @@ class GameEngine {
       ownerPlayerId,
       targetPlayerId: this.state.turn.watchTargetPlayerId,
       endTrigger: challenge.endTrigger,
+      triggerKind: challenge.triggerKind,
       startedAt: now
     };
     this.state.chapter.watchChallenges += 1;
     this.state.activeChallenges.push(instance);
     if (challenge.followUpId) this.scheduleFollowUp(challenge, ownerPlayerId, now);
+    if (challenge.standing) this.resolveSecretTriggerCurses('standingFun', now, ownerPlayerId);
     this.state.turn.outcomeCode = 'watchActive';
     this.state.turn.phase = 'resolved';
     this.log('watchChallengeActivated', { challengeId: challenge.id, instanceId: instance.instanceId, ownerPlayerId, targetPlayerId: instance.targetPlayerId }, now);
@@ -5020,8 +5479,8 @@ class GameEngine {
       // restored from a turn that predates ingredient target ids.
       this.state.turn.ingredientActionTargetId = target.id;
     }
-    const needsChoice = this.applyAction(actionCode, now, 'event');
     this.state.turn.outcomeCode = actionCode;
+    const needsChoice = this.applyAction(actionCode, now, 'event');
     if (!needsChoice) {
       this.state.turn.phase = 'resolved';
       this.markEventResolved(event, now);
@@ -5103,17 +5562,25 @@ class GameEngine {
         }, now);
       }
     }
-    const outcomeIndex = value <= 2 ? 0 : value <= 4 ? 1 : 2;
-    const actionCode = event.outcomes[outcomeIndex] ?? event.outcomes.at(-1) ?? this.fallbackActions(event.stage)[0];
+    const actionCode = this.eventOutcomeForDie(event, value) ?? this.fallbackActions(event.stage)[0];
     if (!actionCode) return false;
-    const needsChoice = this.applyAction(actionCode, now, 'event');
     this.state.turn.outcomeCode = actionCode;
+    const needsChoice = this.applyAction(actionCode, now, 'event');
     if (!needsChoice) {
       this.state.turn.phase = 'resolved';
       this.markEventResolved(event, now);
       this.updateChapterStage(now);
     }
     return true;
+  }
+
+  eventOutcomeForDie(event = this.currentEvent, value = this.state.turn.dieResult) {
+    if (!event?.outcomes?.length || !Number.isInteger(value)) return null;
+    const face = Math.max(1, Math.min(6, value));
+    const outcomeIndex = event.orderedCoinRoll && event.outcomes.length >= 6
+      ? face - 1
+      : face <= 2 ? 0 : face <= 4 ? 1 : 2;
+    return event.outcomes[outcomeIndex] ?? event.outcomes.at(-1) ?? null;
   }
 
   markEventResolved(event, now) {
@@ -5138,8 +5605,9 @@ class GameEngine {
       case 'lockIngredient': this.lockLastIngredient(now, null, ingredientTargetId); break;
       case 'returnIngredient': this.returnLastIngredient(now, ingredientTargetId); break;
       case 'treasure': this.addCoins(COIN_VALUES.event, 'event', now); break;
+      case 'treasureSmall': this.addCoins(COIN_VALUES.smallEvent, 'event', now); break;
       case 'coinLoss': this.addCoins(COIN_VALUES.coinLoss, 'event', now); break;
-      case 'fiveMinuteBreak': return this.startWatchChallenge('fiveMinuteBreak', now);
+      case 'coinLossSmall': this.addCoins(COIN_VALUES.smallCoinLoss, 'event', now); break;
       case 'treasureAndChain':
         this.addCoins(COIN_VALUES.event, 'event', now);
         if (this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH) this.state.turn.chainPending = true;
@@ -5153,6 +5621,20 @@ class GameEngine {
         this.addCoins(COIN_VALUES.event, 'event', now);
         this.startWatchChallenge('watchChallenge', now);
         return true;
+      case 'drawAnyQuiz': return this.startStoryQuizFromEvent(this.storyQuizCandidates()[0], actionCode, now);
+      case 'drawIslandQuiz': return this.startStoryQuizFromEvent(this.storyQuizCandidates('island-detail')[0], actionCode, now);
+      case 'drawLocationQuiz': return this.startStoryQuizFromEvent(this.storyQuizCandidates('location-detail')[0], actionCode, now);
+      case 'drawRouteQuiz': return this.startStoryQuizFromEvent(this.storyQuizCandidates('route')[0], actionCode, now);
+      case 'drawSoloFun': {
+        const challenge = this.funCardCandidates('solo')[0];
+        return challenge ? this.startWatchChallenge('watchChallenge', now, { cardType: 'solo' }, challenge.id) : false;
+      }
+      case 'drawCoopFun': {
+        const challenge = this.funCardCandidates('coop')[0];
+        return challenge ? this.startWatchChallenge('watchChallenge', now, { cardType: 'coop' }, challenge.id) : false;
+      }
+      case 'chooseNamedQuiz': return this.prepareCardOffer('quiz', actionCode, now);
+      case 'chooseNamedFun': return this.prepareCardOffer('fun', actionCode, now);
       case 'chain':
         if (this.state.turn.chainDepth < MAX_EVENT_CHAIN_DEPTH) this.state.turn.chainPending = true;
         break;
@@ -5162,26 +5644,29 @@ class GameEngine {
     return false;
   }
 
-  startWatchChallenge(actionCode = 'watchChallenge', now = Date.now(), logData = {}) {
-    if (actionCode === 'fiveMinuteBreak' && this.hasOpenTasks()) return false;
-    if (actionCode === 'fiveMinuteBreak' && this.state.chapter.funCardIdsDrawn.length >= this.funCardLimit()) return false;
+  startWatchChallenge(actionCode = 'watchChallenge', now = Date.now(), logData = {}, requestedChallengeId = null) {
     const event = this.currentEvent;
     const drawn = new Set(this.state.funCardsDrawn);
     let challenge;
     let targetPlayerId = this.state.players[(this.state.activePlayerIndex + 1) % this.state.players.length].id;
-    if (actionCode === 'fiveMinuteBreak') {
-      challenge = WATCH_CHALLENGES.find((entry) => entry.id === 'five-minute-break');
-    } else {
-      while (this.state.chapter.queuedChallenges.length && !challenge) {
-        const queued = this.state.chapter.queuedChallenges.shift();
-        if (drawn.has(queued.id)) continue;
-        const queuedChallenge = WATCH_CHALLENGES.find((entry) => entry.id === queued.id);
-        if (queuedChallenge?.cooperative && !this.challengeRequirementsMet(queuedChallenge)) continue;
-        challenge = queuedChallenge;
-        targetPlayerId = queued.targetPlayerId;
+    if (requestedChallengeId) {
+      const requested = WATCH_CHALLENGES.find((candidate) => candidate.id === requestedChallengeId);
+      const blessingTarget = this.state.blessingTargets?.[requestedChallengeId];
+      if (requested && !drawn.has(requested.id) &&
+        (requested.cardKind === 'blessing' ? Boolean(blessingTarget) : this.challengeRequirementsMet(requested))) {
+        challenge = requested;
+        if (blessingTarget) targetPlayerId = blessingTarget;
       }
     }
-    if (!challenge && actionCode !== 'fiveMinuteBreak') {
+    while (!requestedChallengeId && this.state.chapter.queuedChallenges.length && !challenge) {
+      const queued = this.state.chapter.queuedChallenges.shift();
+      if (drawn.has(queued.id)) continue;
+      const queuedChallenge = WATCH_CHALLENGES.find((entry) => entry.id === queued.id);
+      if (queuedChallenge?.cooperative && !this.challengeRequirementsMet(queuedChallenge)) continue;
+      challenge = queuedChallenge;
+      targetPlayerId = queued.targetPlayerId;
+    }
+    if (!challenge && !requestedChallengeId) {
       const roundKey = String(this.state.chapter.round);
       const used = new Set(this.state.chapter.challengeIdsByRound[roundKey] ?? []);
       const candidates = this.watchChallengeCandidates(actionCode);
@@ -5191,6 +5676,9 @@ class GameEngine {
       this.state.chapter.challengeIdsByRound[roundKey] = [...used, challenge.id];
     }
     if (!challenge || drawn.has(challenge.id)) return false;
+    const globalIndex = this.state.nonFundamentalQueue?.indexOf(challenge.id) ?? -1;
+    if (globalIndex >= 0) this.state.nonFundamentalQueue.splice(globalIndex, 1);
+    if (challenge.cardKind === 'blessing') delete this.state.blessingTargets[challenge.id];
     this.state.funCardsDrawn.push(challenge.id);
     this.state.chapter.funCardIdsDrawn.push(challenge.id);
     this.state.turn.watchChallengeId = challenge.id;
@@ -5508,6 +5996,7 @@ class GameEngine {
       if (this.state.eventsDrawn.at(-1) === eventId) this.state.eventsDrawn.pop();
       queue.push(eventId);
       const turnContext = continuedTurnContext(this.state.turn);
+      turnContext.forcedEventDeckKind = isNonFundamentalEvent(this.currentEvent) ? 'nonFundamental' : 'fundamental';
       this.log('eventReplacedByIngredient', { eventId }, now);
       this.state.turn = { ...freshTurn(), ...turnContext };
       this.beginEvent(now);
@@ -6348,6 +6837,7 @@ class GameEngine {
     this.state.previousIngredientId = null;
     this.state.bonuses = freshBonuses(); // legacy compatibility; the shared ingredient effect stack persists
     this.log('chapterStarted', { chapterIndex: this.state.chapterIndex, stage: this.state.chapter.stage }, now);
+    this.shuffleNonFundamentalDeck(now, 'islandStarted');
     this.registerLocationVisit(this.state.chapterIndex, 0, now);
     const clearingTask = this.assignTask({ group: this.activeGroup, now });
     if (clearingTask) this.briefTask(clearingTask, true, now);
@@ -6417,16 +6907,19 @@ class GameEngine {
     let used = true;
 
     switch (role.activeCode) {
-      case 'replaceEvent':
+      case 'replaceEvent': {
         if (!this.currentEvent || this.currentEvent.storyKind || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
+        const replacedDeckKind = isNonFundamentalEvent(this.currentEvent) ? 'nonFundamental' : 'fundamental';
         this.state.discardedEvents.push(this.currentEvent.id);
         const turnContext = continuedTurnContext(this.state.turn);
+        turnContext.forcedEventDeckKind = replacedDeckKind;
         this.state.turn = {
           ...freshTurn(),
           ...turnContext
         };
         this.beginEvent(now);
         break;
+      }
       case 'shuffleEvents': {
         if (!this.currentEvent || this.currentEvent.storyKind || !['event', 'rolled'].includes(this.state.turn.phase)) return false;
         const queue = this.eventQueueForCard(this.currentEvent);
@@ -6437,6 +6930,7 @@ class GameEngine {
         this.state.rngState = shuffled.state;
         queue.splice(0, queue.length, ...shuffled.value);
         const turnContext = continuedTurnContext(this.state.turn);
+        turnContext.forcedEventDeckKind = isNonFundamentalEvent(this.currentEvent) ? 'nonFundamental' : 'fundamental';
         this.state.turn = {
           ...freshTurn(),
           ...turnContext
@@ -6691,6 +7185,8 @@ function validateSessionState(state) {
   if (!Array.isArray(state.ingredientQueues) || state.ingredientQueues.length !== CHAPTERS.length) errors.push('ingredient queues');
   if (!Array.isArray(state.eventQueues) || state.eventQueues.length !== CHAPTERS.length) errors.push('event queues');
   if (!Array.isArray(state.taskQueues) || state.taskQueues.length !== CHAPTERS.length) errors.push('task queues');
+  if (state.nonFundamentalQueue != null && !Array.isArray(state.nonFundamentalQueue)) errors.push('non-fundamental queue');
+  if (state.blessingTargets != null && (typeof state.blessingTargets !== 'object' || Array.isArray(state.blessingTargets))) errors.push('blessing targets');
   if (!Array.isArray(state.history)) errors.push('history');
   return { valid: errors.length === 0, errors };
 }
@@ -6872,8 +7368,8 @@ const STAGE_COPY = Object.freeze({
     en: { label: '2 · Fun & tasks', title: 'Draw from the work deck', button: 'Draw next card', lead: 'Draw the next card and discover what the voyage has in store for your crew.' }
   },
   cooking: {
-    de: { label: '3 · Parallel kochen', title: 'Freies Ereignis ziehen', button: 'Eventkarte ziehen', lead: 'Küchenarbeit läuft parallel. Freie Personen erleben Challenges, Pausen, geheime Späße und Münzereignisse.' },
-    en: { label: '3 · Cook in parallel', title: 'Draw an open event', button: 'Draw event card', lead: 'Kitchen work continues in parallel. Free players get challenges, breaks, secret fun, and coin events.' }
+    de: { label: '3 · Parallel kochen', title: 'Vom globalen Stapel ziehen', button: 'Karte ziehen', lead: 'Küchenarbeit läuft parallel. Der globale Stapel mischt Ereignisse, Quiz, Spaß, Scharaden, Flüche, Segen und Münzen.' },
+    en: { label: '3 · Cook in parallel', title: 'Draw from the global deck', button: 'Draw a card', lead: 'Kitchen work continues in parallel. The global deck mixes events, quizzes, fun, charades, curses, blessings, and coins.' }
   }
 });
 
@@ -7038,7 +7534,7 @@ function eventActionText(engine, actionCode, language) {
     }
     return `${treasure}${accept}${t(challenge, language)}`;
   }
-  if (actionCode === 'coinLoss') {
+  if (['coinLoss', 'coinLossSmall'].includes(actionCode)) {
     const challengeDecline = engine.currentEvent?.type === 'choice' &&
       engine.currentEvent?.options?.some((option) => ['watchChallenge', 'watchChallengeAlt', 'treasureAndWatch'].includes(option));
     const prefix = challengeDecline
@@ -7051,7 +7547,8 @@ function eventActionText(engine, actionCode, language) {
         ? `${prefix}Gambler-Wurf ${roll} · −${actualLoss} Münzen`
         : `${prefix}Gambler roll ${roll} · −${actualLoss} coins`;
     }
-    const preview = engine.coinLossPreview(COIN_VALUES.coinLoss);
+    const requestedLoss = actionCode === 'coinLossSmall' ? COIN_VALUES.smallCoinLoss : COIN_VALUES.coinLoss;
+    const preview = engine.coinLossPreview(requestedLoss);
     if (preview.dice) {
       return language === 'de'
         ? `${prefix}Gambler würfelt den Verlust · 1–6 Münzen`
@@ -7222,6 +7719,17 @@ function renderStatusPanel(engine, language) {
   const fixedIngredients = currentIngredients.filter((ingredient) => ['locked', 'used'].includes(ingredient.status)).length;
   const freeCrew = engine.freePlayersForTask(group).length;
   const stage = stageCopy(engine, language);
+  const activeCurses = engine.state.activeChallenges.map((instance) => ({
+    instance,
+    card: WATCH_CHALLENGES.find((challenge) => challenge.id === instance.challengeId),
+    owner: engine.state.players.find((player) => player.id === instance.ownerPlayerId)
+  })).filter(({ card }) => card?.cardKind === 'curse');
+  const curseStatus = activeCurses.length ? `<div class="active-curse-list"><strong>${language === 'de' ? 'Aktive Flüche' : 'Active curses'}</strong>${activeCurses.map(({ instance, card, owner }) => `
+    <div class="card-effect"><span>${card.secret
+      ? (language === 'de' ? `Geheimer Fluch bei ${escapeHtml(owner?.name ?? '')}` : `Secret curse affecting ${escapeHtml(owner?.name ?? '')}`)
+      : `${t(card.title, language)} · ${escapeHtml(owner?.name ?? '')}`}</span>${instance.endTrigger === 'secretTrigger'
+      ? `<button class="quiet-button" type="button" data-action="release-triggered-curse" data-challenge-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Geheimer Auslöser ist eingetreten' : 'Secret trigger occurred'}</button>`
+      : ''}</div>`).join('')}</div>` : '';
   return `
     <section class="panel" style="box-shadow:none">
       <div class="panel-header">
@@ -7233,6 +7741,7 @@ function renderStatusPanel(engine, language) {
       </div>
       <p class="muted">${t(engine.currentChapter.atmosphere, language)}</p>
       ${renderCocktailTeams(engine, language)}
+      ${curseStatus}
       <div class="stat-strip">
         ${statusTag(`${tx('round', language)} ${engine.state.chapter.round}`)}
         ${statusTag(`● ${engine.state.coins}/${engine.state.coinGoal} ${tx('treasure', language)}`, 'gold')}
@@ -7373,7 +7882,12 @@ function renderDrawCard(engine, language) {
   const preview = engine.nextEventPreview();
   const scoutPreview = engine.activePlayer.roleId === 'scout' && engine.isPassiveEnabled(engine.activePlayer);
   const group = engine.activeGroup;
-  const copy = stageCopy(engine, language);
+  const nextDeckKind = engine.nextEventDeckKind();
+  const phaseCopy = stageCopy(engine, language);
+  const globalCopy = STAGE_COPY.cooking[language];
+  const copy = nextDeckKind === 'nonFundamental'
+    ? { ...globalCopy, label: phaseCopy.label }
+    : phaseCopy;
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
@@ -7428,7 +7942,6 @@ function renderStoryEventCard(engine, language) {
 function renderEventCard(engine, language) {
   const event = engine.currentEvent;
   if (event?.storyKind) return renderStoryEventCard(engine, language);
-  const pauseBlocked = event.archetype === 'respite' && !event.options?.includes('fiveMinuteBreak');
   const choices = event.options?.map((code) => {
     const ingredientTarget = ['lockIngredient', 'returnIngredient', 'swapIngredient'].includes(code)
       ? engine.ingredientActionTarget()
@@ -7447,19 +7960,53 @@ function renderEventCard(engine, language) {
       </div>
       <h2>${t(event.title, language)}</h2>
       <p class="card-story">${t(event.story, language)}</p>
-      ${pauseBlocked ? `<div class="card-effect"><strong>${language === 'de' ? 'Noch keine Pause:' : 'No break yet:'}</strong> ${language === 'de' ? 'Die Pausenoption erscheint erst, wenn alle offenen Küchenaufgaben erledigt markiert sind.' : 'The break option appears only after every open kitchen task has been marked complete.'}</div>` : ''}
       ${event.type === 'choice'
         ? `${event.options.length > 1 ? `<div class="card-effect"><strong>${language === 'de' ? 'Die Crew darf beraten. Die endgültige Wahl trifft die aktive Person.' : 'The crew may discuss. The active player makes the final choice.'}</strong></div>` : ''}<div class="choice-list">${choices}</div>`
-        : `<div class="card-effect">${language === 'de' ? 'Würfelt und folgt dem passenden Ergebnis: 1–2, 3–4 oder 5–6.' : 'Roll and follow the matching result: 1–2, 3–4, or 5–6.'}</div>
+        : `<div class="card-effect">${event.orderedCoinRoll
+          ? (language === 'de' ? 'Jede Augenzahl hat ein eigenes Ergebnis: 1 ist das schlechteste, 6 das beste.' : 'Every face has its own result: 1 is the worst and 6 is the best.')
+          : (language === 'de' ? 'Würfelt und folgt dem passenden Ergebnis: 1–2, 3–4 oder 5–6.' : 'Roll and follow the matching result: 1–2, 3–4, or 5–6.')}</div>
            <button class="primary-button" type="button" data-action="roll-die">${tx('roll', language)}</button>`}
+    </article>`;
+}
+
+function renderCardChoice(engine, language) {
+  const offer = engine.state.turn.pendingCardOffer;
+  const cards = engine.cardOfferCards();
+  const quizLabels = {
+    'island-detail': { de: 'Inselchronik-Quiz', en: 'Island lore quiz' },
+    'location-detail': { de: 'Ortsdetail-Quiz', en: 'Location detail quiz' },
+    route: { de: 'Routen-Quiz', en: 'Route quiz' }
+  };
+  const choices = cards.map((card) => {
+    const detail = offer.kind === 'quiz'
+      ? t(quizLabels[card.quizKind] ?? { de: 'Erinnerungsquiz', en: 'Memory quiz' }, language)
+      : card.cooperative
+        ? (language === 'de' ? `Koop-Spaßkarte · ${card.partnerCount + 1} Personen` : `Co-op fun card · ${card.partnerCount + 1} people`)
+        : (language === 'de' ? 'Solo-Spaßkarte' : 'Solo fun card');
+    return `<button type="button" class="choice-button" data-action="choose-offered-card" data-card-id="${escapeHtml(card.id)}"><strong>${escapeHtml(t(card.title, language))}</strong><small>${escapeHtml(detail)}</small></button>`;
+  }).join('');
+  return `
+    <article class="game-card card-offer-card">
+      ${renderCourseFlow(engine, language)}
+      <div class="card-row">
+        <p class="eyebrow">${language === 'de' ? 'Aktive Kartenwahl' : 'Active card choice'} · ${cards.length} ${language === 'de' ? 'Karten' : 'cards'}</p>
+        ${statusTag(offer.kind === 'quiz'
+          ? (language === 'de' ? 'Quiz' : 'Quiz')
+          : (language === 'de' ? 'Spaß' : 'Fun'), 'gold')}
+      </div>
+      <h2>${language === 'de' ? 'Welche Karte möchtet ihr ziehen?' : 'Which card would you like to draw?'}</h2>
+      <p class="event-subtitle">${t(engine.currentEvent.title, language)}</p>
+      <p class="card-story">${language === 'de'
+        ? 'Die Crew darf die sichtbaren Titel gemeinsam abwägen. Die aktive Person trifft die endgültige Wahl; nur die gewählte Karte wird verbraucht.'
+        : 'The crew may weigh the visible titles together. The active player makes the final choice; only the selected card is consumed.'}</p>
+      <div class="choice-list">${choices}</div>
     </article>`;
 }
 
 function renderRolledCard(engine, language) {
   const event = engine.currentEvent;
   const value = engine.state.turn.dieResult;
-  const outcomeIndex = value <= 2 ? 0 : value <= 4 ? 1 : 2;
-  const outcomeCode = event.outcomes[outcomeIndex];
+  const outcomeCode = engine.eventOutcomeForDie(event, value);
   const smithKey = `smith-reroll-${engine.state.chapterIndex}`;
   const canReroll = engine.activePlayer.roleId === 'smith' && engine.passiveUnused(engine.activePlayer, smithKey);
   const nextDiceEffect = engine.nextStoredIngredientEffect('dice');
@@ -7811,11 +8358,12 @@ function renderWatchCard(engine, language) {
   const secretRevealed = !challenge.secret || engine.state.turn.watchSecretRevealedAt != null;
   if (challenge.secret && !secretRevealed) {
     const activeName = escapeHtml(engine.activePlayer.name);
+    const secretCurse = challenge.cardKind === 'curse';
     return `
       <article class="game-card secret-event-announcement">
         ${renderCourseFlow(engine, language)}
-        <p class="eyebrow">${language === 'de' ? 'Private Karte auf dem Tablet' : 'Private card on the tablet'}</p>
-        <h2>${language === 'de' ? 'Geheimes Event' : 'Secret event'}</h2>
+        <p class="eyebrow">${secretCurse ? (language === 'de' ? 'Fluch mit geheimem Auslöser' : 'Curse with a secret trigger') : (language === 'de' ? 'Private Scharadenkarte' : 'Private charade card')}</p>
+        <h2>${secretCurse ? (language === 'de' ? 'Geheimer Fluch' : 'Secret curse') : (language === 'de' ? 'Geheime Scharade' : 'Secret charade')}</h2>
         <div class="secret-screen-warning" role="status">
           <strong>${language === 'de' ? 'Alle außer der aktiven Person schauen jetzt vom großen Bildschirm weg.' : 'Everyone except the active player now looks away from the large screen.'}</strong>
           <p>${language === 'de'
@@ -7823,9 +8371,9 @@ function renderWatchCard(engine, language) {
             : `${activeName} opens the card only after everyone else has stopped looking at the mirrored screen.`}</p>
         </div>
         <p class="card-story">${language === 'de'
-          ? 'Die geheime Anweisung wird erst nach dem Öffnen sichtbar. Sie kann anschließend kurz gelesen und wieder zugeklappt werden.'
-          : 'The secret instruction is only shown after opening. It can then be read briefly and collapsed again.'}</p>
-        <button class="primary-button" type="button" data-action="reveal-secret-watch">${language === 'de' ? 'Geheimes Event öffnen' : 'Open secret event'}</button>
+          ? (secretCurse ? 'Nur die verfluchte Person liest Wirkung und Auslöser. Der Auslöser bleibt vor der übrigen Crew verborgen.' : 'Nur die darstellende Person liest den gesuchten Begriff. Die übrige Crew darf ihn nicht sehen.')
+          : (secretCurse ? 'Only the cursed player reads the effect and trigger. The trigger remains hidden from the rest of the crew.' : 'Only the performer reads the answer. The rest of the crew must not see it.')}</p>
+        <button class="primary-button" type="button" data-action="reveal-secret-watch">${secretCurse ? (language === 'de' ? 'Fluch heimlich öffnen' : 'Open curse privately') : (language === 'de' ? 'Scharade heimlich öffnen' : 'Open charade privately')}</button>
       </article>`;
   }
   if (challenge.playerSelection) {
@@ -7841,7 +8389,7 @@ function renderWatchCard(engine, language) {
         ${renderCourseFlow(engine, language)}
         <p class="eyebrow">${language === 'de' ? 'Crewauftrag · Person bestimmen' : 'Crew duty · choose a player'}</p>
         <h2>${t(challenge.title, language)}</h2>
-        ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
+        ${event ? `<p class="event-subtitle">${t(event.title, language)}</p>` : ''}
         <p class="card-story">${t(challenge, language)}</p>
         <div class="card-effect">${language === 'de'
           ? 'Die ausgewählte Person wird beim nächsten Servieren als Portionswache angezeigt. Für diese Karte läuft kein Timer.'
@@ -7885,14 +8433,20 @@ function renderWatchCard(engine, language) {
     ? (language === 'de' ? 'Läuft bis zu deinem nächsten Zug' : 'Runs until your next turn')
     : challenge.endTrigger === 'targetTurnEnd'
       ? (language === 'de' ? 'Läuft während des nächsten Ziel-Zugs' : 'Runs during the target’s next turn')
-      : (language === 'de' ? 'Läuft bis zur passenden Gegenkarte' : 'Runs until the matching counter-card');
+      : challenge.endTrigger === 'secretTrigger'
+        ? (language === 'de' ? 'Läuft bis zum geheimen Auslöser' : 'Runs until the secret trigger')
+        : (language === 'de' ? 'Läuft bis zum passenden Segen' : 'Runs until the matching blessing');
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
-      <p class="eyebrow">${mandatory
-        ? (language === 'de' ? `Verbindliche geheime Anweisung · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Mandatory secret instruction · only ${escapeHtml(engine.activePlayer.name)} reads`)
-        : challenge.secret
-        ? (language === 'de' ? `Geheime Karte · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Secret card · only ${escapeHtml(engine.activePlayer.name)} reads`)
+      <p class="eyebrow">${challenge.cardKind === 'blessing'
+        ? (language === 'de' ? 'Segenkarte · beendet einen Fluch' : 'Blessing card · ends a curse')
+        : challenge.cardKind === 'curse'
+          ? (challenge.secret ? (language === 'de' ? `Geheimer Fluch · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Secret curse · only ${escapeHtml(engine.activePlayer.name)} reads`) : (language === 'de' ? 'Fluchkarte' : 'Curse card'))
+        : challenge.cardKind === 'charade'
+          ? (language === 'de' ? `Geheime Scharade · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Secret charade · only ${escapeHtml(engine.activePlayer.name)} reads`)
+        : mandatory
+        ? (language === 'de' ? 'Verbindliche Anweisung' : 'Mandatory instruction')
         : skillCheck && cooperative
           ? (language === 'de' ? `Koop-${challenge.dexterity ? 'Geschicklichkeits' : 'Erfolgs'}-Challenge` : `Co-op ${challenge.dexterity ? 'dexterity' : 'success'} challenge`)
         : skillCheck
@@ -7901,7 +8455,7 @@ function renderWatchCard(engine, language) {
           ? (language === 'de' ? 'Koop-Zeitfüller · sofort gemeinsam ausführen' : 'Co-op interlude · do it together now')
           : (language === 'de' ? 'Zeitfüller · sofort ausführen' : 'Interlude · do it now')}</p>
       ${challenge.secret ? '' : `<h2>${t(challenge.title, language)}</h2>`}
-      ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
+      ${event ? `<p class="event-subtitle">${t(event.title, language)}</p>` : ''}
       ${cooperative ? `<div class="card-effect"><strong>${language === 'de' ? 'Beteiligte' : 'Participants'}: ${cooperativeNames}</strong><p>${language === 'de'
         ? 'Alle ausgewählten Personen sind gerade ohne laufende Küchenaufgabe.'
         : 'Every selected participant is currently free from an active kitchen task.'}</p></div>` : ''}
@@ -7978,6 +8532,7 @@ function renderCurrentCard(engine, language) {
     case 'draw': return renderDrawCard(engine, language);
     case 'event': return renderEventCard(engine, language);
     case 'rolled': return renderRolledCard(engine, language);
+    case 'cardChoice': return renderCardChoice(engine, language);
     case 'ingredientChoice': return renderIngredientChoice(engine, language);
     case 'effectChoice': return renderIngredientEffectChoice(engine, language);
     case 'cocktailTeamChoice': return renderCocktailTeamChoice(engine, language);
@@ -8428,6 +8983,7 @@ function historyLabel(entry, language) {
     voyageStarted: 'Reise gestartet', eventDrawn: 'Ereigniskarte gezogen', eventResolved: 'Ereignis abgeschlossen',
     eventIgnoredByBonus: 'Ereignisbonus eingesetzt', eventIgnoredByTactician: 'Ereignis taktisch ignoriert',
     eventChainContinued: 'Ereigniskette fortgesetzt', eventChainStoppedForTask: 'Ereigniskette wegen Küchenauftrag beendet', dieRolled: 'Würfel geworfen', dieRerolled: 'Würfel neu geworfen',
+    cardOfferOpened: 'Kartenauswahl geöffnet', offeredCardChosen: 'Angebotene Karte gewählt', storyQuizSelected: 'Quizkarte gewählt',
     treasureFound: 'Münzen gefunden', coinsChanged: 'Münzstand verändert', ingredientDiscovered: 'Zutat in den Gangkorb gelegt', ingredientLocked: 'Zutat festgelegt', ingredientReturned: 'Zutat zurückgelegt', bonusIngredientDiscovered: 'Bonuszutat entdeckt',
     ingredientSwapped: 'Zutat getauscht', taskAssigneeChoiceStarted: 'Aufgabenbesetzung geöffnet', taskAssigneesChosen: 'Aufgabenbesetzung gewählt', taskAssigned: 'Aufgabe zugeteilt', taskStarted: 'Aufgabe gestartet',
     taskCompleted: 'Aufgabe erledigt', questTaskUnlocked: 'Nächster Questschritt eingemischt', taskCompletionUndone: 'Aufgabenhaken zurückgenommen', taskConvertedToTreasure: 'Aufgabe in Münzen umgewandelt',
@@ -8444,6 +9000,7 @@ function historyLabel(entry, language) {
     voyageStarted: 'Voyage started', eventDrawn: 'Event card drawn', eventResolved: 'Event resolved',
     eventIgnoredByBonus: 'Event bonus used', eventIgnoredByTactician: 'Event ignored tactically',
     eventChainContinued: 'Event chain continued', eventChainStoppedForTask: 'Event chain ended for kitchen task', dieRolled: 'Die rolled', dieRerolled: 'Die rerolled',
+    cardOfferOpened: 'Card choice opened', offeredCardChosen: 'Offered card chosen', storyQuizSelected: 'Quiz card chosen',
     treasureFound: 'Coins found', coinsChanged: 'Coin balance changed', ingredientDiscovered: 'Ingredient put in course basket', ingredientLocked: 'Ingredient locked', ingredientReturned: 'Ingredient returned', bonusIngredientDiscovered: 'Bonus ingredient discovered',
     ingredientSwapped: 'Ingredient swapped', taskAssigneeChoiceStarted: 'Task crew selection opened', taskAssigneesChosen: 'Task crew selected', taskAssigned: 'Task assigned', taskStarted: 'Task started',
     taskCompleted: 'Task completed', questTaskUnlocked: 'Next quest step shuffled in', taskCompletionUndone: 'Task completion undone', taskConvertedToTreasure: 'Task converted to coins',
@@ -9114,9 +9671,9 @@ function catalogFunCard(challenge, usage, language, kind) {
   if (challenge.flow === 'ongoing') traits.push(catalogLanguageText(language, 'mehrere Züge', 'multi-turn'));
   if (challenge.mandatory) traits.push(catalogLanguageText(language, 'verbindlich', 'mandatory'));
   if (challenge.partnerCount) traits.push(`${challenge.partnerCount + 1} ${catalogLanguageText(language, 'Personen', 'players')}`);
-  if (challenge.durationSeconds && challenge.flow !== 'ongoing') traits.push(challenge.durationSeconds < 60
-    ? `${challenge.durationSeconds} ${catalogLanguageText(language, 'Sek.', 'sec')}`
-    : `${challenge.minutes} ${catalogLanguageText(language, 'Min.', 'min')}`);
+  if (challenge.durationSeconds && challenge.flow !== 'ongoing') traits.push(challenge.durationSeconds % 60 === 0
+    ? `${challenge.durationSeconds / 60} ${catalogLanguageText(language, 'Min.', 'min')}`
+    : `${challenge.durationSeconds} ${catalogLanguageText(language, 'Sek.', 'sec')}`);
   if (challenge.skillCheck) traits.push(language === 'de'
     ? `${challenge.dexterity ? 'Geschicklichkeit' : 'Erfolgswertung'} · Erfolg +${challenge.successCoins} · Scheitern −${Math.abs(challenge.failureCoins)}`
     : `${challenge.dexterity ? 'Dexterity' : 'Scored outcome'} · success +${challenge.successCoins} · failure −${Math.abs(challenge.failureCoins)}`);
@@ -9135,11 +9692,33 @@ function catalogFunGroup(challenges, usage, language, cooperative) {
     : catalogLanguageText(language, 'Spaßkarten', 'Fun cards');
   const lead = cooperative
     ? catalogLanguageText(language, 'Diese Karten binden zwei oder drei gerade freie Personen in eine gemeinsame Mini-Aufgabe ein.', 'These cards involve two or three currently free players in a shared mini-task.')
-    : catalogLanguageText(language, 'Kurze, geheime und fortlaufende Bordaufgaben. Jede davon kann pro Reise nur einmal gezogen werden.', 'Quick, secret, and ongoing deck duties. Each can be drawn only once per voyage.');
+    : catalogLanguageText(language, 'Kurze öffentliche Bordaufgaben und private Scherze. Jede davon kann pro Reise nur einmal gezogen werden.', 'Quick public deck duties and personal jokes. Each can be drawn only once per voyage.');
   const used = challenges.filter((challenge) => usage.fun.has(challenge.id)).length;
   return `<section class="catalog-section" id="${id}">
     <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Eigenständiger Kartenstapel', 'Separate card deck')}</p><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(lead)}</p></div>${statusTag(usage.hasSession ? `${used}/${challenges.length}` : `${challenges.length}`, used ? 'green' : '')}</div>
     <div class="catalog-card-grid">${challenges.map((challenge) => catalogFunCard(challenge, usage, language, cooperative ? 'coop-fun' : 'fun')).join('')}</div>
+  </section>`;
+}
+
+function catalogSpecialChallengeGroup(challenges, usage, language, kind) {
+  const config = {
+    curse: {
+      id: 'curse-cards', title: { de: 'Fluchkarten', en: 'Curse cards' },
+      lead: { de: 'Fortlaufende Effekte. Einige enden automatisch, einige durch einen geheimen Auslöser und andere erst durch einen späteren Segen.', en: 'Ongoing effects. Some end automatically, some through a secret trigger, and others only through a later blessing.' }
+    },
+    blessing: {
+      id: 'blessing-cards', title: { de: 'Segenkarten', en: 'Blessing cards' },
+      lead: { de: 'Diese verbindlichen Karten werden in festem Abstand hinter ihrem Fluch in den globalen Stapel gelegt und beenden ihn.', en: 'These mandatory cards are locked into the global deck behind their curse and end it.' }
+    },
+    charade: {
+      id: 'charade-cards', title: { de: 'Geheime Scharadenkarten', en: 'Secret charade cards' },
+      lead: { de: 'Nur die darstellende Person sieht den gesuchten Begriff; die übrige Crew rät.', en: 'Only the performer sees the answer; the rest of the crew guesses.' }
+    }
+  }[kind];
+  const used = challenges.filter((challenge) => usage.fun.has(challenge.id)).length;
+  return `<section class="catalog-section" id="${config.id}">
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Globaler nicht-fundamentaler Stapel', 'Global non-fundamental deck')}</p><h2>${t(config.title, language)}</h2><p class="muted">${t(config.lead, language)}</p></div>${statusTag(usage.hasSession ? `${used}/${challenges.length}` : `${challenges.length}`, used ? 'green' : '')}</div>
+    <div class="catalog-card-grid">${challenges.map((challenge) => catalogFunCard(challenge, usage, language, kind)).join('')}</div>
   </section>`;
 }
 
@@ -9149,12 +9728,12 @@ function catalogEventMechanics(event, language) {
   return `<details class="catalog-card-detail"><summary>${catalogLanguageText(language, 'Mögliche Effekte', 'Possible effects')}</summary><ul>${mechanics.map((mechanic) => `<li>${t(EFFECT_TEXT[mechanic] ?? mechanic, language)}</li>`).join('')}</ul></details>`;
 }
 
-function catalogEventCard(event, usage, language) {
+function catalogEventCard(event, usage, language, kind = 'event') {
   const used = usage.events.has(event.id);
   const type = event.type === 'dice'
     ? catalogLanguageText(language, 'Würfelkarte', 'dice card')
     : catalogLanguageText(language, 'Auswahlkarte', 'choice card');
-  return `<article class="catalog-card" data-card-kind="event" data-card-id="${escapeHtml(event.id)}" data-used="${used}">
+  return `<article class="catalog-card" data-card-kind="${escapeHtml(kind)}" data-card-id="${escapeHtml(event.id)}" data-used="${used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(event.id)}</span>${catalogUsedBadge(used, language)}</div>
     <h3>${t(event.title, language)}</h3>
     <p>${t(event.story, language)}</p>
@@ -9165,16 +9744,42 @@ function catalogEventCard(event, usage, language) {
 
 function catalogEventGroups(usage, language) {
   return EVENT_STAGES.map((stage) => {
-    const events = EVENT_DECKS.flatMap((deck) => deck.filter((event) => event.stage === stage));
+    const events = EVENT_DECKS.flatMap((deck) => deck.filter((event) => event.stage === stage && !isNonFundamentalEvent(event)));
+    if (!events.length) return '';
     const used = events.filter((event) => usage.events.has(event.id)).length;
     return `<details class="catalog-subgroup event-stage">
       <summary>${catalogGroupSummary(t(CATALOG_STAGE_LABELS[stage], language), usage.hasSession ? used : null, events.length, language)}</summary>
       <div class="catalog-course-groups">${CHAPTERS.map((chapter, chapterIndex) => {
-        const courseEvents = EVENT_DECKS[chapterIndex].filter((event) => event.stage === stage);
+        const courseEvents = EVENT_DECKS[chapterIndex].filter((event) => event.stage === stage && !isNonFundamentalEvent(event));
+        if (!courseEvents.length) return '';
         return `<section><h3>${t(chapter.course, language)} · ${t(chapter.name, language)}</h3><div class="catalog-card-grid">${courseEvents.map((event) => catalogEventCard(event, usage, language)).join('')}</div></section>`;
       }).join('')}</div>
     </details>`;
   }).join('');
+}
+
+function catalogNonFundamentalEventGroup(events, usage, language, type) {
+  const dice = type === 'dice';
+  const id = dice ? 'non-fundamental-dice-cards' : 'non-fundamental-choice-cards';
+  const kind = dice ? 'non-fundamental-dice-event' : 'non-fundamental-choice-event';
+  const title = dice
+    ? catalogLanguageText(language, 'Nicht-fundamentale Würfelkarten', 'Non-fundamental dice cards')
+    : catalogLanguageText(language, 'Nicht-fundamentale Auswahlkarten', 'Non-fundamental choice cards');
+  const lead = catalogLanguageText(
+    language,
+    'Diese generischen Ereignisse liegen im globalen nicht-fundamentalen Stapel. Jede konkrete Karten-ID wird nur einmal gezogen; dieselbe Würfel- oder Auswahlvorlage kommt aber mehrfach im Stapel vor und kann deshalb während einer Reise wiederkehren.',
+    'These generic events live in the global non-fundamental deck. Each specific card ID is drawn only once, but the same dice or choice template occurs several times in the deck and can therefore recur during a voyage.'
+  );
+  const used = events.filter((event) => usage.events.has(event.id)).length;
+  return `<section class="catalog-section" id="${id}">
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Globaler nicht-fundamentaler Stapel', 'Global non-fundamental deck')}</p><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(lead)}</p></div>${statusTag(usage.hasSession ? `${used}/${events.length}` : `${events.length}`, used ? 'green' : '')}</div>
+    <div class="catalog-course-groups">${CHAPTERS.map((chapter, chapterIndex) => {
+      const courseEvents = EVENT_DECKS[chapterIndex].filter((event) => isNonFundamentalEvent(event) && event.type === type);
+      if (!courseEvents.length) return '';
+      const courseUsed = courseEvents.filter((event) => usage.events.has(event.id)).length;
+      return `<details class="catalog-subgroup event-stage"><summary>${catalogGroupSummary(`${t(chapter.course, language)} · ${t(chapter.name, language)}`, usage.hasSession ? courseUsed : null, courseEvents.length, language)}</summary><div class="catalog-card-grid">${courseEvents.map((event) => catalogEventCard(event, usage, language, kind)).join('')}</div></details>`;
+    }).join('')}</div>
+  </section>`;
 }
 
 function catalogStoryRequirement(card, language) {
@@ -9244,7 +9849,7 @@ function catalogStoryGroups(usage, language) {
     return `<section data-story-island="${escapeHtml(chapter.id)}"><h3>${chapter.number}. ${t(chapter.name, language)}</h3><div class="catalog-card-grid">${cards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></section>`;
   }).join('');
   return `<section class="catalog-section" id="story-cards">
-    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jede Insel beginnt mit ihrer verpflichtenden Inselgeschichte, direkt gefolgt von der Geschichte des ersten Ortes. Weitere Ortsgeschichten erscheinen beim ersten Besuch; Quizkarten beachten ihre Story- und Besuchsvoraussetzungen.', 'Each island begins with its required island story, immediately followed by the first location story. Further location stories appear on first visit; quiz cards respect their story and visit requirements.')}</p></div>${statusTag(usage.hasSession ? `${totalUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, totalUsed ? 'green' : 'gold')}</div>
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jede Insel beginnt mit ihrer verpflichtenden Inselgeschichte, direkt gefolgt von der Geschichte des ersten Ortes. Weitere Ortsgeschichten erscheinen beim ersten Besuch. Sobald eine Chronik vorgelesen oder ein Ort besucht wurde, bleiben die zugehörigen Quizkarten für den gesamten weiteren Spielverlauf freigeschaltet.', 'Each island begins with its required island story, immediately followed by the first location story. Further location stories appear on first visit. Once a chronicle has been read or a location visited, its quiz cards remain unlocked for the rest of the game.')}</p></div>${statusTag(usage.hasSession ? `${totalUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, totalUsed ? 'green' : 'gold')}</div>
     <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Insel Karten', 'Island Story Cards'), usage.hasSession ? islandUsed : null, ISLAND_STORY_CARDS.length, language)}</summary><div class="catalog-card-grid">${ISLAND_STORY_CARDS.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
     <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Ort Karten', 'Location Story Cards'), usage.hasSession ? locationUsed : null, LOCATION_STORY_CARDS.length, language)}</summary><div class="catalog-course-groups">${locationGroups}</div></details>
     <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail Insel Quiz Karten', 'Island Detail Quiz Cards'), usage.hasSession ? islandDetailUsed : null, islandDetailCards.length, language)}</summary><div class="catalog-card-grid">${islandDetailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
@@ -9317,8 +9922,14 @@ function catalogUsageTotals(usage) {
 function renderCardCatalog(engine, language) {
   const usage = catalogUsage(engine);
   const totals = catalogUsageTotals(usage);
-  const standardFun = WATCH_CHALLENGES.filter((challenge) => !challenge.cooperative);
-  const cooperativeFun = WATCH_CHALLENGES.filter((challenge) => challenge.cooperative);
+  const standardFun = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'fun' && !challenge.cooperative);
+  const cooperativeFun = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'fun' && challenge.cooperative);
+  const curses = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'curse');
+  const blessings = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'blessing');
+  const charades = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'charade');
+  const nonFundamentalEvents = EVENT_DECKS.flat().filter(isNonFundamentalEvent);
+  const nonFundamentalDiceEvents = nonFundamentalEvents.filter((event) => event.type === 'dice');
+  const nonFundamentalChoiceEvents = nonFundamentalEvents.filter((event) => event.type === 'choice');
   const statusLead = usage.hasSession
     ? catalogLanguageText(language, 'Grün markierte Karten wurden in der laufenden Reise bereits gezogen, zugeteilt oder festgelegt.', 'Cards marked in green have already been drawn, assigned, or locked in during the current voyage.')
     : catalogLanguageText(language, 'Startet oder ladet eine Reise, damit bereits verwendete Karten hier automatisch grün markiert werden.', 'Start or load a voyage to automatically mark used cards in green here.');
@@ -9333,7 +9944,12 @@ function renderCardCatalog(engine, language) {
       <a href="#story-cards">${catalogLanguageText(language, 'Story', 'Story')}</a>
       <a href="#fun-cards">${catalogLanguageText(language, 'Spaß', 'Fun')}</a>
       <a href="#coop-fun-cards">${catalogLanguageText(language, 'Koop-Spaß', 'Co-op fun')}</a>
-      <a href="#event-cards">${catalogLanguageText(language, 'Ereignisse', 'Events')}</a>
+      <a href="#curse-cards">${catalogLanguageText(language, 'Flüche', 'Curses')}</a>
+      <a href="#blessing-cards">${catalogLanguageText(language, 'Segen', 'Blessings')}</a>
+      <a href="#charade-cards">${catalogLanguageText(language, 'Scharaden', 'Charades')}</a>
+      <a href="#non-fundamental-dice-cards">${catalogLanguageText(language, 'Würfelereignisse', 'Dice events')}</a>
+      <a href="#non-fundamental-choice-cards">${catalogLanguageText(language, 'Auswahlereignisse', 'Choice events')}</a>
+      <a href="#event-cards">${catalogLanguageText(language, 'Fundamentale Ereignisse', 'Fundamental events')}</a>
       <a href="#ingredient-cards">${catalogLanguageText(language, 'Zutaten', 'Ingredients')}</a>
       <a href="#role-cards">${catalogLanguageText(language, 'Figuren', 'Characters')}</a>
     </nav>
@@ -9347,9 +9963,14 @@ function renderCardCatalog(engine, language) {
 
     ${catalogFunGroup(standardFun, usage, language, false)}
     ${catalogFunGroup(cooperativeFun, usage, language, true)}
+    ${catalogSpecialChallengeGroup(curses, usage, language, 'curse')}
+    ${catalogSpecialChallengeGroup(blessings, usage, language, 'blessing')}
+    ${catalogSpecialChallengeGroup(charades, usage, language, 'charade')}
+    ${catalogNonFundamentalEventGroup(nonFundamentalDiceEvents, usage, language, 'dice')}
+    ${catalogNonFundamentalEventGroup(nonFundamentalChoiceEvents, usage, language, 'choice')}
 
     <section class="catalog-section" id="event-cards">
-      <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Nach Spielphase und Gang', 'By game stage and course')}</p><h2>${catalogLanguageText(language, 'Ereigniskarten', 'Event cards')}</h2><p class="muted">${catalogLanguageText(language, 'Öffnet eine Phase; darin sind die Karten nach Gängen gruppiert.', 'Open a stage; its cards are grouped by course.')}</p></div></div>
+      <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Nach Spielphase und Gang', 'By game stage and course')}</p><h2>${catalogLanguageText(language, 'Fundamentale Ereigniskarten', 'Fundamental event cards')}</h2><p class="muted">${catalogLanguageText(language, 'Diese Zutaten- und Aufgabenkarten gehören fest zu ihrem jeweiligen Gang. Öffnet eine Phase, um die Karten nach Gängen gruppiert zu sehen.', 'These ingredient and task cards belong to their respective course. Open a stage to see its cards grouped by course.')}</p></div></div>
       ${catalogEventGroups(usage, language)}
     </section>
 
@@ -9754,6 +10375,9 @@ async function handleAction(target) {
       if (gamblerRolled) animateVisibleDie();
       break;
     }
+    case 'choose-offered-card':
+      if (engine.chooseOfferedCard(target.dataset.cardId)) { audio.play('card'); persist(); render(); }
+      break;
     case 'roll-die': {
       engine.rollDie();
       audio.play('dice');
@@ -9807,6 +10431,9 @@ async function handleAction(target) {
       }
       break;
     }
+    case 'release-triggered-curse':
+      if (engine.releaseTriggeredCurse(target.dataset.challengeId)) { audio.play('complete'); persist(); render(); }
+      break;
     case 'choose-ingredient': engine.chooseIngredient(target.dataset.ingredientId); audio.play('card'); persist(); render(); break;
     case 'choose-soup-style':
       if (engine.chooseSoupStyle(target.dataset.style)) { audio.play('move'); persist(); render(); }

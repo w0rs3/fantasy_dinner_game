@@ -1,5 +1,5 @@
 import { CHAPTERS } from '../data/chapters.js';
-import { EFFECT_TEXT, EVENT_DECKS, EVENT_STAGES, WATCH_CHALLENGES } from '../data/events.js';
+import { EFFECT_TEXT, EVENT_DECKS, EVENT_STAGES, WATCH_CHALLENGES, isNonFundamentalEvent } from '../data/events.js';
 import { INGREDIENT_EFFECT_TEXT, INGREDIENTS, SHOPPING_STAPLES } from '../data/ingredients.js';
 import { localize } from '../data/i18n.js';
 import { ROLES } from '../data/roles.js';
@@ -304,9 +304,9 @@ function catalogFunCard(challenge, usage, language, kind) {
   if (challenge.flow === 'ongoing') traits.push(catalogLanguageText(language, 'mehrere Züge', 'multi-turn'));
   if (challenge.mandatory) traits.push(catalogLanguageText(language, 'verbindlich', 'mandatory'));
   if (challenge.partnerCount) traits.push(`${challenge.partnerCount + 1} ${catalogLanguageText(language, 'Personen', 'players')}`);
-  if (challenge.durationSeconds && challenge.flow !== 'ongoing') traits.push(challenge.durationSeconds < 60
-    ? `${challenge.durationSeconds} ${catalogLanguageText(language, 'Sek.', 'sec')}`
-    : `${challenge.minutes} ${catalogLanguageText(language, 'Min.', 'min')}`);
+  if (challenge.durationSeconds && challenge.flow !== 'ongoing') traits.push(challenge.durationSeconds % 60 === 0
+    ? `${challenge.durationSeconds / 60} ${catalogLanguageText(language, 'Min.', 'min')}`
+    : `${challenge.durationSeconds} ${catalogLanguageText(language, 'Sek.', 'sec')}`);
   if (challenge.skillCheck) traits.push(language === 'de'
     ? `${challenge.dexterity ? 'Geschicklichkeit' : 'Erfolgswertung'} · Erfolg +${challenge.successCoins} · Scheitern −${Math.abs(challenge.failureCoins)}`
     : `${challenge.dexterity ? 'Dexterity' : 'Scored outcome'} · success +${challenge.successCoins} · failure −${Math.abs(challenge.failureCoins)}`);
@@ -325,11 +325,33 @@ function catalogFunGroup(challenges, usage, language, cooperative) {
     : catalogLanguageText(language, 'Spaßkarten', 'Fun cards');
   const lead = cooperative
     ? catalogLanguageText(language, 'Diese Karten binden zwei oder drei gerade freie Personen in eine gemeinsame Mini-Aufgabe ein.', 'These cards involve two or three currently free players in a shared mini-task.')
-    : catalogLanguageText(language, 'Kurze, geheime und fortlaufende Bordaufgaben. Jede davon kann pro Reise nur einmal gezogen werden.', 'Quick, secret, and ongoing deck duties. Each can be drawn only once per voyage.');
+    : catalogLanguageText(language, 'Kurze öffentliche Bordaufgaben und private Scherze. Jede davon kann pro Reise nur einmal gezogen werden.', 'Quick public deck duties and personal jokes. Each can be drawn only once per voyage.');
   const used = challenges.filter((challenge) => usage.fun.has(challenge.id)).length;
   return `<section class="catalog-section" id="${id}">
     <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Eigenständiger Kartenstapel', 'Separate card deck')}</p><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(lead)}</p></div>${statusTag(usage.hasSession ? `${used}/${challenges.length}` : `${challenges.length}`, used ? 'green' : '')}</div>
     <div class="catalog-card-grid">${challenges.map((challenge) => catalogFunCard(challenge, usage, language, cooperative ? 'coop-fun' : 'fun')).join('')}</div>
+  </section>`;
+}
+
+function catalogSpecialChallengeGroup(challenges, usage, language, kind) {
+  const config = {
+    curse: {
+      id: 'curse-cards', title: { de: 'Fluchkarten', en: 'Curse cards' },
+      lead: { de: 'Fortlaufende Effekte. Einige enden automatisch, einige durch einen geheimen Auslöser und andere erst durch einen späteren Segen.', en: 'Ongoing effects. Some end automatically, some through a secret trigger, and others only through a later blessing.' }
+    },
+    blessing: {
+      id: 'blessing-cards', title: { de: 'Segenkarten', en: 'Blessing cards' },
+      lead: { de: 'Diese verbindlichen Karten werden in festem Abstand hinter ihrem Fluch in den globalen Stapel gelegt und beenden ihn.', en: 'These mandatory cards are locked into the global deck behind their curse and end it.' }
+    },
+    charade: {
+      id: 'charade-cards', title: { de: 'Geheime Scharadenkarten', en: 'Secret charade cards' },
+      lead: { de: 'Nur die darstellende Person sieht den gesuchten Begriff; die übrige Crew rät.', en: 'Only the performer sees the answer; the rest of the crew guesses.' }
+    }
+  }[kind];
+  const used = challenges.filter((challenge) => usage.fun.has(challenge.id)).length;
+  return `<section class="catalog-section" id="${config.id}">
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Globaler nicht-fundamentaler Stapel', 'Global non-fundamental deck')}</p><h2>${t(config.title, language)}</h2><p class="muted">${t(config.lead, language)}</p></div>${statusTag(usage.hasSession ? `${used}/${challenges.length}` : `${challenges.length}`, used ? 'green' : '')}</div>
+    <div class="catalog-card-grid">${challenges.map((challenge) => catalogFunCard(challenge, usage, language, kind)).join('')}</div>
   </section>`;
 }
 
@@ -339,12 +361,12 @@ function catalogEventMechanics(event, language) {
   return `<details class="catalog-card-detail"><summary>${catalogLanguageText(language, 'Mögliche Effekte', 'Possible effects')}</summary><ul>${mechanics.map((mechanic) => `<li>${t(EFFECT_TEXT[mechanic] ?? mechanic, language)}</li>`).join('')}</ul></details>`;
 }
 
-function catalogEventCard(event, usage, language) {
+function catalogEventCard(event, usage, language, kind = 'event') {
   const used = usage.events.has(event.id);
   const type = event.type === 'dice'
     ? catalogLanguageText(language, 'Würfelkarte', 'dice card')
     : catalogLanguageText(language, 'Auswahlkarte', 'choice card');
-  return `<article class="catalog-card" data-card-kind="event" data-card-id="${escapeHtml(event.id)}" data-used="${used}">
+  return `<article class="catalog-card" data-card-kind="${escapeHtml(kind)}" data-card-id="${escapeHtml(event.id)}" data-used="${used}">
     <div class="catalog-card-top"><span class="catalog-card-id">${escapeHtml(event.id)}</span>${catalogUsedBadge(used, language)}</div>
     <h3>${t(event.title, language)}</h3>
     <p>${t(event.story, language)}</p>
@@ -355,16 +377,42 @@ function catalogEventCard(event, usage, language) {
 
 function catalogEventGroups(usage, language) {
   return EVENT_STAGES.map((stage) => {
-    const events = EVENT_DECKS.flatMap((deck) => deck.filter((event) => event.stage === stage));
+    const events = EVENT_DECKS.flatMap((deck) => deck.filter((event) => event.stage === stage && !isNonFundamentalEvent(event)));
+    if (!events.length) return '';
     const used = events.filter((event) => usage.events.has(event.id)).length;
     return `<details class="catalog-subgroup event-stage">
       <summary>${catalogGroupSummary(t(CATALOG_STAGE_LABELS[stage], language), usage.hasSession ? used : null, events.length, language)}</summary>
       <div class="catalog-course-groups">${CHAPTERS.map((chapter, chapterIndex) => {
-        const courseEvents = EVENT_DECKS[chapterIndex].filter((event) => event.stage === stage);
+        const courseEvents = EVENT_DECKS[chapterIndex].filter((event) => event.stage === stage && !isNonFundamentalEvent(event));
+        if (!courseEvents.length) return '';
         return `<section><h3>${t(chapter.course, language)} · ${t(chapter.name, language)}</h3><div class="catalog-card-grid">${courseEvents.map((event) => catalogEventCard(event, usage, language)).join('')}</div></section>`;
       }).join('')}</div>
     </details>`;
   }).join('');
+}
+
+function catalogNonFundamentalEventGroup(events, usage, language, type) {
+  const dice = type === 'dice';
+  const id = dice ? 'non-fundamental-dice-cards' : 'non-fundamental-choice-cards';
+  const kind = dice ? 'non-fundamental-dice-event' : 'non-fundamental-choice-event';
+  const title = dice
+    ? catalogLanguageText(language, 'Nicht-fundamentale Würfelkarten', 'Non-fundamental dice cards')
+    : catalogLanguageText(language, 'Nicht-fundamentale Auswahlkarten', 'Non-fundamental choice cards');
+  const lead = catalogLanguageText(
+    language,
+    'Diese generischen Ereignisse liegen im globalen nicht-fundamentalen Stapel. Jede konkrete Karten-ID wird nur einmal gezogen; dieselbe Würfel- oder Auswahlvorlage kommt aber mehrfach im Stapel vor und kann deshalb während einer Reise wiederkehren.',
+    'These generic events live in the global non-fundamental deck. Each specific card ID is drawn only once, but the same dice or choice template occurs several times in the deck and can therefore recur during a voyage.'
+  );
+  const used = events.filter((event) => usage.events.has(event.id)).length;
+  return `<section class="catalog-section" id="${id}">
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Globaler nicht-fundamentaler Stapel', 'Global non-fundamental deck')}</p><h2>${escapeHtml(title)}</h2><p class="muted">${escapeHtml(lead)}</p></div>${statusTag(usage.hasSession ? `${used}/${events.length}` : `${events.length}`, used ? 'green' : '')}</div>
+    <div class="catalog-course-groups">${CHAPTERS.map((chapter, chapterIndex) => {
+      const courseEvents = EVENT_DECKS[chapterIndex].filter((event) => isNonFundamentalEvent(event) && event.type === type);
+      if (!courseEvents.length) return '';
+      const courseUsed = courseEvents.filter((event) => usage.events.has(event.id)).length;
+      return `<details class="catalog-subgroup event-stage"><summary>${catalogGroupSummary(`${t(chapter.course, language)} · ${t(chapter.name, language)}`, usage.hasSession ? courseUsed : null, courseEvents.length, language)}</summary><div class="catalog-card-grid">${courseEvents.map((event) => catalogEventCard(event, usage, language, kind)).join('')}</div></details>`;
+    }).join('')}</div>
+  </section>`;
 }
 
 function catalogStoryRequirement(card, language) {
@@ -434,7 +482,7 @@ function catalogStoryGroups(usage, language) {
     return `<section data-story-island="${escapeHtml(chapter.id)}"><h3>${chapter.number}. ${t(chapter.name, language)}</h3><div class="catalog-card-grid">${cards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></section>`;
   }).join('');
   return `<section class="catalog-section" id="story-cards">
-    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jede Insel beginnt mit ihrer verpflichtenden Inselgeschichte, direkt gefolgt von der Geschichte des ersten Ortes. Weitere Ortsgeschichten erscheinen beim ersten Besuch; Quizkarten beachten ihre Story- und Besuchsvoraussetzungen.', 'Each island begins with its required island story, immediately followed by the first location story. Further location stories appear on first visit; quiz cards respect their story and visit requirements.')}</p></div>${statusTag(usage.hasSession ? `${totalUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, totalUsed ? 'green' : 'gold')}</div>
+    <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Chronik der Reise', 'Voyage chronicle')}</p><h2>${catalogLanguageText(language, 'Storykarten', 'Story cards')}</h2><p class="muted">${catalogLanguageText(language, 'Jede Insel beginnt mit ihrer verpflichtenden Inselgeschichte, direkt gefolgt von der Geschichte des ersten Ortes. Weitere Ortsgeschichten erscheinen beim ersten Besuch. Sobald eine Chronik vorgelesen oder ein Ort besucht wurde, bleiben die zugehörigen Quizkarten für den gesamten weiteren Spielverlauf freigeschaltet.', 'Each island begins with its required island story, immediately followed by the first location story. Further location stories appear on first visit. Once a chronicle has been read or a location visited, its quiz cards remain unlocked for the rest of the game.')}</p></div>${statusTag(usage.hasSession ? `${totalUsed}/${STORY_CARDS.length}` : `${STORY_CARDS.length}`, totalUsed ? 'green' : 'gold')}</div>
     <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Insel Karten', 'Island Story Cards'), usage.hasSession ? islandUsed : null, ISLAND_STORY_CARDS.length, language)}</summary><div class="catalog-card-grid">${ISLAND_STORY_CARDS.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
     <details class="catalog-subgroup" open><summary>${catalogGroupSummary(catalogLanguageText(language, 'Story Ort Karten', 'Location Story Cards'), usage.hasSession ? locationUsed : null, LOCATION_STORY_CARDS.length, language)}</summary><div class="catalog-course-groups">${locationGroups}</div></details>
     <details class="catalog-subgroup"><summary>${catalogGroupSummary(catalogLanguageText(language, 'Detail Insel Quiz Karten', 'Island Detail Quiz Cards'), usage.hasSession ? islandDetailUsed : null, islandDetailCards.length, language)}</summary><div class="catalog-card-grid">${islandDetailCards.map((card) => catalogStoryCard(card, usage, language)).join('')}</div></details>
@@ -507,8 +555,14 @@ function catalogUsageTotals(usage) {
 export function renderCardCatalog(engine, language) {
   const usage = catalogUsage(engine);
   const totals = catalogUsageTotals(usage);
-  const standardFun = WATCH_CHALLENGES.filter((challenge) => !challenge.cooperative);
-  const cooperativeFun = WATCH_CHALLENGES.filter((challenge) => challenge.cooperative);
+  const standardFun = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'fun' && !challenge.cooperative);
+  const cooperativeFun = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'fun' && challenge.cooperative);
+  const curses = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'curse');
+  const blessings = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'blessing');
+  const charades = WATCH_CHALLENGES.filter((challenge) => challenge.cardKind === 'charade');
+  const nonFundamentalEvents = EVENT_DECKS.flat().filter(isNonFundamentalEvent);
+  const nonFundamentalDiceEvents = nonFundamentalEvents.filter((event) => event.type === 'dice');
+  const nonFundamentalChoiceEvents = nonFundamentalEvents.filter((event) => event.type === 'choice');
   const statusLead = usage.hasSession
     ? catalogLanguageText(language, 'Grün markierte Karten wurden in der laufenden Reise bereits gezogen, zugeteilt oder festgelegt.', 'Cards marked in green have already been drawn, assigned, or locked in during the current voyage.')
     : catalogLanguageText(language, 'Startet oder ladet eine Reise, damit bereits verwendete Karten hier automatisch grün markiert werden.', 'Start or load a voyage to automatically mark used cards in green here.');
@@ -523,7 +577,12 @@ export function renderCardCatalog(engine, language) {
       <a href="#story-cards">${catalogLanguageText(language, 'Story', 'Story')}</a>
       <a href="#fun-cards">${catalogLanguageText(language, 'Spaß', 'Fun')}</a>
       <a href="#coop-fun-cards">${catalogLanguageText(language, 'Koop-Spaß', 'Co-op fun')}</a>
-      <a href="#event-cards">${catalogLanguageText(language, 'Ereignisse', 'Events')}</a>
+      <a href="#curse-cards">${catalogLanguageText(language, 'Flüche', 'Curses')}</a>
+      <a href="#blessing-cards">${catalogLanguageText(language, 'Segen', 'Blessings')}</a>
+      <a href="#charade-cards">${catalogLanguageText(language, 'Scharaden', 'Charades')}</a>
+      <a href="#non-fundamental-dice-cards">${catalogLanguageText(language, 'Würfelereignisse', 'Dice events')}</a>
+      <a href="#non-fundamental-choice-cards">${catalogLanguageText(language, 'Auswahlereignisse', 'Choice events')}</a>
+      <a href="#event-cards">${catalogLanguageText(language, 'Fundamentale Ereignisse', 'Fundamental events')}</a>
       <a href="#ingredient-cards">${catalogLanguageText(language, 'Zutaten', 'Ingredients')}</a>
       <a href="#role-cards">${catalogLanguageText(language, 'Figuren', 'Characters')}</a>
     </nav>
@@ -537,9 +596,14 @@ export function renderCardCatalog(engine, language) {
 
     ${catalogFunGroup(standardFun, usage, language, false)}
     ${catalogFunGroup(cooperativeFun, usage, language, true)}
+    ${catalogSpecialChallengeGroup(curses, usage, language, 'curse')}
+    ${catalogSpecialChallengeGroup(blessings, usage, language, 'blessing')}
+    ${catalogSpecialChallengeGroup(charades, usage, language, 'charade')}
+    ${catalogNonFundamentalEventGroup(nonFundamentalDiceEvents, usage, language, 'dice')}
+    ${catalogNonFundamentalEventGroup(nonFundamentalChoiceEvents, usage, language, 'choice')}
 
     <section class="catalog-section" id="event-cards">
-      <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Nach Spielphase und Gang', 'By game stage and course')}</p><h2>${catalogLanguageText(language, 'Ereigniskarten', 'Event cards')}</h2><p class="muted">${catalogLanguageText(language, 'Öffnet eine Phase; darin sind die Karten nach Gängen gruppiert.', 'Open a stage; its cards are grouped by course.')}</p></div></div>
+      <div class="section-header"><div><p class="eyebrow">${catalogLanguageText(language, 'Nach Spielphase und Gang', 'By game stage and course')}</p><h2>${catalogLanguageText(language, 'Fundamentale Ereigniskarten', 'Fundamental event cards')}</h2><p class="muted">${catalogLanguageText(language, 'Diese Zutaten- und Aufgabenkarten gehören fest zu ihrem jeweiligen Gang. Öffnet eine Phase, um die Karten nach Gängen gruppiert zu sehen.', 'These ingredient and task cards belong to their respective course. Open a stage to see its cards grouped by course.')}</p></div></div>
       ${catalogEventGroups(usage, language)}
     </section>
 

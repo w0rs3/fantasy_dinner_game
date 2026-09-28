@@ -1,6 +1,7 @@
 import { GameEngine } from '../js/core/game-engine.js';
 import { updateTaskTimers } from '../js/core/timers.js';
 import { CHAPTERS } from '../js/data/chapters.js';
+import { isNonFundamentalEvent } from '../js/data/events.js';
 import { ROLES } from '../js/data/roles.js';
 
 const MINUTE = 60_000;
@@ -11,7 +12,9 @@ function chooseEventOption(engine, seed) {
     ? ['discoverIngredient', 'treasureAndIngredient', 'lockIngredient', 'swapIngredient']
     : engine.currentEventStage() === 'tasks'
       ? ['teamTask', 'drawTask', 'singleTask', 'treasureAndTask']
-      : ['treasureAndWatch', 'watchChallenge', 'watchChallengeAlt', 'treasureAndChain', 'treasure'];
+      : seed % 2
+        ? ['chooseNamedQuiz', 'drawLocationQuiz', 'drawAnyQuiz', 'drawCoopFun', 'drawSoloFun', 'chooseNamedFun', 'treasureAndWatch', 'watchChallenge', 'watchChallengeAlt', 'treasureAndChain', 'treasure']
+        : ['chooseNamedFun', 'drawCoopFun', 'drawSoloFun', 'drawRouteQuiz', 'drawIslandQuiz', 'drawAnyQuiz', 'treasureAndWatch', 'watchChallenge', 'watchChallengeAlt', 'treasureAndChain', 'treasure'];
   return priorities.find((option) => options.includes(option)) ?? options[0];
 }
 
@@ -114,18 +117,23 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
           : event.answers.find((candidate) => candidate.id !== event.correctAnswerId).id;
         if (!engine.answerStoryQuiz(answer, now)) failedTransitions += 1;
       } else {
-        stageEvents[event.stage] += 1;
-        if (event.stage !== engine.currentEventStage()) stageEventMismatches += 1;
+        const globalCard = isNonFundamentalEvent(event);
+        const effectiveStage = globalCard ? engine.currentEventStage() : event.stage;
+        stageEvents[effectiveStage] += 1;
+        if (!globalCard && event.stage !== engine.currentEventStage()) stageEventMismatches += 1;
         const actions = event.type === 'choice' ? event.options : event.outcomes;
         if (new Set(actions).size !== actions.length) duplicateEventActions += 1;
         invalidEventActions += actions.filter((action) => !engine.actionAvailable(action)).length;
-        if (event.stage === 'tasks' && engine.state.chapter.stage !== 'clearing' && !engine.ingredientsLockedForCourse() && engine.state.chapterIndex !== 0) taskAssignmentsBeforeIngredientsLocked += 1;
+        if (!globalCard && event.stage === 'tasks' && engine.state.chapter.stage !== 'clearing' && !engine.ingredientsLockedForCourse() && engine.state.chapterIndex !== 0) taskAssignmentsBeforeIngredientsLocked += 1;
         if (engine.currentEvent.type === 'choice') {
           if (!engine.resolveChoice(chooseEventOption(engine, seed), now)) failedTransitions += 1;
         } else if (!engine.rollDie(now)) failedTransitions += 1;
       }
     } else if (phase === 'rolled') {
       if (!engine.confirmRoll(now)) failedTransitions += 1;
+    } else if (phase === 'cardChoice') {
+      const cards = engine.cardOfferCards();
+      if (!cards.length || !engine.chooseOfferedCard(cards[(seed + steps) % cards.length].id, now)) failedTransitions += 1;
     } else if (phase === 'watch') {
       let handled;
       if (engine.currentWatchChallenge?.secret && engine.state.turn.watchSecretRevealedAt == null) {
@@ -259,7 +267,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
     taskIngredientMismatches,
     cauldronHandoffViolations,
     activeChallengesRemaining: engine.state.activeChallenges.length,
-    followUpDelayViolations: engine.state.history.filter((entry) => entry.type === 'watchFollowUpScheduled' && (entry.data.delayTurns < 3 || entry.data.delayTurns > 5)).length,
+    followUpDelayViolations: engine.state.history.filter((entry) => entry.type === 'watchFollowUpScheduled' && (entry.data.cardDistance < 3 || entry.data.cardDistance > 10)).length,
     backgroundCoinViolations: engine.state.tasks.filter((instance) => instance.timingMode === 'background' && instance.challengeCoinValue !== 0).length,
     backgroundTasks: engine.state.tasks.filter((instance) => instance.timingMode === 'background').length,
     challengeTasks: engine.state.tasks.filter((instance) => instance.timingMode === 'challenge').length,

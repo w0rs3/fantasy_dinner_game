@@ -79,6 +79,7 @@ test('all thirteen active role abilities execute once and leave a progressable t
     let option = null;
 
     if (['scout', 'tactician'].includes(role.id)) {
+      engine.state.turn.forcedEventDeckKind = 'fundamental';
       assert.ok(engine.beginEvent(now + 200));
       assert.equal(engine.state.turn.phase, 'event');
     } else if (role.id === 'smith') {
@@ -224,6 +225,7 @@ test('the Smith cannot spend an active use on a clamped no-op at die boundaries'
 
 test('the Tactician really shuffles the open event back instead of silently discarding it', () => {
   const engine = create('tactician', 4_605);
+  engine.state.turn.forcedEventDeckKind = 'fundamental';
   assert.ok(engine.beginEvent(now + 300));
   const originalId = engine.currentEvent.id;
   assert.equal(engine.distinctEventReplacementAvailable(), true);

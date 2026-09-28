@@ -1,6 +1,6 @@
 import { CHAPTERS } from '../data/chapters.js';
 import { COIN_VALUES } from '../config.js';
-import { EFFECT_TEXT } from '../data/events.js';
+import { EFFECT_TEXT, WATCH_CHALLENGES } from '../data/events.js';
 import { INGREDIENT_EFFECT_TEXT } from '../data/ingredients.js';
 import { localize, formatDuration } from '../data/i18n.js';
 import { getRole } from '../data/roles.js';
@@ -24,8 +24,8 @@ const STAGE_COPY = Object.freeze({
     en: { label: '2 · Fun & tasks', title: 'Draw from the work deck', button: 'Draw next card', lead: 'Draw the next card and discover what the voyage has in store for your crew.' }
   },
   cooking: {
-    de: { label: '3 · Parallel kochen', title: 'Freies Ereignis ziehen', button: 'Eventkarte ziehen', lead: 'Küchenarbeit läuft parallel. Freie Personen erleben Challenges, Pausen, geheime Späße und Münzereignisse.' },
-    en: { label: '3 · Cook in parallel', title: 'Draw an open event', button: 'Draw event card', lead: 'Kitchen work continues in parallel. Free players get challenges, breaks, secret fun, and coin events.' }
+    de: { label: '3 · Parallel kochen', title: 'Vom globalen Stapel ziehen', button: 'Karte ziehen', lead: 'Küchenarbeit läuft parallel. Der globale Stapel mischt Ereignisse, Quiz, Spaß, Scharaden, Flüche, Segen und Münzen.' },
+    en: { label: '3 · Cook in parallel', title: 'Draw from the global deck', button: 'Draw a card', lead: 'Kitchen work continues in parallel. The global deck mixes events, quizzes, fun, charades, curses, blessings, and coins.' }
   }
 });
 
@@ -190,7 +190,7 @@ function eventActionText(engine, actionCode, language) {
     }
     return `${treasure}${accept}${t(challenge, language)}`;
   }
-  if (actionCode === 'coinLoss') {
+  if (['coinLoss', 'coinLossSmall'].includes(actionCode)) {
     const challengeDecline = engine.currentEvent?.type === 'choice' &&
       engine.currentEvent?.options?.some((option) => ['watchChallenge', 'watchChallengeAlt', 'treasureAndWatch'].includes(option));
     const prefix = challengeDecline
@@ -203,7 +203,8 @@ function eventActionText(engine, actionCode, language) {
         ? `${prefix}Gambler-Wurf ${roll} · −${actualLoss} Münzen`
         : `${prefix}Gambler roll ${roll} · −${actualLoss} coins`;
     }
-    const preview = engine.coinLossPreview(COIN_VALUES.coinLoss);
+    const requestedLoss = actionCode === 'coinLossSmall' ? COIN_VALUES.smallCoinLoss : COIN_VALUES.coinLoss;
+    const preview = engine.coinLossPreview(requestedLoss);
     if (preview.dice) {
       return language === 'de'
         ? `${prefix}Gambler würfelt den Verlust · 1–6 Münzen`
@@ -374,6 +375,17 @@ function renderStatusPanel(engine, language) {
   const fixedIngredients = currentIngredients.filter((ingredient) => ['locked', 'used'].includes(ingredient.status)).length;
   const freeCrew = engine.freePlayersForTask(group).length;
   const stage = stageCopy(engine, language);
+  const activeCurses = engine.state.activeChallenges.map((instance) => ({
+    instance,
+    card: WATCH_CHALLENGES.find((challenge) => challenge.id === instance.challengeId),
+    owner: engine.state.players.find((player) => player.id === instance.ownerPlayerId)
+  })).filter(({ card }) => card?.cardKind === 'curse');
+  const curseStatus = activeCurses.length ? `<div class="active-curse-list"><strong>${language === 'de' ? 'Aktive Flüche' : 'Active curses'}</strong>${activeCurses.map(({ instance, card, owner }) => `
+    <div class="card-effect"><span>${card.secret
+      ? (language === 'de' ? `Geheimer Fluch bei ${escapeHtml(owner?.name ?? '')}` : `Secret curse affecting ${escapeHtml(owner?.name ?? '')}`)
+      : `${t(card.title, language)} · ${escapeHtml(owner?.name ?? '')}`}</span>${instance.endTrigger === 'secretTrigger'
+      ? `<button class="quiet-button" type="button" data-action="release-triggered-curse" data-challenge-id="${escapeHtml(instance.instanceId)}">${language === 'de' ? 'Geheimer Auslöser ist eingetreten' : 'Secret trigger occurred'}</button>`
+      : ''}</div>`).join('')}</div>` : '';
   return `
     <section class="panel" style="box-shadow:none">
       <div class="panel-header">
@@ -385,6 +397,7 @@ function renderStatusPanel(engine, language) {
       </div>
       <p class="muted">${t(engine.currentChapter.atmosphere, language)}</p>
       ${renderCocktailTeams(engine, language)}
+      ${curseStatus}
       <div class="stat-strip">
         ${statusTag(`${tx('round', language)} ${engine.state.chapter.round}`)}
         ${statusTag(`● ${engine.state.coins}/${engine.state.coinGoal} ${tx('treasure', language)}`, 'gold')}
@@ -525,7 +538,12 @@ function renderDrawCard(engine, language) {
   const preview = engine.nextEventPreview();
   const scoutPreview = engine.activePlayer.roleId === 'scout' && engine.isPassiveEnabled(engine.activePlayer);
   const group = engine.activeGroup;
-  const copy = stageCopy(engine, language);
+  const nextDeckKind = engine.nextEventDeckKind();
+  const phaseCopy = stageCopy(engine, language);
+  const globalCopy = STAGE_COPY.cooking[language];
+  const copy = nextDeckKind === 'nonFundamental'
+    ? { ...globalCopy, label: phaseCopy.label }
+    : phaseCopy;
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
@@ -580,7 +598,6 @@ function renderStoryEventCard(engine, language) {
 function renderEventCard(engine, language) {
   const event = engine.currentEvent;
   if (event?.storyKind) return renderStoryEventCard(engine, language);
-  const pauseBlocked = event.archetype === 'respite' && !event.options?.includes('fiveMinuteBreak');
   const choices = event.options?.map((code) => {
     const ingredientTarget = ['lockIngredient', 'returnIngredient', 'swapIngredient'].includes(code)
       ? engine.ingredientActionTarget()
@@ -599,19 +616,53 @@ function renderEventCard(engine, language) {
       </div>
       <h2>${t(event.title, language)}</h2>
       <p class="card-story">${t(event.story, language)}</p>
-      ${pauseBlocked ? `<div class="card-effect"><strong>${language === 'de' ? 'Noch keine Pause:' : 'No break yet:'}</strong> ${language === 'de' ? 'Die Pausenoption erscheint erst, wenn alle offenen Küchenaufgaben erledigt markiert sind.' : 'The break option appears only after every open kitchen task has been marked complete.'}</div>` : ''}
       ${event.type === 'choice'
         ? `${event.options.length > 1 ? `<div class="card-effect"><strong>${language === 'de' ? 'Die Crew darf beraten. Die endgültige Wahl trifft die aktive Person.' : 'The crew may discuss. The active player makes the final choice.'}</strong></div>` : ''}<div class="choice-list">${choices}</div>`
-        : `<div class="card-effect">${language === 'de' ? 'Würfelt und folgt dem passenden Ergebnis: 1–2, 3–4 oder 5–6.' : 'Roll and follow the matching result: 1–2, 3–4, or 5–6.'}</div>
+        : `<div class="card-effect">${event.orderedCoinRoll
+          ? (language === 'de' ? 'Jede Augenzahl hat ein eigenes Ergebnis: 1 ist das schlechteste, 6 das beste.' : 'Every face has its own result: 1 is the worst and 6 is the best.')
+          : (language === 'de' ? 'Würfelt und folgt dem passenden Ergebnis: 1–2, 3–4 oder 5–6.' : 'Roll and follow the matching result: 1–2, 3–4, or 5–6.')}</div>
            <button class="primary-button" type="button" data-action="roll-die">${tx('roll', language)}</button>`}
+    </article>`;
+}
+
+function renderCardChoice(engine, language) {
+  const offer = engine.state.turn.pendingCardOffer;
+  const cards = engine.cardOfferCards();
+  const quizLabels = {
+    'island-detail': { de: 'Inselchronik-Quiz', en: 'Island lore quiz' },
+    'location-detail': { de: 'Ortsdetail-Quiz', en: 'Location detail quiz' },
+    route: { de: 'Routen-Quiz', en: 'Route quiz' }
+  };
+  const choices = cards.map((card) => {
+    const detail = offer.kind === 'quiz'
+      ? t(quizLabels[card.quizKind] ?? { de: 'Erinnerungsquiz', en: 'Memory quiz' }, language)
+      : card.cooperative
+        ? (language === 'de' ? `Koop-Spaßkarte · ${card.partnerCount + 1} Personen` : `Co-op fun card · ${card.partnerCount + 1} people`)
+        : (language === 'de' ? 'Solo-Spaßkarte' : 'Solo fun card');
+    return `<button type="button" class="choice-button" data-action="choose-offered-card" data-card-id="${escapeHtml(card.id)}"><strong>${escapeHtml(t(card.title, language))}</strong><small>${escapeHtml(detail)}</small></button>`;
+  }).join('');
+  return `
+    <article class="game-card card-offer-card">
+      ${renderCourseFlow(engine, language)}
+      <div class="card-row">
+        <p class="eyebrow">${language === 'de' ? 'Aktive Kartenwahl' : 'Active card choice'} · ${cards.length} ${language === 'de' ? 'Karten' : 'cards'}</p>
+        ${statusTag(offer.kind === 'quiz'
+          ? (language === 'de' ? 'Quiz' : 'Quiz')
+          : (language === 'de' ? 'Spaß' : 'Fun'), 'gold')}
+      </div>
+      <h2>${language === 'de' ? 'Welche Karte möchtet ihr ziehen?' : 'Which card would you like to draw?'}</h2>
+      <p class="event-subtitle">${t(engine.currentEvent.title, language)}</p>
+      <p class="card-story">${language === 'de'
+        ? 'Die Crew darf die sichtbaren Titel gemeinsam abwägen. Die aktive Person trifft die endgültige Wahl; nur die gewählte Karte wird verbraucht.'
+        : 'The crew may weigh the visible titles together. The active player makes the final choice; only the selected card is consumed.'}</p>
+      <div class="choice-list">${choices}</div>
     </article>`;
 }
 
 function renderRolledCard(engine, language) {
   const event = engine.currentEvent;
   const value = engine.state.turn.dieResult;
-  const outcomeIndex = value <= 2 ? 0 : value <= 4 ? 1 : 2;
-  const outcomeCode = event.outcomes[outcomeIndex];
+  const outcomeCode = engine.eventOutcomeForDie(event, value);
   const smithKey = `smith-reroll-${engine.state.chapterIndex}`;
   const canReroll = engine.activePlayer.roleId === 'smith' && engine.passiveUnused(engine.activePlayer, smithKey);
   const nextDiceEffect = engine.nextStoredIngredientEffect('dice');
@@ -963,11 +1014,12 @@ function renderWatchCard(engine, language) {
   const secretRevealed = !challenge.secret || engine.state.turn.watchSecretRevealedAt != null;
   if (challenge.secret && !secretRevealed) {
     const activeName = escapeHtml(engine.activePlayer.name);
+    const secretCurse = challenge.cardKind === 'curse';
     return `
       <article class="game-card secret-event-announcement">
         ${renderCourseFlow(engine, language)}
-        <p class="eyebrow">${language === 'de' ? 'Private Karte auf dem Tablet' : 'Private card on the tablet'}</p>
-        <h2>${language === 'de' ? 'Geheimes Event' : 'Secret event'}</h2>
+        <p class="eyebrow">${secretCurse ? (language === 'de' ? 'Fluch mit geheimem Auslöser' : 'Curse with a secret trigger') : (language === 'de' ? 'Private Scharadenkarte' : 'Private charade card')}</p>
+        <h2>${secretCurse ? (language === 'de' ? 'Geheimer Fluch' : 'Secret curse') : (language === 'de' ? 'Geheime Scharade' : 'Secret charade')}</h2>
         <div class="secret-screen-warning" role="status">
           <strong>${language === 'de' ? 'Alle außer der aktiven Person schauen jetzt vom großen Bildschirm weg.' : 'Everyone except the active player now looks away from the large screen.'}</strong>
           <p>${language === 'de'
@@ -975,9 +1027,9 @@ function renderWatchCard(engine, language) {
             : `${activeName} opens the card only after everyone else has stopped looking at the mirrored screen.`}</p>
         </div>
         <p class="card-story">${language === 'de'
-          ? 'Die geheime Anweisung wird erst nach dem Öffnen sichtbar. Sie kann anschließend kurz gelesen und wieder zugeklappt werden.'
-          : 'The secret instruction is only shown after opening. It can then be read briefly and collapsed again.'}</p>
-        <button class="primary-button" type="button" data-action="reveal-secret-watch">${language === 'de' ? 'Geheimes Event öffnen' : 'Open secret event'}</button>
+          ? (secretCurse ? 'Nur die verfluchte Person liest Wirkung und Auslöser. Der Auslöser bleibt vor der übrigen Crew verborgen.' : 'Nur die darstellende Person liest den gesuchten Begriff. Die übrige Crew darf ihn nicht sehen.')
+          : (secretCurse ? 'Only the cursed player reads the effect and trigger. The trigger remains hidden from the rest of the crew.' : 'Only the performer reads the answer. The rest of the crew must not see it.')}</p>
+        <button class="primary-button" type="button" data-action="reveal-secret-watch">${secretCurse ? (language === 'de' ? 'Fluch heimlich öffnen' : 'Open curse privately') : (language === 'de' ? 'Scharade heimlich öffnen' : 'Open charade privately')}</button>
       </article>`;
   }
   if (challenge.playerSelection) {
@@ -993,7 +1045,7 @@ function renderWatchCard(engine, language) {
         ${renderCourseFlow(engine, language)}
         <p class="eyebrow">${language === 'de' ? 'Crewauftrag · Person bestimmen' : 'Crew duty · choose a player'}</p>
         <h2>${t(challenge.title, language)}</h2>
-        ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
+        ${event ? `<p class="event-subtitle">${t(event.title, language)}</p>` : ''}
         <p class="card-story">${t(challenge, language)}</p>
         <div class="card-effect">${language === 'de'
           ? 'Die ausgewählte Person wird beim nächsten Servieren als Portionswache angezeigt. Für diese Karte läuft kein Timer.'
@@ -1037,14 +1089,20 @@ function renderWatchCard(engine, language) {
     ? (language === 'de' ? 'Läuft bis zu deinem nächsten Zug' : 'Runs until your next turn')
     : challenge.endTrigger === 'targetTurnEnd'
       ? (language === 'de' ? 'Läuft während des nächsten Ziel-Zugs' : 'Runs during the target’s next turn')
-      : (language === 'de' ? 'Läuft bis zur passenden Gegenkarte' : 'Runs until the matching counter-card');
+      : challenge.endTrigger === 'secretTrigger'
+        ? (language === 'de' ? 'Läuft bis zum geheimen Auslöser' : 'Runs until the secret trigger')
+        : (language === 'de' ? 'Läuft bis zum passenden Segen' : 'Runs until the matching blessing');
   return `
     <article class="game-card">
       ${renderCourseFlow(engine, language)}
-      <p class="eyebrow">${mandatory
-        ? (language === 'de' ? `Verbindliche geheime Anweisung · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Mandatory secret instruction · only ${escapeHtml(engine.activePlayer.name)} reads`)
-        : challenge.secret
-        ? (language === 'de' ? `Geheime Karte · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Secret card · only ${escapeHtml(engine.activePlayer.name)} reads`)
+      <p class="eyebrow">${challenge.cardKind === 'blessing'
+        ? (language === 'de' ? 'Segenkarte · beendet einen Fluch' : 'Blessing card · ends a curse')
+        : challenge.cardKind === 'curse'
+          ? (challenge.secret ? (language === 'de' ? `Geheimer Fluch · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Secret curse · only ${escapeHtml(engine.activePlayer.name)} reads`) : (language === 'de' ? 'Fluchkarte' : 'Curse card'))
+        : challenge.cardKind === 'charade'
+          ? (language === 'de' ? `Geheime Scharade · nur ${escapeHtml(engine.activePlayer.name)} liest` : `Secret charade · only ${escapeHtml(engine.activePlayer.name)} reads`)
+        : mandatory
+        ? (language === 'de' ? 'Verbindliche Anweisung' : 'Mandatory instruction')
         : skillCheck && cooperative
           ? (language === 'de' ? `Koop-${challenge.dexterity ? 'Geschicklichkeits' : 'Erfolgs'}-Challenge` : `Co-op ${challenge.dexterity ? 'dexterity' : 'success'} challenge`)
         : skillCheck
@@ -1053,7 +1111,7 @@ function renderWatchCard(engine, language) {
           ? (language === 'de' ? 'Koop-Zeitfüller · sofort gemeinsam ausführen' : 'Co-op interlude · do it together now')
           : (language === 'de' ? 'Zeitfüller · sofort ausführen' : 'Interlude · do it now')}</p>
       ${challenge.secret ? '' : `<h2>${t(challenge.title, language)}</h2>`}
-      ${event ? `<p class="muted">${t(event.title, language)}</p>` : ''}
+      ${event ? `<p class="event-subtitle">${t(event.title, language)}</p>` : ''}
       ${cooperative ? `<div class="card-effect"><strong>${language === 'de' ? 'Beteiligte' : 'Participants'}: ${cooperativeNames}</strong><p>${language === 'de'
         ? 'Alle ausgewählten Personen sind gerade ohne laufende Küchenaufgabe.'
         : 'Every selected participant is currently free from an active kitchen task.'}</p></div>` : ''}
@@ -1130,6 +1188,7 @@ function renderCurrentCard(engine, language) {
     case 'draw': return renderDrawCard(engine, language);
     case 'event': return renderEventCard(engine, language);
     case 'rolled': return renderRolledCard(engine, language);
+    case 'cardChoice': return renderCardChoice(engine, language);
     case 'ingredientChoice': return renderIngredientChoice(engine, language);
     case 'effectChoice': return renderIngredientEffectChoice(engine, language);
     case 'cocktailTeamChoice': return renderCocktailTeamChoice(engine, language);

@@ -89,6 +89,7 @@ test('parchment card choices use a dark high-contrast palette in every state', a
   assert.match(css, /\.game-card \.choice-button:hover,[\s\S]*?color:\s*#171006;[\s\S]*?background:\s*#fffaf0;/);
   assert.match(css, /\.game-card \.choice-button:focus-visible,[\s\S]*?outline-color:\s*#4f3210;/);
   assert.match(css, /\.game-card button\[disabled\][\s\S]*?color:\s*#5e503c;[\s\S]*?opacity:\s*\.75;/);
+  assert.match(css, /\.game-card \.event-subtitle\s*\{[\s\S]*?color:\s*#123f4c;/);
 });
 
 test('the shared start and eating backdrop keeps the complete island map width visible', async () => {

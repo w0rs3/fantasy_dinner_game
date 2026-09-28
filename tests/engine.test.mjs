@@ -395,18 +395,19 @@ test('resolved work-order cards keep the task that was actually assigned', () =>
   assert.doesNotMatch(resultText, new RegExp(nextTitle));
 });
 
-test('single-action event cards do not pretend that there is a crew decision', () => {
-  const engine = GameEngine.create({ names, title: 'Single event action', defaultLanguage: 'de', seed: 53 }, 1_800_000_000_000);
+test('choice event cards present their available actions without obsolete break copy', () => {
+  const engine = GameEngine.create({ names, title: 'Event actions', defaultLanguage: 'de', seed: 53 }, 1_800_000_000_000);
   engine.state.chapter.stage = 'tasks';
   engine.state.turn.phase = 'event';
-  const singleActionEvent = EVENT_DECKS[0].find((card) => {
+  const choiceEvent = EVENT_DECKS[0].find((card) => {
     engine.state.turn.currentEventId = card.id;
-    return engine.currentEvent?.type === 'choice' && engine.currentEvent.options.length === 1;
+    return engine.currentEvent?.type === 'choice' && engine.currentEvent.options.length > 1;
   });
-  assert.ok(singleActionEvent);
-  engine.state.turn.currentEventId = singleActionEvent.id;
+  assert.ok(choiceEvent);
+  engine.state.turn.currentEventId = choiceEvent.id;
 
   const html = renderGame(engine, 'de');
-  assert.doesNotMatch(html, /Die Crew darf beraten\. Die endgültige Wahl trifft die aktive Person\./);
-  assert.equal((html.match(/data-action="resolve-choice"/g) ?? []).length, 1);
+  assert.match(html, /Die Crew darf beraten\. Die endgültige Wahl trifft die aktive Person\./);
+  assert.equal((html.match(/data-action="resolve-choice"/g) ?? []).length, engine.currentEvent.options.length);
+  assert.doesNotMatch(html, /Noch keine Pause|Ruhiges Fahrwasser/);
 });

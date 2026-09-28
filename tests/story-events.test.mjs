@@ -19,16 +19,16 @@ const create = (seed = 91_001) => GameEngine.create({ names, title: 'Story voyag
 
 test('story catalog contains island and location stories with their requested quiz groups', () => {
   assert.deepEqual(validateStoryCatalog(), {
-    total: 150,
+    total: 222,
     islandStories: 6,
     locationStories: 36,
-    quizzes: 108,
+    quizzes: 180,
     islandDetailQuizzes: 12,
-    locationDetailQuizzes: 72,
+    locationDetailQuizzes: 144,
     routeQuizzes: 24,
     valid: true
   });
-  assert.equal(STORY_CARDS.length, 150);
+  assert.equal(STORY_CARDS.length, 222);
   assert.equal(new Set(STORY_CARDS.map((card) => card.id)).size, STORY_CARDS.length);
 
   for (let chapterIndex = 0; chapterIndex < CHAPTERS.length; chapterIndex += 1) {
@@ -42,7 +42,7 @@ test('story catalog contains island and location stories with their requested qu
       assert.ok(sentences.length >= 3 && sentences.length <= 5, `${islandStory.id} ${language} has ${sentences.length} sentences`);
     }
     assert.equal(LOCATION_STORY_CARDS.filter((card) => card.chapterIndex === chapterIndex).length, locations.length);
-    assert.equal(STORY_QUIZ_CARDS.filter((card) => card.chapterId === CHAPTERS[chapterIndex].id && card.quizKind === 'location-detail').length, locations.length * 2);
+    assert.equal(STORY_QUIZ_CARDS.filter((card) => card.chapterId === CHAPTERS[chapterIndex].id && card.quizKind === 'location-detail').length, locations.length * 4);
     assert.equal(STORY_QUIZ_CARDS.filter((card) => card.chapterId === CHAPTERS[chapterIndex].id && card.quizKind === 'route').length, 4);
     for (let locationIndex = 0; locationIndex < locations.length; locationIndex += 1) {
       const story = LOCATION_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex && card.locationIndex === locationIndex);
@@ -51,7 +51,7 @@ test('story catalog contains island and location stories with their requested qu
         const sentences = story.story[language].match(/[^.!?]+[.!?]/g) ?? [];
         assert.ok(sentences.length >= 3 && sentences.length <= 5, `${story.id} ${language} has ${sentences.length} sentences`);
       }
-      assert.equal(STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'location-detail' && card.sourceStoryId === story.id).length, 2);
+      assert.equal(STORY_QUIZ_CARDS.filter((card) => card.quizKind === 'location-detail' && card.sourceStoryId === story.id).length, 4);
     }
   }
   assert.ok(STORY_QUIZ_CARDS.every((card) => card.answers.length === 3 && card.answers.filter((answer) => answer.id === card.correctAnswerId).length === 1));
@@ -121,8 +121,8 @@ test('memory questions enforce prerequisites and apply character passives to the
     engine.activePlayer.roleId = answerCorrect ? 'lucky' : 'unlucky';
     const quiz = STORY_QUIZ_CARDS.find((card) => card.quizKind === (answerCorrect ? 'island-detail' : 'location-detail') && card.sourceStoryId === (answerCorrect ? 'SI1' : 'SL1-1'));
     engine.state.storyQuizQueue = [quiz.id];
-    engine.state.chapter.nextStoryQuizAt = 0;
-    const drawn = engine.beginEvent(now + 7);
+    engine.state.nonFundamentalQueue = [quiz.id];
+    const drawn = engine.drawNonFundamentalCard(now + 7);
     assert.equal(drawn.id, quiz.id);
     if (!answerCorrect) assert.match(renderGame(engine, 'de'), /falsche Antwort: −4 Münzen/);
     const answerId = answerCorrect ? quiz.correctAnswerId : quiz.answers.find((answer) => answer.id !== quiz.correctAnswerId).id;
@@ -138,17 +138,17 @@ test('memory questions enforce prerequisites and apply character passives to the
   assert.equal(wrong.state.turn.storyCoinDelta, -4);
 });
 
-test('the long main course allows twice the usual number of memory quizzes', () => {
+test('memory quizzes have no per-island cap and every unlocked card joins the global deck', () => {
   const engine = create(91_0041);
-  assert.equal(engine.storyQuizLimit(), 3);
-  engine.state.chapterIndex = 3;
-  assert.equal(engine.storyQuizLimit(), 6);
-  engine.state.chapter.eventsResolved = 20;
-  engine.state.chapter.nextStoryQuizAt = 20;
-  engine.state.chapter.storyQuizIdsDrawn = Array.from({ length: 5 }, (_, index) => `main-quiz-${index}`);
-  assert.equal(engine.storyQuizDue(), true);
-  engine.state.chapter.storyQuizIdsDrawn.push('main-quiz-5');
-  assert.equal(engine.storyQuizDue(), false);
+  engine.state.eventsDrawn.push(...ISLAND_STORY_CARDS.map((card) => card.id), ...LOCATION_STORY_CARDS.map((card) => card.id));
+  engine.state.visitedLocationIds = LOCATION_STORY_CARDS.map((card) => card.locationKey);
+  engine.state.chapterIndex = 5;
+  engine.state.nonFundamentalQueue = engine.state.nonFundamentalQueue.filter((id) => !STORY_QUIZ_CARDS.some((card) => card.id === id));
+  const unlocked = engine.unlockEligibleStoryQuizzes(now + 1);
+  assert.equal(unlocked.length, STORY_QUIZ_CARDS.length);
+  assert.ok(STORY_QUIZ_CARDS.every((card) => engine.state.nonFundamentalQueue.includes(card.id)));
+  assert.ok(STORY_QUIZ_CARDS.every((card) => engine.storyQuizPrerequisitesMet(card)), 'all quiz cards stay eligible after every lore card and location is known');
+  assert.ok(STORY_QUIZ_CARDS.every((card) => !(card.requirements?.unvisitedLocationIds?.length)), 'no quiz expires after later travel');
 });
 
 test('the card overview exposes all story groups, requirements, scoring, and current usage', () => {
@@ -161,7 +161,7 @@ test('the card overview exposes all story groups, requirements, scoring, and cur
   const html = renderCardCatalog(engine, 'de');
   assert.equal((html.match(/data-card-kind="story-island"/g) ?? []).length, 6);
   assert.equal((html.match(/data-card-kind="story-location"/g) ?? []).length, 36);
-  assert.equal((html.match(/data-card-kind="story-quiz"/g) ?? []).length, 108);
+  assert.equal((html.match(/data-card-kind="story-quiz"/g) ?? []).length, 180);
   assert.match(html, /Storykarten/);
   assert.doesNotMatch(html, /Storrykarten/);
   assert.match(html, /Story Insel Karten/);

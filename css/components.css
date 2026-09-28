@@ -656,6 +656,13 @@ button[disabled] {
 .game-card .eyebrow { color: #744a1f; }
 .game-card h1,
 .game-card h2 { color: #2d2417; }
+.game-card .event-subtitle {
+  margin: -.1rem 0 .85rem;
+  color: #123f4c;
+  font-family: system-ui, sans-serif;
+  font-size: .88rem;
+  font-weight: 750;
+}
 .game-card .card-story { font-size: 1.05rem; }
 .game-card .card-effect {
   margin: 1.1rem 0;

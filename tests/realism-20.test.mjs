@@ -3,7 +3,8 @@ import assert from 'node:assert/strict';
 import { GameEngine, validateSessionState } from '../js/core/game-engine.js';
 import { COURSE_INGREDIENT_RULES, INGREDIENTS } from '../js/data/ingredients.js';
 import { CHAPTERS } from '../js/data/chapters.js';
-import { WATCH_CHALLENGES } from '../js/data/events.js';
+import { EVENT_DECKS, WATCH_CHALLENGES } from '../js/data/events.js';
+import { STORY_CARDS } from '../js/data/story-events.js';
 import { TASK_DECKS } from '../js/data/tasks.js';
 import { simulateGame } from '../tools/simulation-lib.mjs';
 
@@ -131,7 +132,8 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.equal(result.funCards, result.uniqueFunCards, `${label} fun cards must be unique`);
     assert.ok(result.funCards <= WATCH_CHALLENGES.length, `${label} finite fun-card deck`);
     assert.equal(result.cauldronHandoffViolations, 0, `${label} cauldron watches must change hands`);
-    assert.ok(result.events >= 150 && result.events <= 540, `${label} events=${result.events}`);
+    const maximumDrawableEvents = EVENT_DECKS.flat().length + STORY_CARDS.length;
+    assert.ok(result.events >= 150 && result.events <= maximumDrawableEvents, `${label} events=${result.events}`);
     assert.ok(result.turnSpread <= 20, `${label} turnSpread=${result.turnSpread}`);
     assert.equal(new Set(state.players.map((player) => player.roleId)).size, state.players.length, label);
     assert.ok(state.history.every((entry, index) => index === 0 || entry.timestamp >= state.history[index - 1].timestamp), `${label} history order`);

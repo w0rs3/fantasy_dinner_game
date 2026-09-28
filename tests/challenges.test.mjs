@@ -9,6 +9,22 @@ import { addOpeningTask } from './test-helpers.mjs';
 const now = 1_800_300_000_000;
 const names = ['Anne', 'Ben', 'Cara', 'Dario', 'Elif', 'Finn'];
 
+const DURATION_WORDS = Object.freeze({
+  five: 5, ten: 10, fifteen: 15, twenty: 20, thirty: 30, 'forty-five': 45, sixty: 60,
+  fünf: 5, zehn: 10, fünfzehn: 15, zwanzig: 20, dreißig: 30, fünfundvierzig: 45, sechzig: 60
+});
+
+function statedDurations(challenge) {
+  const values = [];
+  const pattern = /(\d+|five|ten|fifteen|twenty|thirty|forty-five|sixty|fünf|zehn|fünfzehn|zwanzig|dreißig|fünfundvierzig|sechzig)[ -]?(?:sekünd\w*|seconds?)/gi;
+  for (const text of [challenge.de, challenge.en]) {
+    for (const match of text.matchAll(pattern)) {
+      values.push(Number(match[1]) || DURATION_WORDS[match[1].toLowerCase()]);
+    }
+  }
+  return [...new Set(values)];
+}
+
 function startChallenge(id, seed = 700, targetPlayerId = null) {
   const engine = GameEngine.create({ names, title: id, defaultLanguage: 'de', seed }, now);
   engine.state.tasks.forEach((task) => { task.status = 'done'; });
@@ -85,35 +101,27 @@ test('target-turn and linked chicken challenges resolve at the correct later mom
 
   const chicken = startChallenge('chicken', 702);
   const cursedPlayerId = chicken.activePlayer.id;
-  chicken.revealSecretWatchChallenge(now + 450);
+  assert.equal(chicken.currentWatchChallenge.secret, false, 'linked curses reveal their rule because their blessing is not a secret trigger');
   chicken.activateOngoingWatchChallenge(now + 500);
   assert.equal(chicken.state.activeChallenges[0].endTrigger, 'followUp');
   chicken.endTurn(now + 600);
-  assert.equal(chicken.state.chapter.queuedChallenges.length, 0, 'the antidote must not appear for the next player');
-  assert.equal(chicken.state.chapter.scheduledChallenges.length, 1);
-  const scheduled = chicken.state.chapter.scheduledChallenges[0];
-  assert.ok(scheduled.delayTurns >= 3 && scheduled.delayTurns <= 5);
-  while (chicken.state.turnsElapsed < scheduled.dueTurn) {
-    chicken.state.turn.phase = 'resolved';
-    chicken.endTurn(now + 610 + chicken.state.turnsElapsed);
-  }
-  chicken.beginEvent(now + 700);
+  const blessingId = chicken.state.nonFundamentalLockedCardId;
+  const blessingIndex = chicken.state.nonFundamentalQueue.indexOf(blessingId);
+  assert.equal(blessingId, 'stop-chicken');
+  assert.ok(blessingIndex >= 3 && blessingIndex <= 10, 'the blessing is locked three to ten global cards later');
+  assert.equal(chicken.unresolvedFollowUpCount(), 1);
+  chicken.state.nonFundamentalQueue.splice(0, blessingIndex);
+  chicken.state.chapter.stage = 'cooking';
+  chicken.state.turn.phase = 'draw';
+  chicken.drawNonFundamentalCard(now + 700);
   assert.equal(chicken.currentWatchChallenge.id, 'stop-chicken');
   assert.equal(chicken.state.turn.watchTargetPlayerId, cursedPlayerId);
   assert.equal(chicken.currentWatchChallenge.mandatory, true);
-  assert.equal(chicken.state.turn.watchStartedAt, null, 'mandatory secret instructions also wait behind the privacy screen');
+  assert.equal(chicken.currentWatchChallenge.cardKind, 'blessing');
+  assert.notEqual(chicken.state.turn.watchStartedAt, null, 'blessings are public cards');
   const mandatoryAnnouncement = renderGame(chicken, 'de');
-  assert.match(mandatoryAnnouncement, /data-action="reveal-secret-watch"/);
-  assert.doesNotMatch(mandatoryAnnouncement, /Hühnerfluch ist gebrochen|Gegenmittel/);
-  assert.equal(chicken.completeWatchChallenge(now + 710), false);
-  assert.equal(chicken.revealSecretWatchChallenge(now + 720), true);
-  const mandatoryHtml = renderGame(chicken, 'de');
-  assert.match(mandatoryHtml, new RegExp(chicken.state.players.find((player) => player.id === cursedPlayerId).name));
-  assert.match(mandatoryHtml, /Verbindliche geheime Anweisung/);
-  assert.match(mandatoryHtml, /data-action="start-watch"/);
-  assert.doesNotMatch(mandatoryHtml, /\{targetPlayer\}|data-action="complete-watch"/);
-  assert.equal(chicken.startWatchChallengeAction(now + 750), true);
-  assert.match(renderGame(chicken, 'de'), /data-action="complete-watch"/);
+  assert.match(mandatoryAnnouncement, /Segen: Ruhe im Hühnerstall/);
+  assert.doesNotMatch(mandatoryAnnouncement, /reveal-secret-watch|\{targetPlayer\}/);
   assert.equal(chicken.completeWatchChallenge(now + 800), true);
   assert.equal(chicken.state.activeChallenges.length, 0);
   assert.equal(chicken.state.coins, 2, 'curse and antidote both pay only after the antidote');
@@ -121,22 +129,20 @@ test('target-turn and linked chicken challenges resolve at the correct later mom
 
 test('every linked counter-card ends its matching curse and follow-ups block serving until resolved', () => {
   const engine = startChallenge('nose-voice', 715);
-  engine.revealSecretWatchChallenge(now + 150);
   engine.activateOngoingWatchChallenge(now + 200);
-  const dueTurn = engine.state.chapter.scheduledChallenges[0].dueTurn;
+  const blessingId = engine.state.nonFundamentalLockedCardId;
+  const blessingIndex = engine.state.nonFundamentalQueue.indexOf(blessingId);
+  assert.equal(blessingId, 'stop-nose');
+  assert.ok(blessingIndex >= 3 && blessingIndex <= 10);
   engine.state.taskQueues[0] = [];
   engine.state.tasks.forEach((task) => { task.status = 'done'; });
   engine.state.groups.forEach((group) => { group.finished = true; });
   assert.equal(engine.evaluateChapter(now + 250).followUpsResolved, false);
-  while (engine.state.turnsElapsed < dueTurn) {
-    engine.state.turn.phase = 'resolved';
-    engine.endTurn(now + 300 + engine.state.turnsElapsed);
-  }
+  engine.state.nonFundamentalQueue.splice(0, blessingIndex);
+  engine.state.chapter.stage = 'cooking';
   engine.state.turn.phase = 'draw';
-  engine.beginEvent(now + 500);
+  engine.drawNonFundamentalCard(now + 500);
   assert.equal(engine.currentWatchChallenge.id, 'stop-nose');
-  assert.equal(engine.revealSecretWatchChallenge(now + 550), true);
-  assert.equal(engine.startWatchChallengeAction(now + 575), true);
   assert.equal(engine.completeWatchChallenge(now + 600), true);
   assert.equal(engine.state.activeChallenges.some((challenge) => challenge.challengeId === 'nose-voice'), false);
   assert.equal(engine.unresolvedFollowUpCount(), 0);
@@ -144,12 +150,11 @@ test('every linked counter-card ends its matching curse and follow-ups block ser
 
 test('an ongoing challenge cannot be dealt to two people at the same time', () => {
   const engine = startChallenge('chicken', 706);
-  assert.equal(engine.revealSecretWatchChallenge(now + 150), true);
   assert.equal(engine.activateOngoingWatchChallenge(now + 200), true);
   engine.state.chapter.queuedChallenges = [];
   engine.state.turn.phase = 'draw';
   engine.state.chapter.challengeIdsByRound[String(engine.state.chapter.round)] = WATCH_CHALLENGES
-    .filter((challenge) => !challenge.followUpOnly && challenge.id !== 'five-minute-break' && challenge.id !== 'chicken')
+    .filter((challenge) => !challenge.followUpOnly && challenge.id !== 'chicken')
     .map((challenge) => challenge.id);
 
   assert.equal(engine.startWatchChallenge('watchChallenge', now + 300), true);
@@ -163,6 +168,24 @@ test('short physical challenges remain immediate', () => {
   assert.equal(engine.completeWatchChallenge(now + 300), true);
   assert.equal(engine.state.turn.phase, 'resolved');
   assert.equal(engine.state.activeChallenges.length, 0);
+});
+
+test('every duration stated on a fun card matches its actual countdown', () => {
+  WATCH_CHALLENGES.forEach((challenge) => {
+    const durations = statedDurations(challenge);
+    assert.ok(durations.length <= 1, `${challenge.id} states conflicting durations: ${durations.join(', ')}`);
+    if (durations.length) assert.equal(challenge.durationSeconds, durations[0], challenge.id);
+  });
+});
+
+test('the source event beneath a fun-card title uses the dark subtitle class', () => {
+  const engine = startChallenge('pirate-weather', 7_031);
+  assert.equal(engine.state.turn.watchEndsAt - engine.state.turn.watchStartedAt, 20_000);
+  const sourceEvent = EVENT_DECKS[0].find((event) => event.archetype === 'mischief');
+  engine.state.turn.currentEventId = sourceEvent.id;
+  const html = renderGame(engine, 'de');
+  assert.match(html, new RegExp(`<p class="event-subtitle">${sourceEvent.title.de.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
+  assert.doesNotMatch(html, new RegExp(`<p class="muted">${sourceEvent.title.de.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}`));
 });
 
 test('the audited challenge deck uses success and failure only for objectively failable cards', () => {
@@ -322,11 +345,11 @@ test('conditional challenges enter the draw pool only after their real prerequis
   assert.equal(candidateIds().includes('timer-check'), true, 'overtime is still a meaningful timer state');
 });
 
-test('the long main-course oven journey allows more fun cards and prefers available co-op challenges', () => {
+test('the long main-course oven journey keeps drawing from the global deck and prefers available co-op challenges', () => {
   const engine = GameEngine.create({ names, title: 'Oven interludes', defaultLanguage: 'de', seed: 7_181 }, now);
   const ovenStart = TASK_DECKS[3].find((card) => card.questId === 'oven');
   const cooperative = WATCH_CHALLENGES.find((challenge) => challenge.cooperative && !challenge.followUpOnly && !challenge.requirements.length);
-  const solo = WATCH_CHALLENGES.find((challenge) => !challenge.cooperative && !challenge.followUpOnly && challenge.id !== 'five-minute-break' && !challenge.requirements.length);
+  const solo = WATCH_CHALLENGES.find((challenge) => !challenge.cooperative && !challenge.followUpOnly && !challenge.requirements.length);
 
   engine.state.chapterIndex = 3;
   engine.state.chapter.stage = 'tasks';
@@ -335,7 +358,7 @@ test('the long main-course oven journey allows more fun cards and prefers availa
     groupId: 'A', assignedPlayerIds: [engine.state.players[0].id], status: 'done',
     assignedAt: now, startedAt: now, completedAt: now + 1
   }];
-  engine.state.funCardQueue = [solo.id, cooperative.id];
+  engine.state.nonFundamentalQueue = [solo.id, cooperative.id];
   engine.state.funCardsDrawn = [];
   engine.state.chapter.funCardIdsDrawn = [];
 
@@ -346,40 +369,13 @@ test('the long main-course oven journey allows more fun cards and prefers availa
   engine.state.chapter.funCardIdsDrawn = Array.from({ length: 143 }, (_, index) => `main-fun-${index}`);
   assert.ok(engine.watchChallengeCandidates().length > 0, 'the main course keeps enough interludes for a long oven run');
   engine.state.chapter.funCardIdsDrawn = Array.from({ length: 144 }, (_, index) => `main-fun-${index}`);
-  assert.equal(engine.watchChallengeCandidates().length, 0);
+  assert.ok(engine.watchChallengeCandidates().length > 0, 'there is no per-course fun-card limit');
 });
 
-test('a real break is only offered when every open kitchen task is completed', () => {
-  const engine = GameEngine.create({ names, title: 'Break safety', defaultLanguage: 'de', seed: 714 }, now);
-  addOpeningTask(engine, now + 10);
-  const event = EVENT_DECKS[0].find((card) => card.archetype === 'respite');
-  const task = engine.state.tasks[0];
-  engine.state.chapter.stage = 'cooking';
-  engine.state.taskQueues[0] = [];
-  engine.state.turn.currentEventId = event.id;
-  engine.state.turn.phase = 'event';
-
-  for (const status of ['queued', 'active', 'ready']) {
-    task.status = status;
-    assert.equal(engine.hasOpenTasks(), true);
-    assert.equal(engine.actionAvailable('fiveMinuteBreak'), false);
-    assert.ok(!engine.currentEvent.options.includes('fiveMinuteBreak'));
-    const blockedHtml = renderGame(engine, 'de');
-    assert.doesNotMatch(blockedHtml, /data-choice="fiveMinuteBreak"/);
-    assert.match(blockedHtml, /Die Pausenoption erscheint erst, wenn alle offenen Küchenaufgaben erledigt markiert sind/);
-    assert.equal(engine.startWatchChallenge('fiveMinuteBreak', now + 200), false);
-  }
-
-  task.status = 'done';
-  assert.equal(engine.hasOpenTasks(), false);
-  assert.equal(engine.actionAvailable('fiveMinuteBreak'), true);
-  assert.ok(engine.currentEvent.options.includes('fiveMinuteBreak'));
-  const availableHtml = renderGame(engine, 'de');
-  assert.match(availableHtml, /data-choice="fiveMinuteBreak"/);
-  assert.doesNotMatch(availableHtml, /Noch keine Pause/);
-  assert.equal(engine.resolveChoice('fiveMinuteBreak', now + 300), true);
-  assert.equal(engine.currentWatchChallenge.id, 'five-minute-break');
-  assert.equal(engine.state.turn.phase, 'watch');
+test('break suggestion cards are absent from events and the challenge deck', () => {
+  assert.equal(EVENT_DECKS.flat().some((card) => card.archetype === 'respite'), false);
+  assert.equal(EVENT_DECKS.flat().some((card) => (card.options ?? card.outcomes ?? []).includes('fiveMinuteBreak')), false);
+  assert.equal(WATCH_CHALLENGES.some((challenge) => challenge.id === 'five-minute-break'), false);
 });
 
 test('the pirate verse event accepts either a song or a dramatic poem', () => {
@@ -396,51 +392,26 @@ test('the pirate verse event accepts either a song or a dramatic poem', () => {
   assert.equal(engine.state.coins, 1);
 });
 
-test('private one-person challenges announce privacy, reveal in a collapse, and require an explicit start', () => {
+test('private jokes are public general fun cards without a secret reveal', () => {
   const engine = startChallenge('folded-note', 704);
-  assert.equal(engine.currentWatchChallenge.secret, true);
-  assert.equal(engine.state.turn.watchSecretRevealedAt, null);
-  assert.equal(engine.state.turn.watchStartedAt, null);
-  assert.equal(engine.completeWatchChallenge(now + 200), false, 'an unopened card cannot start or complete itself');
-  assert.equal(engine.startWatchChallengeAction(now + 210), false, 'the start action is locked until the private reveal');
-
-  const before = renderGame(engine, 'de');
-  assert.match(before, /Geheimes Event/);
-  assert.match(before, /großen Bildschirm weg/);
-  assert.match(before, /data-action="reveal-secret-watch"/);
-  assert.doesNotMatch(before, /streng geheime Nachricht|Nicht sagen, was hier draufsteht|data-action="start-watch"/);
-
-  assert.equal(engine.revealSecretWatchChallenge(now + 250), true);
-  assert.equal(engine.revealSecretWatchChallenge(now + 251), false, 'the private reveal boundary is unique');
-  const revealed = renderGame(engine, 'de');
-  assert.match(revealed, /<details class="secret-instruction" open>/);
-  assert.match(revealed, /<summary[^>]*>Geheime Anweisung anzeigen<\/summary>/);
-  assert.match(revealed, /streng geheime Nachricht/);
-  assert.match(revealed, /Nicht sagen, was hier draufsteht/);
-  assert.match(revealed, /data-action="start-watch"/);
-  assert.match(revealed, /Geheimes Event starten/);
-
-  assert.equal(engine.startWatchChallengeAction(now + 300), true);
-  assert.equal(engine.startWatchChallengeAction(now + 301), false, 'the start boundary is unique');
-  assert.equal(engine.state.turn.watchStartedAt, now + 300);
-  const running = renderGame(engine, 'de');
-  assert.match(running, /Die geheime Challenge läuft jetzt/);
-  assert.match(running, /<details class="secret-instruction" >/);
-  assert.doesNotMatch(running, /<details class="secret-instruction" open>/);
-  assert.match(running, /data-action="complete-watch"/);
+  assert.equal(engine.currentWatchChallenge.secret, false);
+  assert.equal(engine.currentWatchChallenge.cardKind, 'fun');
+  const html = renderGame(engine, 'de');
+  assert.match(html, /streng geheime Nachricht/);
+  assert.doesNotMatch(html, /reveal-secret-watch|secret-instruction|Geheimes Event/);
   assert.equal(engine.completeWatchChallenge(now + 400), true);
 });
 
 test('event choices never reveal a secret challenge before it is drawn', () => {
   const engine = GameEngine.create({ names, title: 'Private preview', defaultLanguage: 'de', seed: 705 }, now);
-  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'chicken');
+  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'charade-anchor');
   const event = EVENT_DECKS[0].find((card) =>
     card.locationIndex === 0 && card.stage === 'cooking' && card.type === 'choice' && card.options.includes('watchChallenge')
   );
   assert.ok(event);
   engine.state.chapter.stage = 'cooking';
   engine.state.taskQueues[0] = [];
-  engine.state.funCardQueue = [secret.id, ...engine.state.funCardQueue.filter((id) => id !== secret.id)];
+  engine.state.nonFundamentalQueue = [secret.id, ...engine.state.nonFundamentalQueue.filter((id) => id !== secret.id)];
   engine.state.turn.currentEventId = event.id;
   engine.state.turn.phase = 'event';
 
@@ -470,15 +441,16 @@ test('strange encounters offer accepting the challenge or losing coins instead o
 test('ingredient-round fun choices offer one challenge or a five-coin loss without duplicate rewards', () => {
   const engine = GameEngine.create({ names, title: 'Pantry choice', defaultLanguage: 'de', seed: 719 }, now);
   const event = EVENT_DECKS[0].find((card) => card.archetype === 'pantry-mischief');
-  const secret = WATCH_CHALLENGES.find((challenge) => challenge.id === 'chicken');
+  const publicJoke = WATCH_CHALLENGES.find((challenge) => challenge.id === 'folded-note');
   assert.deepEqual(event.options, ['watchChallenge', 'coinLoss']);
   engine.state.chapter.stage = 'ingredients';
-  engine.state.funCardQueue = [secret.id, ...engine.state.funCardQueue.filter((id) => id !== secret.id)];
+  engine.state.nonFundamentalQueue = [publicJoke.id, ...engine.state.nonFundamentalQueue.filter((id) => id !== publicJoke.id)];
   engine.state.turn.currentEventId = event.id;
   engine.state.turn.phase = 'event';
 
   const html = renderGame(engine, 'de');
-  assert.match(html, new RegExp(`Challenge annehmen: Geheime Challenge nur für ${engine.activePlayer.name} ziehen · nicht vorlesen`));
+  assert.match(html, /Challenge annehmen:.*Nicht sagen, was hier draufsteht/s);
+  assert.doesNotMatch(html, /nicht vorlesen|Geheime Challenge nur/);
   assert.match(html, /Challenge ablehnen · −5 Münzen/);
   assert.doesNotMatch(html, /\+2 Münzen|Gewinnt zwei Münzen/);
   assert.equal((html.match(/data-action="resolve-choice"/g) ?? []).length, 2);
@@ -528,19 +500,20 @@ test('a fun card can be drawn only once during the entire voyage', () => {
   assert.equal(new Set(engine.state.funCardsDrawn).size, engine.state.funCardsDrawn.length);
 });
 
-test('the complete fun-card deck is randomly shuffled per voyage and reproducible by seed', () => {
+test('the complete challenge set is present once in the shuffled global deck', () => {
   const order = (seed) => GameEngine.create({ names, title: `Fun deck ${seed}`, defaultLanguage: 'de', seed }, now)
-    .state.funCardQueue;
+    .state.nonFundamentalQueue.filter((id) => WATCH_CHALLENGES.some((challenge) => challenge.id === id));
   const first = order(8_001);
   const repeated = order(8_001);
   const second = order(8_002);
 
-  assert.equal(first.length, 227);
-  assert.equal(new Set(first).size, 227);
+  const expected = WATCH_CHALLENGES.filter((challenge) => !challenge.followUpOnly).length;
+  assert.equal(first.length, expected);
+  assert.equal(new Set(first).size, expected);
   assert.deepEqual(first, repeated, 'the same seed recreates the same shuffled deck');
   assert.notDeepEqual(first.slice(0, 20), second.slice(0, 20), 'different voyages receive different opening orders');
   assert.equal(new Set(Array.from({ length: 12 }, (_, index) => order(8_100 + index)
-    .find((id) => !WATCH_CHALLENGES.find((challenge) => challenge.id === id)?.followUpOnly && id !== 'five-minute-break'))).size > 3, true);
+    .find((id) => !WATCH_CHALLENGES.find((challenge) => challenge.id === id)?.followUpOnly))).size > 3, true);
 });
 
 test('co-op fun cards enter the pool only with enough task-free partners', () => {
@@ -548,7 +521,7 @@ test('co-op fun cards enter the pool only with enough task-free partners', () =>
   const pairCard = WATCH_CHALLENGES.find((challenge) => challenge.cooperative && challenge.partnerCount === 1);
   const trioCard = WATCH_CHALLENGES.find((challenge) => challenge.cooperative && challenge.partnerCount === 2);
   const otherPlayers = engine.state.players.filter((player) => player.id !== engine.activePlayer.id);
-  engine.state.funCardQueue = [trioCard.id, pairCard.id, ...engine.state.funCardQueue.filter((id) => ![trioCard.id, pairCard.id].includes(id))];
+  engine.state.nonFundamentalQueue = [trioCard.id, pairCard.id, ...engine.state.nonFundamentalQueue.filter((id) => ![trioCard.id, pairCard.id].includes(id))];
   otherPlayers.slice(1).forEach((player, index) => engine.state.tasks.push({
     instanceId: `busy-coop-${index}`, taskId: 'A1-03', chapterIndex: 0,
     assignedPlayerIds: [player.id], status: 'active', assignedAt: now, startedAt: now
@@ -570,7 +543,7 @@ test('secret charades enter the deck only while at least two guessers are free',
   const engine = GameEngine.create({ names, title: 'Charade availability', defaultLanguage: 'de', seed: 8_206 }, now);
   const charade = WATCH_CHALLENGES.find((challenge) => challenge.id === 'charade-anchor');
   const otherPlayers = engine.state.players.filter((player) => player.id !== engine.activePlayer.id);
-  engine.state.funCardQueue = [charade.id, ...engine.state.funCardQueue.filter((id) => id !== charade.id)];
+  engine.state.nonFundamentalQueue = [charade.id, ...engine.state.nonFundamentalQueue.filter((id) => id !== charade.id)];
   otherPlayers.slice(2).forEach((player, index) => engine.state.tasks.push({
     instanceId: `busy-charade-${index}`, taskId: 'A1-03', chapterIndex: 0,
     assignedPlayerIds: [player.id], status: 'active', assignedAt: now, startedAt: now
@@ -587,7 +560,7 @@ test('secret charades enter the deck only while at least two guessers are free',
 test('a co-op card names only free partners and renders its complete crew', () => {
   const engine = GameEngine.create({ names, title: 'Co-op draw', defaultLanguage: 'de', seed: 8_202 }, now);
   const trioCard = WATCH_CHALLENGES.find((challenge) => challenge.id === 'coop-three-voice-chorus');
-  engine.state.funCardQueue = [trioCard.id, ...engine.state.funCardQueue.filter((id) => id !== trioCard.id)];
+  engine.state.nonFundamentalQueue = [trioCard.id, ...engine.state.nonFundamentalQueue.filter((id) => id !== trioCard.id)];
   assert.equal(engine.startWatchChallenge('watchChallenge', now + 100), true);
   assert.equal(engine.currentWatchChallenge.id, trioCard.id);
   assert.equal(engine.state.turn.watchPartnerPlayerIds.length, 2);

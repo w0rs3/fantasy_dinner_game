@@ -401,6 +401,9 @@ async function handleAction(target) {
       if (gamblerRolled) animateVisibleDie();
       break;
     }
+    case 'choose-offered-card':
+      if (engine.chooseOfferedCard(target.dataset.cardId)) { audio.play('card'); persist(); render(); }
+      break;
     case 'roll-die': {
       engine.rollDie();
       audio.play('dice');
@@ -454,6 +457,9 @@ async function handleAction(target) {
       }
       break;
     }
+    case 'release-triggered-curse':
+      if (engine.releaseTriggeredCurse(target.dataset.challengeId)) { audio.play('complete'); persist(); render(); }
+      break;
     case 'choose-ingredient': engine.chooseIngredient(target.dataset.ingredientId); audio.play('card'); persist(); render(); break;
     case 'choose-soup-style':
       if (engine.chooseSoupStyle(target.dataset.style)) { audio.play('move'); persist(); render(); }

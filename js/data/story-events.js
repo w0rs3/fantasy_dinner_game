@@ -350,6 +350,34 @@ const DETAIL_QUESTIONS = Object.freeze([
   ]
 ]);
 
+// Each location has two hand-written recall questions above. Add two more
+// recognition cards from the same lore, using details from neighbouring
+// locations on that island as plausible alternatives. Keeping these derived
+// from the story text means every location reliably owns four bilingual quiz
+// cards without letting the questions drift away from the lore they test.
+function additionalLocationQuestions(chapterIndex, locationIndex) {
+  const stories = LOCATION_STORIES[chapterIndex];
+  const source = stories[locationIndex];
+  const alternatives = [1, 2].map((offset) => stories[(locationIndex + offset) % stories.length]);
+  const location = CHAPTERS[chapterIndex].locations[locationIndex];
+  return [
+    question(
+      `Welches Detail gehört zur Chronik von ${location.de}?`,
+      `Which detail belongs to the chronicle of ${location.en}?`,
+      source.de[1], source.en[1],
+      alternatives[0].de[1], alternatives[0].en[1],
+      alternatives[1].de[1], alternatives[1].en[1]
+    ),
+    question(
+      `Welche Erinnerung an ${location.de} ist richtig?`,
+      `Which memory of ${location.en} is correct?`,
+      source.de[2], source.en[2],
+      alternatives[0].de[2], alternatives[0].en[2],
+      alternatives[1].de[2], alternatives[1].en[2]
+    )
+  ];
+}
+
 export const ISLAND_STORY_CARDS = Object.freeze(ISLAND_STORIES.map((island, chapterIndex) => ({
   id: `SI${chapterIndex + 1}`,
   storyKind: 'island',
@@ -403,7 +431,10 @@ const islandDetailQuizzes = ISLAND_STORIES.flatMap((island, chapterIndex) => isl
   };
 }));
 
-const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => DETAIL_QUESTIONS[chapterIndex][locationIndex].map((quiz, quizIndex) => {
+const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) => stories.flatMap((story, locationIndex) => [
+  ...DETAIL_QUESTIONS[chapterIndex][locationIndex],
+  ...additionalLocationQuestions(chapterIndex, locationIndex)
+].map((quiz, quizIndex) => {
   const sourceCard = LOCATION_STORY_CARDS.find((card) => card.chapterIndex === chapterIndex && card.locationIndex === locationIndex);
   const rawAnswers = [
     { id: 'correct', label: quiz.correct },
@@ -428,21 +459,20 @@ const locationDetailQuizzes = LOCATION_STORIES.flatMap((stories, chapterIndex) =
 })));
 
 const routeQuestionTemplates = [
-  { de: 'Welchen dieser Orte hat die Crew auf der {island} bereits besucht?', en: 'Which of these places has the crew already visited on {island}?' },
-  { de: 'Welcher Ort liegt auf dieser Insel bereits hinter der Crew?', en: 'Which location on this island is already behind the crew?' },
-  { de: 'Welcher Name gehört schon in das Logbuch dieser Insel?', en: 'Which name already belongs in this island’s logbook?' },
-  { de: 'An welchem dieser Orte war die Crew auf dieser Insel bereits?', en: 'Which of these locations has the crew already reached on this island?' }
+  { de: 'Welcher dieser Orte gehört zur {island}?', en: 'Which of these locations belongs to {island}?' },
+  { de: 'Welchen Ort findet man auf der {island}?', en: 'Which location can be found on {island}?' },
+  { de: 'Welcher Name gehört in das Logbuch der {island}?', en: 'Which name belongs in the logbook of {island}?' },
+  { de: 'Welches Ziel liegt auf der {island}?', en: 'Which destination lies on {island}?' }
 ];
 
 const routeQuizzes = CHAPTERS.flatMap((chapter, chapterIndex) => routeQuestionTemplates.map((template, routeIndex) => {
   const visited = chapter.locations[routeIndex];
-  const futureIndices = [4, 5];
-  const futureA = chapter.locations[futureIndices[0]];
-  const futureB = chapter.locations[futureIndices[1]];
+  const alternativeA = CHAPTERS[(chapterIndex + 1) % CHAPTERS.length].locations[routeIndex];
+  const alternativeB = CHAPTERS[(chapterIndex + 2) % CHAPTERS.length].locations[routeIndex];
   const rawAnswers = [
     { id: 'correct', label: visited },
-    { id: 'wrong-1', label: futureA },
-    { id: 'wrong-2', label: futureB }
+    { id: 'wrong-1', label: alternativeA },
+    { id: 'wrong-2', label: alternativeB }
   ];
   return {
     id: `SQ${chapterIndex + 1}-R${routeIndex + 1}`,
@@ -457,8 +487,7 @@ const routeQuizzes = CHAPTERS.flatMap((chapter, chapterIndex) => routeQuestionTe
     answers: rotateAnswers(rawAnswers, (chapterIndex + routeIndex) % rawAnswers.length),
     correctAnswerId: 'correct',
     requirements: {
-      visitedLocationIds: [locationKey(chapterIndex, routeIndex)],
-      unvisitedLocationIds: futureIndices.map((locationIndex) => locationKey(chapterIndex, locationIndex))
+      visitedLocationIds: [locationKey(chapterIndex, routeIndex)]
     }
   };
 }));
@@ -495,8 +524,8 @@ export function validateStoryCatalog() {
     islandDetailQuizzes: islandDetailQuizzes.length,
     locationDetailQuizzes: locationDetailQuizzes.length,
     routeQuizzes: routeQuizzes.length,
-    valid: STORY_CARDS.length === 150 && ISLAND_STORY_CARDS.length === 6 && LOCATION_STORY_CARDS.length === 36 &&
-      islandDetailQuizzes.length === 12 && locationDetailQuizzes.length === 72 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 108 &&
+    valid: STORY_CARDS.length === 222 && ISLAND_STORY_CARDS.length === 6 && LOCATION_STORY_CARDS.length === 36 &&
+      islandDetailQuizzes.length === 12 && locationDetailQuizzes.length === 144 && routeQuizzes.length === 24 && STORY_QUIZ_CARDS.length === 180 &&
       ids.size === STORY_CARDS.length && titlesDe.size === STORY_CARDS.length && titlesEn.size === STORY_CARDS.length
   };
 }
