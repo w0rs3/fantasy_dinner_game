@@ -3,7 +3,6 @@ import { shuffle } from '../core/random.js';
 const q = (min, max, unitDe, unitEn = unitDe, precision = 0) => ({ min, max, unitDe, unitEn, precision });
 const item = (id, category, nameDe, nameEn, quantity, courseTags, options = {}) => ({
   id, category, name: { de: nameDe, en: nameEn }, quantity, essential: options.essential !== false,
-  shoppingOptional: options.shoppingOptional ?? (options.essential === false),
   courseTags, effect: options.effect ?? null, note: options.note ?? null
 });
 const shoppingStaple = (id, nameDe, nameEn, quantity, noteDe, noteEn, courseTags = ['main']) => ({

@@ -74,7 +74,19 @@ test('the shopping PDF contains every item and identifies renamed originals', ()
   assert.equal(items.find((item) => item.id === 'pumpkin').quantity, '1 klein');
   assert.equal(items.find((item) => item.id === 'eggs').name, 'Eier');
   assert.equal(items.find((item) => item.id === 'eggs').quantity, '3 Stück');
-  assert.equal(items.find((item) => item.id === 'eggs').optional, false);
+  assert.deepEqual(items.find((item) => item.id === 'eggs').courses, ['Suppe', 'Salat', 'Dessert']);
+  assert.deepEqual(items.find((item) => item.id === 'dry-wine').courses, ['Hauptgericht']);
+  assert.ok(items.every((item) => item.courses.length > 0), 'every PDF item names at least one course');
+  assert.ok(items.every((item) => !Object.hasOwn(item, 'optional')), 'the shopping list never labels purchased ingredients as optional');
+  assert.equal(sections.find((section) => section.id === 'alcohol').title, 'Spirituosen');
+});
+
+test('shopping PDF course names follow the selected language', () => {
+  const sections = buildShoppingListSections({ playerCount: 8, language: 'en' });
+  const items = sections.flatMap((section) => section.items);
+  assert.deepEqual(items.find((item) => item.id === 'eggs').courses, ['Soup', 'Salad', 'Dessert']);
+  assert.deepEqual(items.find((item) => item.id === 'dry-wine').courses, ['Main Course']);
+  assert.equal(sections.find((section) => section.id === 'alcohol').title, 'Spirits');
 });
 
 test('the generated shopping document is a complete multi-page A4 PDF', () => {

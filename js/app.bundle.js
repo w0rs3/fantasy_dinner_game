@@ -1021,7 +1021,6 @@ function getRole(roleId) {
 const q = (min, max, unitDe, unitEn = unitDe, precision = 0) => ({ min, max, unitDe, unitEn, precision });
 const item = (id, category, nameDe, nameEn, quantity, courseTags, options = {}) => ({
   id, category, name: { de: nameDe, en: nameEn }, quantity, essential: options.essential !== false,
-  shoppingOptional: options.shoppingOptional ?? (options.essential === false),
   courseTags, effect: options.effect ?? null, note: options.note ?? null
 });
 const shoppingStaple = (id, nameDe, nameEn, quantity, noteDe, noteEn, courseTags = ['main']) => ({
@@ -2948,7 +2947,6 @@ class GameEngine {
       if (current) {
         ingredient.courseTags = [...current.courseTags];
         ingredient.essential = current.essential;
-        ingredient.shoppingOptional = current.shoppingOptional;
         const customName = normalizedLocalizedName(ingredient.customName);
         if (customName) {
           ingredient.customName = customName;
@@ -9271,7 +9269,7 @@ const SHOPPING_GROUPS = Object.freeze([
   { id: 'pantry', de: 'Suppenbasis, Salat & Dressings', en: 'Soup base, salad & dressings' },
   { id: 'fruit', de: 'Obst', en: 'Fruit' },
   { id: 'dessert', de: 'Dessert', en: 'Dessert' },
-  { id: 'alcohol', de: 'Optionale Spirituosen', en: 'Optional spirits' },
+  { id: 'alcohol', de: 'Spirituosen', en: 'Spirits' },
   { id: 'drinks', de: 'Cocktails & Getränke', en: 'Cocktails & drinks' }
 ]);
 
@@ -9289,6 +9287,13 @@ function displayName(item, customNames, language) {
     : `${custom} (original: ${original})`;
 }
 
+function courseNames(item, language) {
+  return (item.courseTags ?? []).map((courseId) => {
+    const chapter = CHAPTERS.find((entry) => entry.id === courseId);
+    return chapter?.course?.[language] ?? chapter?.course?.de ?? courseId;
+  });
+}
+
 function buildShoppingListSections({ playerCount = 6, language = 'de', ingredientNames = {}, shoppingStapleNames = {} } = {}) {
   const crewSize = Math.min(10, Math.max(6, Number(playerCount) || 6));
   return SHOPPING_GROUPS.map((group) => {
@@ -9297,13 +9302,16 @@ function buildShoppingListSections({ playerCount = 6, language = 'de', ingredien
     return {
       id: group.id,
       title: group[language] ?? group.de,
-      items: source.map((item) => ({
-        id: item.id,
-        name: displayName(item, customNames, language),
-        originalName: item.name[language],
-        quantity: suggestQuantity(item, crewSize, language),
-        optional: item.shoppingOptional === true
-      }))
+      items: source.map((item) => {
+        const courses = courseNames(item, language);
+        return {
+          id: item.id,
+          name: displayName(item, customNames, language),
+          originalName: item.name[language],
+          quantity: suggestQuantity(item, crewSize, language),
+          courses
+        };
+      })
     };
   });
 }
@@ -9349,9 +9357,12 @@ function wrapText(text, maxWidth, fontSize, bold = false) {
 }
 
 function itemLayout(item, language) {
-  const optional = item.optional ? (language === 'de' ? ' - optional' : ' - optional') : '';
-  const lines = wrapText(`${item.name} - ${item.quantity}${optional}`, COLUMN_WIDTH - 22, 8.6, true);
-  return { ...item, lines, height: Math.max(35, 24 + (lines.length * 9.5)) };
+  const lines = wrapText(`${item.name} - ${item.quantity}`, COLUMN_WIDTH - 22, 8.6, true);
+  const courseLabel = item.courses.length === 1
+    ? (language === 'de' ? 'Gang' : 'Course')
+    : (language === 'de' ? 'Gänge' : 'Courses');
+  const courseLines = wrapText(`${courseLabel}: ${item.courses.join(' · ')}`, COLUMN_WIDTH - 22, 7.5);
+  return { ...item, lines, courseLines, height: Math.max(45, 27 + (lines.length * 9.5) + (courseLines.length * 8.5)) };
 }
 
 function layoutPages(sections, language) {
@@ -9436,6 +9447,10 @@ function pageContent(placements, pageNumber, pageCount, playerCount, language) {
     content += `0.32 G 0.9 w ${(placement.x + 1).toFixed(2)} ${(placement.y - 13).toFixed(2)} 9 9 re S\n`;
     placement.lines.forEach((line, index) => {
       content += drawText(line, placement.x + 16, placement.y - 9 - (index * 9.5), 8.6, 'F2', 0.1);
+    });
+    const courseStartY = placement.y - 10 - (placement.lines.length * 9.5);
+    placement.courseLines.forEach((line, index) => {
+      content += drawText(line, placement.x + 16, courseStartY - (index * 8.5), 7.5, 'F1', 0.3);
     });
     content += drawText(replacement, placement.x + 16, bottom + 7, 7.5, 'F1', 0.38);
     const labelWidth = textWidth(replacement, 7.5) + 5;

@@ -287,7 +287,6 @@ export class GameEngine {
       if (current) {
         ingredient.courseTags = [...current.courseTags];
         ingredient.essential = current.essential;
-        ingredient.shoppingOptional = current.shoppingOptional;
         const customName = normalizedLocalizedName(ingredient.customName);
         if (customName) {
           ingredient.customName = customName;
