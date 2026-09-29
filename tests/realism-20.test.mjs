@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { GameEngine, validateSessionState } from '../js/core/game-engine.js';
-import { COURSE_INGREDIENT_RULES, INGREDIENTS } from '../js/data/ingredients.js';
+import { COURSE_INGREDIENT_RULES } from '../js/data/ingredients.js';
 import { CHAPTERS } from '../js/data/chapters.js';
 import { EVENT_DECKS, WATCH_CHALLENGES } from '../js/data/events.js';
 import { STORY_CARDS } from '../js/data/story-events.js';
@@ -16,8 +16,6 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     const result = simulateGame({ playerCount: 5 + run, seed: 88_000 + run, choiceStyle });
     const state = result.snapshot;
     const label = `run=${run} seed=${88_000 + run}`;
-    const servedIngredients = new Set(state.menu.flatMap((course) => course?.ingredientIds ?? []));
-    const essentialIds = INGREDIENTS.filter((ingredient) => ingredient.essential).map((ingredient) => ingredient.id);
     const taskCounts = Array.from({ length: 6 }, (_, chapterIndex) =>
       state.tasks.filter((task) => task.chapterIndex === chapterIndex).length
     );
@@ -72,15 +70,16 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
     assert.equal(result.basketResidue.length, 0, label);
     assert.ok(Object.values(result.stageEvents).every((count) => count > 0), label);
 
-    assert.ok(essentialIds.every((ingredientId) => servedIngredients.has(ingredientId)), label);
-    assert.equal(result.essentialUnused.length, 0, label);
     const categoryCount = (courseIndex, category) => state.menu[courseIndex].ingredientIds.filter((id) => state.ingredients.find((ingredient) => ingredient.id === id)?.category === category).length;
     for (let courseIndex = 1; courseIndex < CHAPTERS.length; courseIndex += 1) {
       const chapter = CHAPTERS[courseIndex];
       const rule = COURSE_INGREDIENT_RULES[chapter.id];
       const ids = state.menu[courseIndex].ingredientIds;
-      const essentialCount = ids.filter((id) => state.ingredients.find((ingredient) => ingredient.id === id)?.essential).length;
-      assert.equal(essentialCount, rule.target, `${label} ${chapter.id} required ingredient total`);
+      const courseIngredients = ids.map((id) => state.ingredients.find((ingredient) => ingredient.id === id));
+      assert.equal(courseIngredients.filter((ingredient) => ingredient.essential).length, rule.target,
+        `${label} ${chapter.id} exact required ingredient total`);
+      assert.ok(courseIngredients.filter((ingredient) => !ingredient.essential).length <= rule.optionalLimit,
+        `${label} ${chapter.id} optional ingredient limit`);
       assert.ok(ids.every((id) => state.ingredients.find((ingredient) => ingredient.id === id)?.courseTags.includes(chapter.id)), `${label} ${chapter.id} tags`);
       for (const [category, minimum] of Object.entries(rule.categoryMinimums ?? {})) {
         assert.ok(categoryCount(courseIndex, category) >= minimum, `${label} ${chapter.id} ${category} minimum`);
@@ -96,6 +95,7 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
       `${label} uses alcohol only for the one-to-three-spirit cocktail selection`);
     assert.equal(categoryCount(4, 'alcohol'), 0, `${label} dessert stays alcohol-free`);
     assert.equal(state.ingredients.some((ingredient) => ingredient.status === 'discovered'), false, `${label} no ingredient may remain in a course basket`);
+    assert.deepEqual(result.essentialUnused, [], `${label} every required ingredient is used`);
     const cocktailSpiritTarget = state.chapter.cocktailSpiritTarget;
     assert.ok([1, 2, 3].includes(cocktailSpiritTarget), `${label} cocktail spirit target is selected`);
     assert.equal(categoryCount(5, 'alcohol'), cocktailSpiritTarget, `${label} cocktail uses the selected number of spirit varieties`);
@@ -103,28 +103,22 @@ test('five complete dinners with varied crews and soup routes remain coherent fr
       state.ingredients.find((ingredient) => ingredient.id === ingredientId)
     );
     const cocktailNonAlcoholCount = (team) => cocktailIngredients.filter((ingredient) =>
-      ingredient.category !== 'alcohol' && [team, 'shared'].includes(ingredient.cocktailUse)
+      ingredient.category !== 'alcohol' && ingredient.cocktailUse === team
     ).length;
-    const cocktailTotalCount = (team) => cocktailIngredients.filter((ingredient) =>
-      [team, 'shared'].includes(ingredient.cocktailUse)
-    ).length;
-    assert.equal(cocktailNonAlcoholCount('alcoholic'), cocktailNonAlcoholCount('alcohol-free'),
-      `${label} both cocktails have equal non-alcohol ingredient counts`);
-    assert.equal(cocktailTotalCount('alcoholic'), cocktailTotalCount('alcohol-free') + cocktailSpiritTarget,
-      `${label} only the selected spirits make the alcoholic recipe longer`);
+    assert.ok(cocktailNonAlcoholCount('alcoholic') > 0, `${label} alcoholic cocktail has its own non-alcohol ingredients`);
+    assert.ok(cocktailNonAlcoholCount('alcohol-free') > 0, `${label} alcohol-free cocktail has its own ingredients`);
+    assert.ok(cocktailIngredients.every((ingredient) => ['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)),
+      `${label} cocktail ingredients are never shared between recipes`);
     const saladHasMeat = categoryCount(2, 'meat') > 0;
     const saladTaskTitles = new Set(state.tasks.filter((task) => task.chapterIndex === 2)
       .map((task) => restored.getTaskCard(task)?.title.de));
     assert.equal(saladTaskTitles.has('Salatfleisch mundgerecht schneiden'), saladHasMeat, label);
     assert.equal(saladTaskTitles.has('Salatfleisch in der Pfanne braten'), saladHasMeat, label);
-    const selectedJuices = ['apple-juice', 'orange-juice', 'cherry-juice'].filter((ingredientId) => state.menu[5].ingredientIds.includes(ingredientId));
-    assert.ok(state.menu[5].ingredientIds.includes('mineral-water'), label);
-    assert.ok(selectedJuices.length >= 1 && selectedJuices.length <= 2, `${label} uses an optional juice selection, not every juice`);
+    assert.ok(categoryCount(5, 'drinks') >= 2, `${label} cocktail recipes use at least two drink bases`);
     assert.equal(state.ingredients.some((ingredient) => ingredient.id === 'ice-cubes'), false, `${label} ice is basic stock, not a played ingredient`);
     assert.ok(['alcoholic', 'alcohol-free'].every((team) => ['mixed', 'stirred'].includes(state.menu[5].cocktailTechniques?.[team])), `${label} both cocktail techniques are fixed`);
     assert.equal(result.cocktailTeamChoices, result.playerCount, `${label} every player chooses a cocktail team exactly once`);
     assert.ok(['alcoholic', 'alcohol-free'].every((team) => state.players.some((player) => player.cocktailTeam === team)), `${label} both cocktail teams are staffed`);
-    assert.ok(state.menu[4].ingredientIds.includes('vanilla-ice'), `${label} vanilla ice belongs to dessert`);
     assert.equal(state.menu[1].courseStyle, choiceStyle, label);
     assert.ok(state.coins <= 500 && state.coins >= 0, label);
 

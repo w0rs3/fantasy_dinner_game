@@ -362,7 +362,7 @@ test('handover advances to the next free player and skips task owners', () => {
     engine.confirmWatchChallengePlayer();
   } else if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.flow === 'ongoing') {
     engine.activateOngoingWatchChallenge();
-  } else if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.secret && engine.state.turn.watchStartedAt == null) {
+  } else if (engine.state.turn.phase === 'watch' && engine.state.turn.watchStartedAt == null) {
     engine.startWatchChallengeAction();
     engine.completeWatchChallenge();
   } else if (engine.state.turn.phase === 'watch' && engine.currentWatchChallenge?.skillCheck) {

@@ -46,7 +46,7 @@ export function buildShoppingListSections({ playerCount = 6, language = 'de', in
         name: displayName(item, customNames, language),
         originalName: item.name[language],
         quantity: suggestQuantity(item, crewSize, language),
-        optional: item.essential === false
+        optional: item.shoppingOptional === true
       }))
     };
   });

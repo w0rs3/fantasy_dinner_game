@@ -355,6 +355,27 @@ button[disabled] {
   border-radius: var(--radius-sm);
 }
 
+.setup-form .field select {
+  padding-right: 2.15rem;
+  appearance: none;
+  -webkit-appearance: none;
+  color-scheme: dark;
+  background-image:
+    linear-gradient(45deg, transparent 50%, var(--gold-light) 50%),
+    linear-gradient(135deg, var(--gold-light) 50%, transparent 50%);
+  background-repeat: no-repeat;
+  background-position:
+    calc(100% - 0.95rem) calc(50% + 0.08rem),
+    calc(100% - 0.65rem) calc(50% + 0.08rem);
+  background-size: 0.32rem 0.32rem;
+  cursor: pointer;
+}
+
+.setup-form .field select option {
+  color: var(--parchment-ink);
+  background: #fff8e7;
+}
+
 .field input::placeholder { color: #7e908d; }
 
 .player-fields {

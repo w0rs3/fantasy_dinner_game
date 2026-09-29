@@ -162,7 +162,14 @@ test('the crew shares one ordered effect stack and consumes the oldest effect ma
   engine.state.turn.ingredientFlow = null;
   assert.equal(engine.nextStoredIngredientEffect('event').effect, 'ignoreEvent');
   assert.equal(engine.nextEventPreview(), null, 'the later preview effect waits behind the older ignore effect');
-  assert.ok(engine.beginEvent(1_800_000_002_000));
+  const stage = engine.currentEventStage();
+  const stageQueues = engine.state.eventQueues[engine.state.chapterIndex][stage];
+  const ignoredEventId = stageQueues.flat().find((eventId) => !engine.state.eventsDrawn.includes(eventId));
+  assert.ok(ignoredEventId);
+  stageQueues.forEach((queue) => queue.splice(0, queue.length));
+  engine.eventQueue(stage).push(ignoredEventId);
+  engine.state.turn.forcedEventDeckKind = 'fundamental';
+  assert.equal(engine.beginEvent(1_800_000_002_000)?.id, ignoredEventId);
   assert.equal(engine.state.turn.outcomeCode, 'ignored');
   assert.equal(engine.nextStoredIngredientEffect('event').effect, 'revealEvent');
 });
@@ -435,6 +442,12 @@ test('a stored event replacement waits instead of redrawing the only remaining e
 
 test('cocktail spirits remain independent optional choices in the global pool', () => {
   const engine = createEngine(950);
+  engine.state.ingredients.forEach((ingredient) => {
+    if (ingredient.essential && !ingredient.courseTags.includes('tapas')) {
+      ingredient.status = 'used';
+      ingredient.chapterIndex = 4;
+    }
+  });
   engine.state.chapterIndex = 4;
   engine.state.turn.phase = 'eating';
   assert.equal(engine.startNextChapter(), true);
@@ -515,6 +528,55 @@ test('the optional dessert card is alcohol-free and appears only with chocolate'
   chocolate.chapterIndex = 4;
   assert.equal(engine.taskAppliesToChapter(chocolateTask, 4), true);
   assert.equal(TASK_DECKS[4].some((card) => card.ingredientRequirement?.categories?.includes('alcohol')), false);
+});
+
+test('eggs are mandatory in exactly one of soup, salad, or dessert and use the course-specific preparation', () => {
+  const egg = INGREDIENTS.find((ingredient) => ingredient.id === 'eggs');
+  assert.ok(egg);
+  assert.equal(egg.essential, true);
+  assert.deepEqual(egg.courseTags, ['soup', 'salad', 'dessert']);
+
+  const engine = createEngine(954);
+  engine.state.ingredients.forEach((ingredient) => {
+    ingredient.status = 'available';
+    ingredient.chapterIndex = null;
+    ingredient.basketCourseIndex = null;
+  });
+  const stateEgg = engine.getIngredient('eggs');
+  stateEgg.status = 'locked';
+
+  engine.state.chapterIndex = 1;
+  stateEgg.chapterIndex = 1;
+  engine.state.chapter.stage = 'tasks';
+  const soupEggTask = TASK_DECKS[1].find((card) => card.title.en === 'Eggs into the Hot Mist Cauldron');
+  const soupWatchTask = TASK_DECKS[1].find((card) => card.title.en === 'Cauldron Watch');
+  assert.match(soupEggTask.instruction.en, /crack the assigned eggs directly into the gently simmering soup/);
+  assert.deepEqual(engine.reserveTaskBasket(soupEggTask, 'soup-eggs'), ['eggs']);
+  assert.equal(engine.taskPrerequisitesMet(soupEggTask), false, 'the egg task waits until soup cooking starts');
+  engine.state.tasks.push({
+    instanceId: 'active-cauldron-watch', taskId: soupWatchTask.id, chapterIndex: 1,
+    assignedPlayerIds: [engine.state.players[0].id], status: 'active'
+  });
+  assert.equal(engine.taskPrerequisitesMet(soupEggTask), true, 'an active cauldron watch unlocks the egg task');
+
+  engine.state.chapterIndex = 4;
+  stateEgg.chapterIndex = 4;
+  const dessertCreamTask = TASK_DECKS[4].find((card) => card.title.en === 'Sweet Clouds');
+  assert.match(dessertCreamTask.instruction.en, /use them to prepare a fully heated creamy component/);
+  assert.match(dessertCreamTask.instruction.en, /If no eggs were assigned, use cream/);
+  assert.deepEqual(engine.reserveTaskBasket(dessertCreamTask, 'dessert-eggs'), ['eggs']);
+  const dessertTeamsTask = TASK_DECKS[4].find((card) => card.title.en === 'The Two Treasure Plans');
+  const dessertIceTask = TASK_DECKS[4].find((card) => card.title.en === 'Ice from the Cave');
+  assert.ok(dessertCreamTask.prerequisites.some((requirement) =>
+    requirement.requiredBlueprintIndex === dessertTeamsTask.blueprintIndex && requirement.state === 'done'
+  ), 'the dessert egg cream starts only after the two dessert teams are defined');
+  assert.ok(dessertIceTask.prerequisites.some((requirement) =>
+    requirement.requiredBlueprintIndex === dessertCreamTask.blueprintIndex && requirement.state === 'done'
+  ), 'ice and plating wait for the egg-or-cream component');
+
+  stateEgg.status = 'available';
+  stateEgg.chapterIndex = null;
+  assert.deepEqual(engine.reserveTaskBasket(dessertCreamTask, 'dessert-cream'), []);
 });
 
 test('soup and salad accept at most one meat variety, including stale pending choices', () => {

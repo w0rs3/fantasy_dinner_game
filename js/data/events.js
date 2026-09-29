@@ -343,7 +343,13 @@ export function buildEventDeck(chapterIndex) {
       };
     });
   });
-  return [...regularEvents, ...cardDrawEvents, ...ingredientFunEvents, ...taskFunEvents];
+  const events = [...regularEvents, ...cardDrawEvents, ...ingredientFunEvents, ...taskFunEvents];
+  // Tapas provisions are fixed before play, so ingredient-selection events have
+  // no meaningful action there. Preserve the generated IDs of every remaining
+  // card so existing saves cannot reinterpret a card as a different event.
+  return chapter.id === 'tapas'
+    ? events.filter((event) => event.stage !== 'ingredients')
+    : events;
 }
 
 export const EVENT_DECKS = Object.freeze(CHAPTERS.map((_, index) => buildEventDeck(index)));

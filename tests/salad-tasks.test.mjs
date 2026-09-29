@@ -27,7 +27,7 @@ test('salad preparation jobs appear only for ingredients actually assigned to th
   const leaves = saladCard('Blätter am Wasserfall');
   const fruit = saladCard('Früchte des Tempelgartens');
   const vegetables = saladCard('Gemüse aus dem Ruinenhof');
-  const crunch = saladCard('Kerne am Papageienpfad');
+  const crunch = saladCard('Kerne und Eier am Papageienpfad');
   const meat = saladCard('Salatfleisch mundgerecht schneiden');
 
   assert.ok([leaves, fruit, vegetables, crunch, meat].every(Boolean));
@@ -115,4 +115,21 @@ test('independent salad preparations open as parallel quest lines', () => {
   assert.ok(['leaves', 'fruit', 'vegetables', 'crunch', 'protein', 'dressing', 'seasoning']
     .every((questId) => parallelQuestIds.has(questId)), `parallel lines: ${[...parallelQuestIds].join(', ')}`);
   assert.equal(parallelQuestIds.has('assemble'), false, 'assembly still waits for every applicable preparation line');
+});
+
+test('salad eggs unlock the cooked egg preparation without requiring nuts or seeds', () => {
+  const engine = createEngine(1_305);
+  engine.state.chapterIndex = 2;
+  engine.state.chapter.stage = 'tasks';
+  assignIngredient(engine, 'eggs');
+  const eggCard = saladCard('Kerne und Eier am Papageienpfad');
+
+  assert.equal(engine.taskAppliesToChapter(eggCard, 2), true);
+  assert.deepEqual(engine.reserveTaskBasket(eggCard, 'salad-eggs'), ['eggs']);
+  assert.match(eggCard.instruction.de, /kocht sie vollständig hart/);
+  assert.match(eggCard.instruction.en, /hard-boil them completely/);
+  const assemblyCard = saladCard('Die große Dschungelschale');
+  assert.ok(assemblyCard.prerequisites.some((requirement) =>
+    requirement.requiredBlueprintIndex === eggCard.blueprintIndex && requirement.state === 'done'
+  ), 'salad assembly waits until the eggs have been cooked and cooled');
 });

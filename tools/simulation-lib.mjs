@@ -142,7 +142,7 @@ export function simulateGame({ playerCount = 8, seed = 1, turnSeconds = 20, maxS
         const player = engine.state.players[(engine.state.activePlayerIndex + 1) % engine.state.players.length];
         handled = engine.selectWatchChallengePlayer(player.id) && engine.confirmWatchChallengePlayer(now);
       } else if (engine.currentWatchChallenge?.flow === 'ongoing') handled = engine.activateOngoingWatchChallenge(now);
-      else if (engine.currentWatchChallenge?.secret && engine.state.turn.watchStartedAt == null) handled = engine.startWatchChallengeAction(now);
+      else if (engine.state.turn.watchStartedAt == null) handled = engine.startWatchChallengeAction(now);
       else if (engine.currentWatchChallenge?.skillCheck) handled = engine.resolveWatchChallengeOutcome((seed + steps) % 3 ? 'success' : 'failure', now);
       else handled = engine.completeWatchChallenge(now);
       if (!handled) failedTransitions += 1;

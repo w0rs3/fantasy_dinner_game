@@ -92,6 +92,19 @@ test('parchment card choices use a dark high-contrast palette in every state', a
   assert.match(css, /\.game-card \.event-subtitle\s*\{[\s\S]*?color:\s*#123f4c;/);
 });
 
+test('setup dropdown chevrons use the same inset spacing as the PDF crew selector', async () => {
+  const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
+  const setupSelect = css.match(/\.setup-form \.field select\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+  const pdfSelect = css.match(/\.shopping-player-count select\s*\{([\s\S]*?)\}/)?.[1] ?? '';
+  for (const rule of [setupSelect, pdfSelect]) {
+    assert.match(rule, /appearance:\s*none;/);
+    assert.match(rule, /calc\(100% - 0\.95rem\)/);
+    assert.match(rule, /calc\(100% - 0\.65rem\)/);
+    assert.match(rule, /background-size:\s*0\.32rem 0\.32rem;/);
+  }
+  assert.match(setupSelect, /padding-right:\s*2\.15rem;/);
+});
+
 test('the shared start and eating backdrop keeps the complete island map width visible', async () => {
   const css = await readFile(join(root, 'css', 'components.css'), 'utf8');
   assert.match(css, /\.hero-screen::before[\s\S]*?background-size:\s*cover,\s*100% auto;/);

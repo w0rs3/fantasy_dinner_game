@@ -3,6 +3,7 @@ import { shuffle } from '../core/random.js';
 const q = (min, max, unitDe, unitEn = unitDe, precision = 0) => ({ min, max, unitDe, unitEn, precision });
 const item = (id, category, nameDe, nameEn, quantity, courseTags, options = {}) => ({
   id, category, name: { de: nameDe, en: nameEn }, quantity, essential: options.essential !== false,
+  shoppingOptional: options.shoppingOptional ?? (options.essential === false),
   courseTags, effect: options.effect ?? null, note: options.note ?? null
 });
 const shoppingStaple = (id, nameDe, nameEn, quantity, noteDe, noteEn, courseTags = ['main']) => ({
@@ -10,13 +11,14 @@ const shoppingStaple = (id, nameDe, nameEn, quantity, noteDe, noteEn, courseTags
 });
 
 export const COURSE_INGREDIENT_RULES = Object.freeze({
-  // The five flexible courses consume exactly all 35 essential, non-Tapas
-  // ingredients. Optional cocktail extras do not count towards these targets.
+  // The five flexible courses consume exactly all 36 essential, non-Tapas
+  // ingredients. Optional cards may add an extra ingredient without replacing
+  // one of those required slots.
   tapas: { target: 9, optionalLimit: 0, categoryMinimums: {}, categoryLimits: {} },
-  soup: { target: 5, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
-  salad: { target: 8, optionalLimit: 0, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
+  soup: { target: 5, optionalLimit: 1, categoryMinimums: { vegetable: 2, pantry: 2 }, categoryLimits: { meat: 1, fruit: 1 } },
+  salad: { target: 8, optionalLimit: 1, categoryMinimums: { vegetable: 2, pantry: 1 }, categoryLimits: { fruit: 2, meat: 1 } },
   main: { target: 11, optionalLimit: 0, categoryMinimums: { vegetable: 2, meat: 1 }, categoryLimits: { fruit: 2 } },
-  dessert: { target: 6, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3, alcohol: 0 } },
+  dessert: { target: 7, optionalLimit: 1, categoryMinimums: { fruit: 1, dessert: 2 }, categoryLimits: { vegetable: 1, meat: 0, fruit: 3, alcohol: 0 } },
   cocktails: { target: 5, optionalLimit: 6, categoryMinimums: { fruit: 1, drinks: 2 }, categoryLimits: { vegetable: 1, meat: 0, alcohol: 3, drinks: 3 } }
 });
 
@@ -164,6 +166,7 @@ export const INGREDIENTS = Object.freeze([
   item('seeds', 'pantry', 'Kerne', 'Seeds', q(150, 200, 'g'), ['soup', 'salad', 'main', 'dessert'], { effect: 'adjustDie' }),
   item('mustard', 'pantry', 'Senf', 'Mustard', q(1, 1, 'Glas', 'jar'), ['salad', 'main'], { effect: 'rerollDie' }),
   item('honey', 'pantry', 'Honig', 'Honey', q(1, 1, 'Glas', 'jar'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'coins5' }),
+  item('eggs', 'pantry', 'Eier', 'Eggs', q(3, 3, 'Stück', 'eggs'), ['soup', 'salad', 'dessert'], { effect: 'drawIngredient' }),
 
   item('apples', 'fruit', 'Äpfel', 'Apples', q(3, 4, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'revealEvent' }),
   item('pears', 'fruit', 'Birnen', 'Pears', q(5, 6, 'Stück', 'pieces'), ['salad', 'main', 'dessert', 'cocktails'], { effect: 'replaceIngredient' }),

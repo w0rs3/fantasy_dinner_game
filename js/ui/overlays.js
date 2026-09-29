@@ -1,5 +1,5 @@
 import { CHAPTERS } from '../data/chapters.js';
-import { INGREDIENTS, INGREDIENT_EFFECT_TEXT, SHOPPING_STAPLES, suggestQuantity } from '../data/ingredients.js';
+import { COURSE_INGREDIENT_RULES, INGREDIENTS, INGREDIENT_EFFECT_TEXT, SHOPPING_STAPLES, suggestQuantity } from '../data/ingredients.js';
 import { formatDate, formatDuration, localize } from '../data/i18n.js';
 import { getElapsedSeconds, getRemainingSeconds, getTaskTimerProgress } from '../core/timers.js';
 import { avatar, escapeHtml, statusTag, t, tx } from './helpers.js';
@@ -135,9 +135,9 @@ function renderShoppingPdfActions(playerCount, language) {
 
 export function renderPantry(engine, language, shoppingPlayerCount = engine.state.players.length) {
   const crewSize = Math.min(10, Math.max(6, Number(shoppingPlayerCount) || engine.state.players.length));
-  const used = engine.state.ingredients.filter((ingredient) => ingredient.essential && ingredient.status === 'used').length;
+  const used = engine.state.ingredients.filter((ingredient) => ingredient.status === 'used').length;
   const inBaskets = engine.state.ingredients.filter((ingredient) => ingredient.status === 'discovered').length;
-  const essential = engine.state.ingredients.filter((ingredient) => ingredient.essential);
+  const courseTarget = Object.values(COURSE_INGREDIENT_RULES).reduce((sum, rule) => sum + rule.target, 0);
   const available = engine.state.ingredients.filter((ingredient) => ingredient.status === 'available');
   const courseTagNames = (ingredient) => ingredient.courseTags.map((courseId) => {
     const chapter = CHAPTERS.find((entry) => entry.id === courseId);
@@ -173,7 +173,7 @@ export function renderPantry(engine, language, shoppingPlayerCount = engine.stat
       <div class="section-header">
         <div><p class="eyebrow">Adventure Dinner</p><h1>${tx('pantryTitle', language)}</h1><p class="muted">${tx('pantryLead', language)}</p></div>
         <div class="pantry-header-actions">
-          <div class="stat-strip">${statusTag(`${used}/${essential.length} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
+          <div class="stat-strip">${statusTag(`${used}/${courseTarget} ${tx('used', language)}`, 'green')}${statusTag(`${inBaskets} ${language === 'de' ? 'im Gangkorb' : 'in course basket'}`, 'gold')}${statusTag(`${available.length} ${language === 'de' ? 'global' : 'global'}`)}</div>
           ${renderShoppingPdfActions(crewSize, language)}
         </div>
       </div>
@@ -336,7 +336,7 @@ function historyLabel(entry, language) {
     chapterReady: 'Gang bereit', courseServed: 'Gang serviert', chapterStarted: 'Neuer Gang gestartet',
     voyageCompleted: 'Reise abgeschlossen', activeAbilityUsed: 'Rollenfähigkeit eingesetzt',
     playerLanguageChanged: 'Spielersprache geändert', optionalIngredientChanged: 'Optionale Zutat geändert',
-    watchChallengeStarted: 'Deckwache geöffnet', watchChallengeActionStarted: 'Geheime Challenge gestartet', watchChallengeActivated: 'Mehrzug-Challenge aktiviert', watchChallengeCompleted: 'Deckwache erledigt', watchChallengeExpired: 'Challenge mit der Reise beendet',
+    watchChallengeStarted: 'Deckwache geöffnet', watchChallengeActionStarted: 'Challenge gestartet', watchChallengeActivated: 'Mehrzug-Challenge aktiviert', watchChallengeCompleted: 'Deckwache erledigt', watchChallengeExpired: 'Challenge mit der Reise beendet',
     watchFollowUpScheduled: 'Verknüpfte Challenge vorgemerkt', watchFollowUpsReleased: 'Verknüpfte Challenge freigegeben',
     turnSkippedForTask: 'Beschäftigte Person übersprungen', turnPassedAfterTaskStarted: 'Nach Aufgabenstart weitergegeben', allPlayersBusy: 'Ganze Crew beschäftigt', crewTurnResumed: 'Crewzug fortgesetzt',
     soupStyleChosen: 'Suppenstil festgelegt', ingredientBasketAutoCleared: 'Gangkorb automatisch geleert',
@@ -353,7 +353,7 @@ function historyLabel(entry, language) {
     chapterReady: 'Course ready', courseServed: 'Course served', chapterStarted: 'New course started',
     voyageCompleted: 'Voyage completed', activeAbilityUsed: 'Role ability used',
     playerLanguageChanged: 'Player language changed', optionalIngredientChanged: 'Optional ingredient changed',
-    watchChallengeStarted: 'Deck watch opened', watchChallengeActionStarted: 'Secret challenge started', watchChallengeActivated: 'Multi-turn challenge activated', watchChallengeCompleted: 'Deck watch completed', watchChallengeExpired: 'Challenge ended with the voyage',
+    watchChallengeStarted: 'Deck watch opened', watchChallengeActionStarted: 'Challenge started', watchChallengeActivated: 'Multi-turn challenge activated', watchChallengeCompleted: 'Deck watch completed', watchChallengeExpired: 'Challenge ended with the voyage',
     watchFollowUpScheduled: 'Linked challenge scheduled', watchFollowUpsReleased: 'Linked challenge released',
     turnSkippedForTask: 'Busy player skipped', turnPassedAfterTaskStarted: 'Turn passed after task start', allPlayersBusy: 'Whole crew busy', crewTurnResumed: 'Crew turn resumed',
     soupStyleChosen: 'Soup style chosen', ingredientBasketAutoCleared: 'Course basket cleared automatically',
@@ -401,14 +401,14 @@ export function renderRules(language) {
   const sections = language === 'de' ? [
     ['1. Das Ziel', 'Bereitet als Crew sechs Gänge zu und folgt dabei den Karten auf dem Tablet. Ihr sammelt gemeinsam Münzen: 500 Münzen entsprechen der vollständigen Süßigkeitenbeute, ein kleinerer Stand dem gleichen Anteil der Belohnung.'],
     ['2. Ein Zug', 'Die markierte Person zieht eine Karte und führt sie aus. Die Crew darf beraten, die aktive Person entscheidet. Eine aktive Spezialfähigkeit darf höchstens einmal pro Zug verwendet werden. Danach wird das Tablet an die angezeigte nächste freie Person weitergegeben.'],
-    ['3. Zutaten', 'Tapas sind fest vorgegeben. Für alle späteren Gänge bringen Karten Zutaten in den Gangkorb, legen sie verbindlich fest oder legen sie zurück. Vor den Küchenaufgaben muss der Gangkorb leer sein. Jede Pflichtzutat wird im Spiel genau einmal verwendet.'],
+    ['3. Zutaten', 'Tapas sind fest vorgegeben. Für alle späteren Gänge bringen Karten Zutaten in den Gangkorb, legen sie verbindlich fest oder legen sie zurück. Jede Pflichtzutat wird im Spiel genau einmal verwendet; optionale Zutaten können hinzukommen. Pflichtzutaten werden zu Beginn ihres letzten möglichen Gangs automatisch festgelegt. Vor den Küchenaufgaben muss der Gangkorb leer sein.'],
     ['4. Küchenaufgaben und Zeit', 'Neue Aufgaben gehen nur an freie Personen; die aktive Person ist an einer in ihrem Zug verteilten Aufgabe beteiligt. Jede offene Aufgabe kann jederzeit über die Aufgabenliste erledigt werden. Challenge-Zeit beeinflusst Münzen, echte Garzeit und Sicherheit haben immer Vorrang.'],
     ['5. Ein Gang', 'Nach dem ersten Gang wird zuerst der Tisch abgeräumt. Danach bestimmt ihr Zutaten, erledigt die freigeschalteten Küchenaufgaben und esst gemeinsam. Geschichten, Spaßkarten und Ortswechsel führt die App automatisch zum passenden Zeitpunkt ein.'],
     ['6. Sicher kochen', 'Befolgt Packungs- und Gerätehinweise, trennt rohe von verzehrfertigen Lebensmitteln und reinigt Hände, Geräte sowie Flächen. Gart Fleisch und Ersatzprodukte entsprechend ihren Vorgaben vollständig. Bei Unsicherheit gilt: Sicherheit vor Karte.']
   ] : [
     ['1. The goal', 'Prepare six courses as one crew and follow the cards shown on the tablet. You collect coins together: 500 coins equal the complete sweet reward, and a lower total awards the same share of it.'],
     ['2. A turn', 'The highlighted player draws and resolves one card. The crew may discuss, but the active player decides. An active special ability may be used at most once per turn. Then pass the tablet to the next free player shown.'],
-    ['3. Ingredients', 'Tapas are fixed. In every later course, cards add ingredients to the course basket, lock them in, or return them. The basket must be empty before kitchen tasks begin. Every essential ingredient is used exactly once during the game.'],
+    ['3. Ingredients', 'Tapas are fixed. In every later course, cards add ingredients to the course basket, lock them in, or return them. Every required ingredient is used exactly once; optional ingredients may be added. Required ingredients are locked automatically at the start of their final eligible course. The basket must be empty before kitchen tasks begin.'],
     ['4. Kitchen tasks and time', 'New tasks are assigned only to free players, and the active player participates in any task dealt during their turn. Every open task can be completed from the task list at any time. Challenge time affects coins; real doneness and safety always take priority.'],
     ['5. A course', 'After the first course, clear the table first. Then choose ingredients, complete the unlocked kitchen tasks, and eat together. The app introduces stories, fun cards, and location changes at the appropriate time.'],
     ['6. Cook safely', 'Follow packaging and appliance instructions, separate raw food from ready-to-eat food, and clean hands, equipment, and surfaces. Cook meat and substitutes fully according to their instructions. When in doubt, safety overrides the card.']

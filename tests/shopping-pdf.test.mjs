@@ -16,6 +16,7 @@ test('the pre-game ingredient list offers a shopping PDF download', async () => 
   assert.match(html, /Einkaufsliste als PDF/);
   assert.match(html, /Personen für Liste und PDF/);
   assert.match(html, /data-action="change-shopping-player-count"/);
+  assert.match(html, /Eier/);
   assert.equal((html.match(/<option value="(?:6|7|8|9|10)"/g) ?? []).length, 5);
   assert.match(html, /<option value="8" selected>/);
   assert.match(appSource, /case 'download-shopping-pdf'/);
@@ -55,6 +56,8 @@ test('the selected crew size changes the shopping quantities used by the PDF', (
   const tenPlayers = buildShoppingListSections({ playerCount: 10, language: 'de' }).flatMap((section) => section.items);
   assert.equal(sixPlayers.find((item) => item.id === 'tapas-dates').quantity, '20 Stück');
   assert.equal(tenPlayers.find((item) => item.id === 'tapas-dates').quantity, '30 Stück');
+  assert.equal(sixPlayers.find((item) => item.id === 'eggs').quantity, '3 Stück');
+  assert.equal(tenPlayers.find((item) => item.id === 'eggs').quantity, '3 Stück');
 });
 
 test('the shopping PDF contains every item and identifies renamed originals', () => {
@@ -69,6 +72,9 @@ test('the shopping PDF contains every item and identifies renamed originals', ()
   assert.equal(items.find((item) => item.id === 'pumpkin').name, 'Hokkaido (Original: Kürbis)');
   assert.equal(items.find((item) => item.id === 'dry-wine').name, 'Riesling trocken (Original: Trockener Wein)');
   assert.equal(items.find((item) => item.id === 'pumpkin').quantity, '1 klein');
+  assert.equal(items.find((item) => item.id === 'eggs').name, 'Eier');
+  assert.equal(items.find((item) => item.id === 'eggs').quantity, '3 Stück');
+  assert.equal(items.find((item) => item.id === 'eggs').optional, false);
 });
 
 test('the generated shopping document is a complete multi-page A4 PDF', () => {

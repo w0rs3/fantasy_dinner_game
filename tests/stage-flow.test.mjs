@@ -102,16 +102,14 @@ test('free players draw ordinary events while the clearing task is still running
   assert.equal(engine.state.chapter.stage, 'clearing');
 });
 
-test('required ingredients in their final eligible course are locked automatically when the ingredient round begins', () => {
+test('required ingredients are automatically locked when their final eligible course begins', () => {
   const engine = create(7_005);
   engine.state.chapterIndex = 1;
   engine.state.turn.phase = 'eating';
   assert.equal(engine.startNextChapter(now + 1_000), true);
   assert.equal(engine.currentChapter.id, 'salad');
-  const expiringIds = engine.expiringIngredientCandidates().map((ingredient) => ingredient.id);
-  assert.ok(expiringIds.includes('lettuce'));
-  assert.ok(expiringIds.includes('croutons'));
-  const optionalIds = engine.state.ingredients.filter((ingredient) => !ingredient.essential).map((ingredient) => ingredient.id);
+  const expiringIds = ['lettuce', 'croutons'];
+  expiringIds.forEach((ingredientId) => assert.equal(engine.getIngredient(ingredientId).status, 'available'));
   const ingredientCoinChangesBefore = engine.state.history.filter((entry) => entry.type === 'coinsChanged' && entry.data.source === 'ingredient').length;
   const effectsBefore = engine.state.ingredientEffectStack.length;
   const clearing = engine.state.tasks.find((task) => task.chapterIndex === 2 && engine.getTaskCard(task)?.questId === 'reset');
@@ -120,19 +118,49 @@ test('required ingredients in their final eligible course are locked automatical
 
   assert.equal(engine.state.chapter.stage, 'ingredients');
   assert.deepEqual(new Set(engine.state.chapter.autoLockedIngredientIds), new Set(expiringIds));
+  assert.deepEqual(engine.expiringIngredientCandidates(), []);
   expiringIds.forEach((ingredientId) => {
     const ingredient = engine.getIngredient(ingredientId);
     assert.equal(ingredient.status, 'locked');
     assert.equal(ingredient.chapterIndex, 2);
-    assert.equal(ingredient.basketCourseIndex, null);
     assert.equal(ingredient.lockedBy, null);
     assert.equal(ingredient.autoLockedChapterIndex, 2);
   });
-  assert.ok(optionalIds.every((ingredientId) => engine.getIngredient(ingredientId).autoLockedChapterIndex == null), 'optional ingredients may remain unused');
-  assert.equal(engine.unlockedCourseIngredients().length, 0, 'automatic ingredients never enter the open basket');
-  assert.equal(engine.state.history.filter((entry) => entry.type === 'coinsChanged' && entry.data.source === 'ingredient').length, ingredientCoinChangesBefore, 'automatic locking does not trigger draw effects');
-  assert.equal(engine.state.ingredientEffectStack.length, effectsBefore, 'automatic locking does not store card effects');
+  assert.equal(engine.getIngredient('eggs').status, 'available', 'eggs remain available until their final eligible dessert course');
+  assert.equal(engine.state.history.filter((entry) => entry.type === 'coinsChanged' && entry.data.source === 'ingredient').length, ingredientCoinChangesBefore);
+  assert.equal(engine.state.ingredientEffectStack.length, effectsBefore);
   assert.match(renderGame(engine, 'de'), /Automatisch festgelegt · letzter möglicher Gang/);
+});
+
+test('every required ingredient is forced into its last eligible course while optional ingredients remain optional', () => {
+  const engine = create(7_050);
+  for (let chapterIndex = 1; chapterIndex < engine.state.menu.length; chapterIndex += 1) {
+    engine.state.chapterIndex = chapterIndex;
+    engine.state.chapter.stage = 'ingredients';
+    engine.state.chapter.autoLockedIngredientIds = [];
+    engine.state.ingredients.forEach((ingredient) => {
+      if (ingredient.courseTags.includes('tapas')) return;
+      ingredient.chapterIndex = null;
+      ingredient.basketCourseIndex = null;
+      ingredient.basketTaskId = null;
+      const lastCourseIndex = engine.ingredientLastCourseIndex(ingredient);
+      ingredient.status = ingredient.essential && lastCourseIndex < chapterIndex ? 'used' : 'available';
+      delete ingredient.autoLockedChapterIndex;
+    });
+    const expected = engine.state.ingredients.filter((ingredient) =>
+      ingredient.essential && ingredient.status === 'available' &&
+      engine.ingredientLastCourseIndex(ingredient) === chapterIndex
+    ).map((ingredient) => ingredient.id);
+    if (chapterIndex === 4) assert.ok(expected.includes('eggs'), 'unused eggs become mandatory in dessert');
+    assert.deepEqual(new Set(engine.autoLockExpiringIngredients(now + chapterIndex)), new Set(expected));
+    expected.forEach((ingredientId) => {
+      const ingredient = engine.getIngredient(ingredientId);
+      assert.equal(ingredient.status, 'locked', `${ingredientId} is locked in its final course`);
+      assert.equal(ingredient.chapterIndex, chapterIndex);
+    });
+    assert.ok(engine.state.ingredients.filter((ingredient) => !ingredient.essential)
+      .every((ingredient) => ingredient.status === 'available'), 'optional ingredients are never auto-locked');
+  }
 });
 
 test('Tapas starts with its required stories and then mixes global and fundamental cards', () => {
@@ -195,6 +223,32 @@ test('mixed deck selection is random when both sources are ready and prevents th
   assert.equal(engine.nextEventDeckKind(), 'nonFundamental');
 });
 
+test('ingredient selection guarantees three ingredient draws in every shuffled four-card cycle', () => {
+  const engine = create(142);
+  engine.state.chapterIndex = 1;
+  engine.state.chapter.stage = 'ingredients';
+  engine.state.pendingLocationStoryIds = [];
+  engine.state.chapter.eventDeckHistory = [];
+
+  const draws = Array.from({ length: 200 }, () => {
+    const kind = engine.nextEventDeckKind({ consumeRandom: true });
+    engine.recordEventDeckDraw(kind);
+    return kind;
+  });
+  const fundamentalShare = draws.filter((kind) => kind === 'fundamental').length / draws.length;
+  assert.equal(fundamentalShare, 0.75);
+  for (let index = 0; index < draws.length; index += 4) {
+    const cycle = draws.slice(index, index + 4);
+    assert.equal(cycle.filter((kind) => kind === 'fundamental').length, 3);
+    assert.equal(cycle.filter((kind) => kind === 'nonFundamental').length, 1);
+  }
+  assert.ok(draws.every((kind, index) => kind !== 'nonFundamental' || draws[index - 1] !== 'nonFundamental'));
+
+  engine.state.chapter.ingredientDeckBag = ['fundamental', 'fundamental', 'nonFundamental'];
+  engine.state.turn.chainDepth = 1;
+  assert.equal(engine.nextEventDeckKind(), 'fundamental', 'ingredient-stage chains use the same three-to-one mix');
+});
+
 test('an exhausted ingredient-event queue still finishes a seven-of-eight salad', () => {
   const engine = create(141);
   engine.state.ingredients.filter((ingredient) => ingredient.chapterIndex === 0)
@@ -232,6 +286,7 @@ test('an exhausted ingredient-event queue still finishes a seven-of-eight salad'
   assert.equal(engine.courseIngredients().filter((ingredient) => ingredient.essential && ingredient.status === 'locked').length, 7);
   assert.ok(engine.courseIngredientCandidates().length > 0);
   assert.equal(engine.fundamentalCardAvailable(), true, 'the guaranteed progress action counts as a fundamental draw');
+  engine.state.turn.forcedEventDeckKind = 'fundamental';
   assert.equal(engine.nextEventDeckKind(), 'fundamental');
 
   const result = engine.beginEvent(timestamp + 1);
@@ -270,7 +325,7 @@ test('separate state decks never expose an impossible ingredient or task action'
   assert.ok((taskEvent.options ?? taskEvent.outcomes).every((action) => !['discoverIngredient', 'lockIngredient', 'swapIngredient'].includes(action)));
 
   beginSecondCourse(engine);
-  engine.state.chapter.eventDeckHistory = ['nonFundamental', 'nonFundamental'];
+  engine.state.turn.forcedEventDeckKind = 'fundamental';
   const ingredientEvent = engine.beginEvent(now + 3_000);
   assert.equal(ingredientEvent.stage, 'ingredients');
   const actions = ingredientEvent.options ?? ingredientEvent.outcomes;
@@ -572,7 +627,7 @@ test('ingredients must be discovered and locked before the work-order deck can a
   }
 
   assert.equal(engine.ingredientsLockedForCourse(), true);
-  assert.equal(engine.requiredCourseIngredients().filter((ingredient) => ingredient.status === 'locked').length, engine.courseRule().target);
+  assert.equal(engine.courseIngredients().filter((ingredient) => ingredient.status === 'locked').length, engine.courseRule().target);
   assert.equal(engine.unlockedCourseIngredients().length, 0);
   assert.equal(engine.state.chapter.stage, 'tasks');
   assert.equal(engine.state.tasks.filter((task) => task.chapterIndex === chapterIndex && engine.getTaskCard(task)?.questId !== 'reset').length, 0);
@@ -636,6 +691,74 @@ test('a completed ingredient target switches decks before another card is drawn'
   assert.equal(engine.state.chapter.stage, 'tasks');
   assert.equal(event.stage, 'tasks');
   assert.equal(engine.state.turn.phase, 'event');
+});
+
+test('dessert starts its tasks at its exact total without requiring an extra ingredient', () => {
+  const engine = create(7_407);
+  const dessertIds = ['vanilla-ice', 'sprinkles', 'chocolate', 'apples', 'ginger', 'honey', 'eggs'];
+  engine.state.chapterIndex = 4;
+  engine.state.chapter.stage = 'ingredients';
+  engine.state.tasks = [];
+  engine.state.ingredients.forEach((ingredient) => {
+    if (dessertIds.includes(ingredient.id)) {
+      ingredient.status = ingredient.id === 'honey' ? 'discovered' : 'locked';
+      ingredient.chapterIndex = 4;
+      ingredient.basketCourseIndex = ingredient.id === 'honey' ? 4 : null;
+      ingredient.discoveredAt = now;
+      ingredient.discoveredBy = engine.activePlayer.id;
+    } else if (ingredient.essential) {
+      ingredient.status = 'used';
+      ingredient.chapterIndex = ingredient.courseTags.includes('tapas') ? 0 : 3;
+      ingredient.basketCourseIndex = null;
+    } else {
+      ingredient.status = 'available';
+      ingredient.chapterIndex = null;
+      ingredient.basketCourseIndex = null;
+    }
+  });
+  engine.state.lastIngredientId = 'honey';
+  engine.state.turn.phase = 'event';
+
+  assert.equal(engine.lockIngredientFromBasket('honey', now + 1), true);
+  assert.equal(engine.ingredientsLockedForCourse(), true);
+  assert.equal(engine.state.chapter.stage, 'ingredients', 'the open event delays the transition until handover');
+  engine.state.turn.phase = 'resolved';
+  assert.equal(engine.endTurn(now + 2), true);
+
+  assert.equal(engine.state.chapter.stage, 'tasks');
+  assert.equal(engine.unlockedCourseIngredients().length, 0);
+  assert.equal(engine.getIngredient('second-ice').status, 'available');
+});
+
+test('mandatory eggs can fill one of the five required soup ingredient slots', () => {
+  const engine = create(7_408);
+  const soupIds = ['carrots', 'asparagus', 'mustard', 'chicken', 'eggs'];
+  engine.state.chapterIndex = 1;
+  engine.state.chapter.stage = 'ingredients';
+  engine.state.tasks = [];
+  engine.state.ingredients.forEach((ingredient) => {
+    if (soupIds.includes(ingredient.id)) {
+      ingredient.status = ingredient.id === 'eggs' ? 'discovered' : 'locked';
+      ingredient.chapterIndex = 1;
+      ingredient.basketCourseIndex = ingredient.id === 'eggs' ? 1 : null;
+      ingredient.discoveredAt = now;
+      ingredient.discoveredBy = engine.activePlayer.id;
+    } else {
+      ingredient.status = ingredient.chapterIndex === 0 ? 'used' : 'available';
+      if (ingredient.status === 'available') ingredient.chapterIndex = null;
+      ingredient.basketCourseIndex = null;
+    }
+  });
+  engine.state.lastIngredientId = 'eggs';
+  engine.state.turn.phase = 'draw';
+  assert.match(renderGame(engine, 'de'), /4\/5 Pflichtzutaten/);
+  engine.state.turn.phase = 'event';
+
+  assert.equal(engine.lockIngredientFromBasket('eggs', now + 1), true);
+  assert.equal(engine.courseRule().target, 5);
+  assert.equal(engine.courseIngredients().filter((ingredient) => ingredient.status === 'locked').length, 5);
+  assert.equal(engine.courseIngredients().filter((ingredient) => ingredient.essential && ingredient.status === 'locked').length, 5);
+  assert.equal(engine.ingredientsLockedForCourse(), true, 'using eggs in soup satisfies one mandatory ingredient slot');
 });
 
 test('loading the main-course roasting bag automatically opens one unassigned baking task that gates the finish', () => {
@@ -716,7 +839,7 @@ test('course baskets are card-driven while the pantry shows global, basket, and 
   game = renderGame(engine, 'de');
   assert.ok(!game.includes(basketIngredient.suggestedQuantity.de), 'the game basket should only show the ingredient name');
   assert.ok(game.includes(INGREDIENT_EFFECT_TEXT[basketIngredient.effect].de), 'the open basket keeps the ingredient effect visible');
-  assert.match(game, /Pflichtzutaten ohne späteren möglichen Gang werden zu Rundenbeginn automatisch festgelegt/);
+  assert.match(game, /Optionale Zutaten ersetzen keine Pflichtzutat/);
   assert.doesNotMatch(game, /data-action="(?:lock|remove)-basket-ingredient"/, 'the draft basket is informational and cannot bypass ingredient cards');
   assert.doesNotMatch(game, /data-action="assign-cocktail-ingredient"/, 'cocktail assignment cannot be changed manually in the draft basket');
 
@@ -849,6 +972,7 @@ test('ingredient-choice alternatives are generated only after the revealed card 
   const stageQueues = engine.state.eventQueues[1].ingredients;
   stageQueues.forEach((queue) => queue.splice(0, queue.length));
   stageQueues[engine.activeGroup.locationIndex].push(event.id);
+  engine.state.turn.forcedEventDeckKind = 'fundamental';
 
   assert.deepEqual(engine.state.turn.pendingIngredientIds, []);
   assert.equal(engine.beginEvent(now + 300).id, event.id);
@@ -999,7 +1123,10 @@ test('locking the target count automatically returns every leftover basket ingre
   const target = engine.courseRule().target;
   const selected = [];
   while (selected.length < target) {
-    const candidate = engine.courseIngredientCandidates()[0];
+    const unmetCategory = engine.unmetCourseCategoryMinimums()[0];
+    const candidate = engine.courseIngredientCandidates().find((ingredient) =>
+      ingredient.essential && (!unmetCategory || ingredient.category === unmetCategory)
+    ) ?? engine.courseIngredientCandidates().find((ingredient) => ingredient.essential);
     assert.ok(candidate);
     candidate.status = 'discovered';
     candidate.chapterIndex = 1;
@@ -1021,4 +1148,26 @@ test('locking the target count automatically returns every leftover basket ingre
   assert.equal(leftover.status, 'available');
   assert.equal(leftover.chapterIndex, null);
   assert.equal(engine.ingredientsLockedForCourse(), true);
+});
+
+test('locking cannot consume a required slot still needed by an unmet category minimum', () => {
+  const engine = create(7_709);
+  beginSecondCourse(engine);
+  const lockDirectly = (ingredientId) => {
+    const ingredient = engine.getIngredient(ingredientId);
+    ingredient.status = 'discovered';
+    ingredient.chapterIndex = 1;
+    ingredient.basketCourseIndex = 1;
+    engine.state.lastIngredientId = ingredientId;
+    return engine.lockIngredientFromBasket(ingredientId, now + 20_000);
+  };
+
+  assert.equal(lockDirectly('croutons'), true);
+  assert.equal(lockDirectly('chestnuts'), true);
+  assert.equal(lockDirectly('nuts'), true);
+  assert.equal(lockDirectly('beef'), false, 'two vegetable slots must remain available');
+  assert.equal(lockDirectly('asparagus'), true);
+  assert.equal(lockDirectly('onions'), true);
+  assert.equal(engine.ingredientsLockedForCourse(), true);
+  assert.equal(engine.courseIngredients().filter((ingredient) => ingredient.essential && ingredient.status === 'locked').length, 5);
 });

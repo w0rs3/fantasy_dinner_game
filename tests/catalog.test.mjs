@@ -5,30 +5,35 @@ import { COURSE_INGREDIENT_RULES, INGREDIENTS, buildIngredientPlan, validateIngr
 import { TASK_DECKS, getPlayableQuestLines, validateTaskCatalog } from '../js/data/tasks.js';
 import { ROLES, getRole } from '../js/data/roles.js';
 
-test('catalog contains 688 uniquely named event cards including active deck-choice events', () => {
+test('catalog contains 655 uniquely named event cards including active deck-choice events', () => {
   const result = validateEventCatalog();
-  assert.equal(result.total, 688);
-  assert.equal(result.uniqueIds, 688);
-  assert.equal(result.uniqueGermanTitles, 688);
-  assert.equal(result.uniqueEnglishTitles, 688);
-  assert.equal(result.uniqueGermanStories, 688);
-  assert.equal(result.uniqueEnglishStories, 688);
+  assert.equal(result.total, 655);
+  assert.equal(result.uniqueIds, 655);
+  assert.equal(result.uniqueGermanTitles, 655);
+  assert.equal(result.uniqueEnglishTitles, 655);
+  assert.equal(result.uniqueGermanStories, 655);
+  assert.equal(result.uniqueEnglishStories, 655);
   assert.equal(result.valid, true);
-  assert.deepEqual(EVENT_DECKS.map((deck) => deck.length), [113, 113, 113, 123, 113, 113]);
+  assert.deepEqual(EVENT_DECKS.map((deck) => deck.length), [80, 113, 113, 123, 113, 113]);
   EVENT_DECKS.forEach((deck, chapterIndex) => {
-    const expectedCounts = chapterIndex === 3 ? [21, 20, 21, 20, 21, 20] : [21, 18, 19, 18, 19, 18];
+    const expectedCounts = chapterIndex === 0
+      ? [15, 13, 13, 13, 13, 13]
+      : chapterIndex === 3
+        ? [21, 20, 21, 20, 21, 20]
+        : [21, 18, 19, 18, 19, 18];
     assert.ok(expectedCounts.every((expected, locationIndex) => deck.filter((event) => event.locationIndex === locationIndex).length === expected));
   });
   assert.equal(EVENT_DECKS[3].filter((event) => event.archetype === 'work-mischief').length, 18);
-  assert.deepEqual(result.stageCounts, { ingredients: 198, tasks: 166, cooking: 324 });
+  assert.deepEqual(result.stageCounts, { ingredients: 165, tasks: 166, cooking: 324 });
   assert.ok(['card-fate', 'deck-crossroads', 'quiz-compass', 'named-card-gallery']
     .every((archetype) => EVENT_DECKS.flat().filter((event) => event.archetype === archetype).length === 36));
   assert.equal(EVENT_DECKS.flat().some((event) => event.archetype === 'respite'), false);
   assert.equal(EVENT_DECKS.flat().some((event) => (event.options ?? event.outcomes).includes('fiveMinuteBreak')), false);
-  assert.ok(EVENT_DECKS.every((deck) => EVENT_STAGES.every((stage) => deck.some((event) => event.stage === stage))));
+  assert.equal(EVENT_DECKS[0].some((event) => event.stage === 'ingredients'), false);
+  assert.ok(EVENT_DECKS.slice(1).every((deck) => EVENT_STAGES.every((stage) => deck.some((event) => event.stage === stage))));
   assert.ok(EVENT_DECKS.flat().every((event) => (event.options ?? event.outcomes).length >= 2));
   assert.ok(EVENT_DECKS.flat().every((event) => !(event.options ?? event.outcomes).includes('storyMoment')));
-  assert.ok(EVENT_DECKS.every((deck) => deck.filter((event) => event.archetype === 'pantry-mischief' && event.stage === 'ingredients').length === 3));
+  assert.deepEqual(EVENT_DECKS.map((deck) => deck.filter((event) => event.archetype === 'pantry-mischief' && event.stage === 'ingredients').length), [0, 3, 3, 3, 3, 3]);
   assert.deepEqual(EVENT_DECKS.map((deck) => deck.filter((event) => event.archetype === 'work-mischief' && event.stage === 'tasks').length), [8, 8, 8, 18, 8, 8]);
 });
 
@@ -90,15 +95,15 @@ test('interludes reserve privacy for linked surprises alongside drinks and co-op
   assert.ok(interludes.every((event) => !event.options.includes('treasure')));
 });
 
-test('catalog contains 87 unique, ordered quest steps including five between-course clearing jobs', () => {
+test('catalog contains 88 unique, ordered quest steps including five between-course clearing jobs', () => {
   const result = validateTaskCatalog();
-  assert.equal(result.total, 87);
-  assert.equal(result.uniqueIds, 87);
-  assert.equal(result.uniqueGermanTitles, 87);
-  assert.equal(result.uniqueEnglishTitles, 87);
+  assert.equal(result.total, 88);
+  assert.equal(result.uniqueIds, 88);
+  assert.equal(result.uniqueGermanTitles, 88);
+  assert.equal(result.uniqueEnglishTitles, 88);
   assert.equal(result.valid, true);
-  assert.deepEqual(TASK_DECKS.map((deck) => deck.length), [16, 14, 15, 14, 11, 17]);
-  assert.deepEqual(TASK_DECKS.map((deck) => deck.filter((card) => card.playable).length), [13, 13, 14, 13, 10, 16]);
+  assert.deepEqual(TASK_DECKS.map((deck) => deck.length), [16, 15, 15, 14, 11, 17]);
+  assert.deepEqual(TASK_DECKS.map((deck) => deck.filter((card) => card.playable).length), [13, 14, 14, 13, 10, 16]);
   assert.equal(TASK_DECKS.flat().filter((card) => card.playable && card.questId === 'reset').length, 5);
   assert.ok(TASK_DECKS.flat().filter((card) => card.playable).every((card) =>
     !['planning', 'story'].includes(card.area) && (card.area !== 'optional' || card.ingredientRequirement)
@@ -189,6 +194,7 @@ test('baking and roasting steps with uncertain doneness never create game timers
   const manualTitles = [
     'Speckdatteln in der Pfanne braten',
     'Salatfleisch in der Pfanne braten',
+    'Eier in den heißen Nebelkessel',
     'Brot backen lassen',
     'Bratschlauch backen lassen'
   ];
@@ -200,10 +206,15 @@ test('baking and roasting steps with uncertain doneness never create game timers
 
 test('the soup protein insert is completed by safe doneness and only ingredient-backed garnish work is dealt', () => {
   const soupProtein = TASK_DECKS[1].find((card) => card.title.de === 'Einlage aus dem Pilzwald');
+  const soupEggs = TASK_DECKS[1].find((card) => card.title.de === 'Eier in den heißen Nebelkessel');
   const soupCrunch = TASK_DECKS[1].find((card) => card.title.de === 'Knusperbeute im Nebel');
   const dessertGarnish = TASK_DECKS[4].find((card) => card.title.de === 'Garnitur aus der Truhe');
   assert.equal(soupProtein.timingMode, 'manual');
   assert.equal(soupProtein.challengeMinutes, 0);
+  assert.doesNotMatch(soupProtein.instruction.de, /schlagt sie direkt/);
+  assert.equal(soupEggs.timingMode, 'manual');
+  assert.deepEqual(soupEggs.ingredientRequirement.ids, ['eggs']);
+  assert.match(soupEggs.instruction.de, /Kesselwache läuft/);
   assert.deepEqual(soupCrunch.ingredientRequirement.ids, ['croutons', 'nuts', 'seeds']);
   assert.deepEqual(dessertGarnish.ingredientRequirement.ids, ['sprinkles', 'chocolate', 'nuts', 'seeds']);
 });
@@ -220,18 +231,22 @@ test('all thirteen roles are unique and have finite active uses', () => {
 });
 
 test('ingredient planner keeps a tagged global pool and only fixes Tapas', () => {
-  assert.equal(INGREDIENTS.length, 53);
+  assert.equal(INGREDIENTS.length, 54);
   assert.deepEqual(INGREDIENTS.filter((ingredient) => !ingredient.essential).map((ingredient) => ingredient.id).sort(), ['amaretto', 'apple-juice', 'cherry-juice', 'gin', 'orange-juice', 'rum', 'second-ice', 'triple-sec', 'vodka']);
   assert.ok(['mince', 'milk', 'butter', 'yoghurt', 'broth', 'herbs', 'vinegar', 'ice-cubes', 'fruit-dates', 'cooking-cream', 'whipping-cream', 'olive-oil'].every((id) => !INGREDIENTS.some((ingredient) => ingredient.id === id)));
-  assert.equal(Object.entries(COURSE_INGREDIENT_RULES).filter(([course]) => course !== 'tapas').reduce((sum, [, rule]) => sum + rule.target, 0), 35);
+  assert.equal(Object.entries(COURSE_INGREDIENT_RULES).filter(([course]) => course !== 'tapas').reduce((sum, [, rule]) => sum + rule.target, 0), 36);
   assert.equal(COURSE_INGREDIENT_RULES.main.target, 11);
-  assert.equal(COURSE_INGREDIENT_RULES.dessert.target, 6);
+  assert.equal(COURSE_INGREDIENT_RULES.dessert.target, 7);
+  assert.deepEqual(Object.fromEntries(Object.entries(COURSE_INGREDIENT_RULES).map(([course, rule]) => [course, rule.optionalLimit])), {
+    tapas: 0, soup: 1, salad: 1, main: 0, dessert: 1, cocktails: 6
+  });
   assert.deepEqual(COURSE_INGREDIENT_RULES.cocktails.categoryMinimums, { fruit: 1, drinks: 2 });
   assert.equal(COURSE_INGREDIENT_RULES.cocktails.target, 5);
   assert.ok(INGREDIENTS.filter((ingredient) => ingredient.category !== 'tapas').every((ingredient) => ingredient.effect), 'every flexible ingredient must have a card effect');
   assert.deepEqual(INGREDIENTS.filter((ingredient) => ['coins3', 'coins5'].includes(ingredient.effect)).map((ingredient) => ingredient.id), ['lettuce', 'honey', 'vanilla-ice', 'mineral-water']);
   assert.deepEqual(INGREDIENTS.find((ingredient) => ingredient.id === 'peppermint').courseTags, ['salad', 'dessert', 'cocktails']);
   assert.deepEqual(INGREDIENTS.find((ingredient) => ingredient.id === 'cucumber').courseTags, ['salad', 'main']);
+  assert.deepEqual(INGREDIENTS.find((ingredient) => ingredient.id === 'eggs').courseTags, ['soup', 'salad', 'dessert']);
   assert.ok(!INGREDIENTS.some((ingredient) => ingredient.id === 'juices'));
   assert.deepEqual(INGREDIENTS.filter((ingredient) => ingredient.category === 'drinks' && !ingredient.essential).map((ingredient) => ingredient.id).sort(), ['apple-juice', 'cherry-juice', 'orange-juice']);
   assert.ok(!INGREDIENTS.find((ingredient) => ingredient.id === 'potatoes').courseTags.includes('salad'), 'potatoes require cooking and cannot be assigned to the salad');

@@ -25,7 +25,7 @@ function statedDurations(challenge) {
   return [...new Set(values)];
 }
 
-function startChallenge(id, seed = 700, targetPlayerId = null) {
+function startChallenge(id, seed = 700, targetPlayerId = null, autoStart = true) {
   const engine = GameEngine.create({ names, title: id, defaultLanguage: 'de', seed }, now);
   engine.state.tasks.forEach((task) => { task.status = 'done'; });
   engine.state.turn = { ...engine.state.turn, phase: 'draw' };
@@ -35,8 +35,33 @@ function startChallenge(id, seed = 700, targetPlayerId = null) {
   });
   assert.equal(engine.startWatchChallenge('watchChallenge', now + 100), true);
   assert.equal(engine.currentWatchChallenge.id, id);
+  if (autoStart && !engine.currentWatchChallenge.secret && engine.currentWatchChallenge.flow === 'immediate' &&
+    engine.currentWatchChallenge.cardKind === 'fun' && !engine.currentWatchChallenge.playerSelection) {
+    assert.equal(engine.startWatchChallengeAction(now + 110), true);
+  }
   return engine;
 }
+
+test('timed public fun cards wait for an explicit start after the instructions are read', () => {
+  for (const [id, durationSeconds] of [['pirate-weather', 20], ['skill-one-leg', 15]]) {
+    const engine = startChallenge(id, id === 'pirate-weather' ? 7_030 : 8_300, null, false);
+    assert.equal(engine.state.turn.watchStartedAt, null);
+    assert.equal(engine.state.turn.watchEndsAt, null);
+    assert.equal(engine.completeWatchChallenge(now + 150), false);
+
+    const instructions = renderGame(engine, 'de');
+    assert.match(instructions, /data-action="start-watch"[^>]*>Challenge starten/);
+    assert.match(instructions, /Lest zuerst in Ruhe die vollständige Anweisung/);
+    assert.doesNotMatch(instructions, /data-watch-timer/);
+    assert.doesNotMatch(instructions, /data-action="complete-watch"|data-action="resolve-watch-outcome"/);
+
+    assert.equal(engine.startWatchChallengeAction(now + 200), true);
+    assert.equal(engine.state.turn.watchEndsAt - engine.state.turn.watchStartedAt, durationSeconds * 1000);
+    const running = renderGame(engine, 'de');
+    assert.match(running, /data-watch-timer/);
+    assert.doesNotMatch(running, /data-action="start-watch"/);
+  }
+});
 
 test('public multi-turn challenges show their instructions, then activate and hand over', () => {
   const engine = startChallenge('compliments');
@@ -440,7 +465,7 @@ test('strange encounters offer accepting the challenge or losing coins instead o
 
 test('ingredient-round fun choices offer one challenge or a five-coin loss without duplicate rewards', () => {
   const engine = GameEngine.create({ names, title: 'Pantry choice', defaultLanguage: 'de', seed: 719 }, now);
-  const event = EVENT_DECKS[0].find((card) => card.archetype === 'pantry-mischief');
+  const event = EVENT_DECKS[1].find((card) => card.archetype === 'pantry-mischief');
   const publicJoke = WATCH_CHALLENGES.find((challenge) => challenge.id === 'folded-note');
   assert.deepEqual(event.options, ['watchChallenge', 'coinLoss']);
   engine.state.chapter.stage = 'ingredients';
@@ -572,7 +597,7 @@ test('a co-op card names only free partners and renders its complete crew', () =
   const partnerNames = engine.state.turn.watchPartnerPlayerIds
     .map((playerId) => engine.state.players.find((player) => player.id === playerId).name);
   const html = renderGame(engine, 'de');
-  assert.match(html, /Koop-Zeitfüller/);
+  assert.match(html, /Koop-Kurzchallenge/);
   assert.match(html, /Beteiligte/);
   [engine.activePlayer.name, ...partnerNames].forEach((name) => assert.match(html, new RegExp(name)));
   assert.doesNotMatch(html, /\{partner2?\}|\{activePlayer\}/);

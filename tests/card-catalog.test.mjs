@@ -77,7 +77,7 @@ test('quest lines follow their practical course order and explain every prerequi
     assert.equal(order.at(-1), 'cleanup', `${chapterId} must end with cleanup`);
   }
   assert.deepEqual(renderedOrder('main'), ['reset', 'meat', 'vegetables', 'fruit', 'sauce', 'preheat', 'assembly', 'oven', 'finish', 'serve', 'cleanup']);
-  assert.deepEqual(renderedOrder('soup'), ['reset', 'vegetables', 'extras', 'cauldron', 'finish', 'serve', 'cleanup']);
+  assert.deepEqual(renderedOrder('soup'), ['reset', 'vegetables', 'extras', 'cauldron', 'eggs', 'finish', 'serve', 'cleanup']);
   assert.deepEqual(renderedOrder('tapas'), ['dates', 'bread', 'cold', 'serve', 'cleanup']);
   assert.match(html, /Vorherigen Gang abräumen → Zutaten festlegen → mögliche Zubereitungsquestlinien parallel starten → servieren → aufräumen/);
   assert.match(html, /Startet zuerst: Der vorherige Gang wurde gegessen/);

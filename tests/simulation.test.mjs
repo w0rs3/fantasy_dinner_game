@@ -3,6 +3,8 @@ import assert from 'node:assert/strict';
 import { GameEngine } from '../js/core/game-engine.js';
 import { WATCH_CHALLENGES } from '../js/data/events.js';
 import { TASK_DECKS } from '../js/data/tasks.js';
+import { CHAPTERS } from '../js/data/chapters.js';
+import { COURSE_INGREDIENT_RULES } from '../js/data/ingredients.js';
 import { simulateGame } from '../tools/simulation-lib.mjs';
 
 test('complete games finish for every supported crew size without pure waiting', () => {
@@ -33,7 +35,15 @@ test('complete games finish for every supported crew size without pure waiting',
       assert.equal(result.funCards, result.uniqueFunCards, 'a voyage must not repeat fun cards');
       assert.ok(result.funCards <= WATCH_CHALLENGES.length, 'the finite fun-card deck must never be exceeded');
       assert.ok(result.productiveWaitingTurns > 0, 'timer windows should contain playable turns');
-      assert.equal(result.essentialUnused.length, 0);
+      assert.equal(result.essentialUnused.length, 0, 'every required ingredient must be used exactly once');
+      result.snapshot.menu.forEach((course, chapterIndex) => {
+        const rule = COURSE_INGREDIENT_RULES[CHAPTERS[chapterIndex].id];
+        const courseIngredients = course.ingredientIds.map((ingredientId) =>
+          result.snapshot.ingredients.find((ingredient) => ingredient.id === ingredientId)
+        );
+        assert.equal(courseIngredients.filter((ingredient) => ingredient.essential).length, rule.target);
+        assert.ok(courseIngredients.filter((ingredient) => !ingredient.essential).length <= rule.optionalLimit);
+      });
       const cocktailSpiritTarget = result.snapshot.chapter.cocktailSpiritTarget;
       const cocktailSpiritCount = result.snapshot.menu[5].ingredientIds.filter((ingredientId) =>
         result.snapshot.ingredients.find((ingredient) => ingredient.id === ingredientId)?.category === 'alcohol'
@@ -43,13 +53,11 @@ test('complete games finish for every supported crew size without pure waiting',
       const cocktailIngredients = result.snapshot.menu[5].ingredientIds
         .map((ingredientId) => result.snapshot.ingredients.find((ingredient) => ingredient.id === ingredientId));
       const nonAlcoholCount = (team) => cocktailIngredients.filter((ingredient) =>
-        ingredient.category !== 'alcohol' && [team, 'shared'].includes(ingredient.cocktailUse)
+        ingredient.category !== 'alcohol' && ingredient.cocktailUse === team
       ).length;
-      const totalCount = (team) => cocktailIngredients.filter((ingredient) =>
-        [team, 'shared'].includes(ingredient.cocktailUse)
-      ).length;
-      assert.equal(nonAlcoholCount('alcoholic'), nonAlcoholCount('alcohol-free'));
-      assert.equal(totalCount('alcoholic'), totalCount('alcohol-free') + cocktailSpiritTarget);
+      assert.ok(nonAlcoholCount('alcoholic') > 0);
+      assert.ok(nonAlcoholCount('alcohol-free') > 0);
+      assert.ok(cocktailIngredients.every((ingredient) => ['alcoholic', 'alcohol-free'].includes(ingredient.cocktailUse)));
       assert.ok(result.snapshot.coins <= 500 && result.snapshot.coins >= 0, 'coin score stays within the reward scale');
       assert.equal(result.tasks, result.completedTasks);
       const restored = new GameEngine(result.snapshot);

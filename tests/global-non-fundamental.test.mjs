@@ -113,6 +113,7 @@ test('a correct quiz and a standing fun card resolve their matching secret curse
   standingEngine.state.turn.phase = 'draw';
   standingEngine.state.nonFundamentalQueue = [standing.id];
   assert.equal(standingEngine.startWatchChallenge('watchChallenge', now + 30, {}, standing.id), true);
-  assert.equal(standingEngine.completeWatchChallenge(now + 31), true);
+  assert.equal(standingEngine.startWatchChallengeAction(now + 31), true);
+  assert.equal(standingEngine.completeWatchChallenge(now + 32), true);
   assert.equal(standingEngine.state.activeChallenges.some((entry) => entry.challengeId === 'standing-fun-curse'), false);
 });
